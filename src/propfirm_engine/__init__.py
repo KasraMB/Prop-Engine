@@ -10,7 +10,23 @@ from .enums import (
     Timing,
 )
 from .model import Account, Firm, Phase, Program, Variant
-from .rules import Rule
+from .rules import (
+    RULE_REGISTRY,
+    CompiledRule,
+    ConsistencyRaisesTargetRule,
+    ConsistencyRule,
+    DailyLossRule,
+    MinimumTradingDaysRule,
+    MinimumWinningDaysRule,
+    NEVER_LOCK,
+    ProfitTargetRule,
+    Rule,
+    RuleKind,
+    StaticDrawdownRule,
+    TrailingDrawdownRule,
+    UnknownRuleError,
+    assert_kernel_supports,
+)
 
 __all__ = [
     # enums
@@ -29,4 +45,18 @@ __all__ = [
     "Phase",
     # rules
     "Rule",
+    "RuleKind",
+    "CompiledRule",
+    "NEVER_LOCK",
+    "TrailingDrawdownRule",
+    "StaticDrawdownRule",
+    "DailyLossRule",
+    "ProfitTargetRule",
+    "MinimumTradingDaysRule",
+    "MinimumWinningDaysRule",
+    "ConsistencyRule",
+    "ConsistencyRaisesTargetRule",
+    "RULE_REGISTRY",
+    "UnknownRuleError",
+    "assert_kernel_supports",
 ]
