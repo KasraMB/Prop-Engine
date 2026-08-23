@@ -121,7 +121,29 @@ _ALL_RULES: tuple[Rule, ...] = (
 def test_numeric_difference_is_same_type_unequal_value(a, b):
     assert type(a) is type(b)
     assert a != b
-    assert hash(a) != hash(b) or a != b  # different value, same class
+    # the differing number must also reach the compiled record (not just the DSL
+    # object): two rules unequal by value compile to unequal records.
+    assert a.compile() != b.compile()
+
+
+def test_non_numeric_fields_participate_in_equality():
+    # Step 2 tests otherwise only vary a number; severity/timing/gate must also be
+    # part of identity, or Step 7's fingerprint (which hashes them) is unsound.
+    assert DailyLossRule(1000.0, severity=Severity.SOFT) != DailyLossRule(
+        1000.0, severity=Severity.HARD
+    )
+    assert TrailingDrawdownRule(2500.0, check_timing=Timing.EOD) != TrailingDrawdownRule(
+        2500.0, check_timing=Timing.CONTINUOUS
+    )
+    assert TrailingDrawdownRule(2500.0, update_timing=Timing.EOD) != TrailingDrawdownRule(
+        2500.0, update_timing=Timing.CONTINUOUS
+    )
+    assert TrailingDrawdownRule(2500.0, lock_at=None) != TrailingDrawdownRule(
+        2500.0, lock_at=0.0
+    )
+    assert ConsistencyRule(0.5, activate_above=0.0) != ConsistencyRule(
+        0.5, activate_above=100.0
+    )
 
 
 def test_identical_rules_are_equal_and_hash_equal():
@@ -152,6 +174,21 @@ def test_trailing_dd_needs_lock_state_only_when_it_can_lock():
     assert StateField.DD_LOCKED in TrailingDrawdownRule(2500.0, lock_at=0.0).requirements()
 
 
+def test_static_dd_needs_intraday_low_only_when_checked_continuously():
+    intraday = StaticDrawdownRule(2000.0, check_timing=Timing.CONTINUOUS)
+    eod = StaticDrawdownRule(2000.0, check_timing=Timing.EOD)
+    assert StateField.DAY_LOW in intraday.requirements()
+    assert StateField.DAY_LOW not in eod.requirements()
+
+
+def test_exact_requirements_for_the_simple_rules():
+    # These three carry a single required field; pin the exact tuple so a swap to
+    # the wrong StateField (which the isinstance sweep would miss) is caught.
+    assert ProfitTargetRule(3000.0).requirements() == (StateField.EQUITY,)
+    assert MinimumTradingDaysRule(3).requirements() == (StateField.N_TRADING_DAYS,)
+    assert DailyLossRule(1000.0).requirements() == (StateField.DAY_PNL,)
+
+
 def test_static_dd_stores_no_trailing_reference():
     # Static DD recomputes start - amount inline (§8): it must NOT pull in the
     # trailing-reference state, or it would falsely widen the live-state union.
@@ -175,11 +212,16 @@ def test_min_winning_days_requires_the_qualifying_counter():
     )
 
 
-def test_consistency_adjust_also_reads_the_live_target():
-    # It must read PROFIT_TARGET (it mutates it) on top of the consistency state.
+def test_consistency_adjust_reads_the_full_consistency_state_plus_target():
+    # It must read PROFIT_TARGET (it mutates it) on top of the *whole* consistency
+    # state — pin the exact set, not just membership of two fields.
     reqs = ConsistencyRaisesTargetRule(0.5, raise_to=6000.0).requirements()
-    assert StateField.PROFIT_TARGET in reqs
-    assert StateField.MAX_DAY_PNL in reqs
+    assert set(reqs) == {
+        StateField.DAY_PNL,
+        StateField.TOTAL_PNL,
+        StateField.MAX_DAY_PNL,
+        StateField.PROFIT_TARGET,
+    }
 
 
 def test_every_requirement_is_a_state_field():
@@ -191,9 +233,38 @@ def test_every_requirement_is_a_state_field():
 # --- compiled action / severity / fail-code -------------------------------- #
 
 
-def test_fail_rule_severity_defaults_daily_soft_trailing_hard():
+def test_compiled_numeric_parameters_match_the_rule_definition():
+    # The core half of the Step 2 contract (BUILD_SPEC): the compiled record's
+    # parameters must match the definition. Pin p0/p1 for EVERY rule so a
+    # compile() that drops or zeroes a threshold/amount/count is caught.
+    cases = [
+        (ProfitTargetRule(3000.0), {"p0": 3000.0}),
+        (TrailingDrawdownRule(2500.0, lock_at=1000.0), {"p0": 2500.0, "p1": 1000.0}),
+        (StaticDrawdownRule(2000.0), {"p0": 2000.0}),
+        (DailyLossRule(1000.0), {"p0": 1000.0}),
+        (MinimumTradingDaysRule(3), {"p0": 3}),
+        (MinimumWinningDaysRule(count=5, threshold=150.0), {"p0": 5, "p1": 150.0}),
+        (ConsistencyRule(0.5, activate_above=250.0), {"p0": 0.5, "p1": 250.0}),
+        (
+            ConsistencyRaisesTargetRule(0.4, raise_to=6000.0),
+            {"p0": 0.4, "p1": 6000.0},
+        ),
+    ]
+    for rule, expected in cases:
+        c = rule.compile()
+        for field_name, val in expected.items():
+            assert getattr(c, field_name) == val, (
+                f"{type(rule).__name__}.compile().{field_name}"
+            )
+
+
+def test_fail_rule_severity_defaults():
+    # Contractual defaults for every FAIL rule — a flipped default (e.g. a
+    # consistency breach becoming SOFT) is a real behaviour change the kernel obeys.
     assert DailyLossRule(1000.0).compile().severity == Severity.SOFT
     assert TrailingDrawdownRule(2500.0).compile().severity == Severity.HARD
+    assert StaticDrawdownRule(2000.0).compile().severity == Severity.HARD
+    assert ConsistencyRule(0.5).compile().severity == Severity.HARD
 
 
 def test_fail_rules_carry_the_right_action_and_fail_code():
@@ -314,6 +385,19 @@ def test_assert_kernel_supports_raises_on_unregistered_kind():
     assert unregistered not in RULE_REGISTRY
     with pytest.raises(UnknownRuleError):
         assert_kernel_supports(unregistered)
+
+
+def test_guard_keys_on_the_registry_not_on_rulekind_membership(monkeypatch):
+    # The safety net exists for exactly one scenario (§5): a RuleKind member added
+    # WITHOUT a registry entry — a kernel branch that doesn't exist yet. A guard
+    # that merely checked `kind in RuleKind` would pass such a rule silently.
+    # Simulate the missing entry and require the guard to still fail loudly.
+    patched = dict(RULE_REGISTRY)
+    del patched[RuleKind.CONSISTENCY]
+    monkeypatch.setattr("propfirm_engine.rules.RULE_REGISTRY", patched)
+    assert RuleKind.CONSISTENCY in RuleKind  # still a valid enum member...
+    with pytest.raises(UnknownRuleError):  # ...but no kernel implementation
+        assert_kernel_supports(RuleKind.CONSISTENCY)
 
 
 def test_every_registered_rule_compiles_to_a_compiled_rule():
