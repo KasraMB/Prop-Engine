@@ -277,7 +277,9 @@ class MinimumWinningDaysRule(Rule):
 
 
 # --------------------------------------------------------------------------- #
-# Consistency: the same whole-day predicate with two possible actions.         #
+# Consistency: one whole-day predicate (max_day / profit <= threshold) worn as #
+# three actions — FAIL (ConsistencyRule), ADJUST (ConsistencyRaisesTargetRule),#
+# and the PASS/PAYOUT gate (ConsistencyGateRule) our firms actually use.       #
 # --------------------------------------------------------------------------- #
 
 
