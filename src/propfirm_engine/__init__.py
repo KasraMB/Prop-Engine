@@ -13,6 +13,7 @@ from .model import Account, Firm, Phase, Program, Variant
 from .rules import (
     RULE_REGISTRY,
     CompiledRule,
+    ConsistencyGateRule,
     ConsistencyRaisesTargetRule,
     ConsistencyRule,
     DailyLossRule,
@@ -56,6 +57,7 @@ __all__ = [
     "MinimumWinningDaysRule",
     "ConsistencyRule",
     "ConsistencyRaisesTargetRule",
+    "ConsistencyGateRule",
     "RULE_REGISTRY",
     "UnknownRuleError",
     "assert_kernel_supports",

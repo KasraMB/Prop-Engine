@@ -51,6 +51,7 @@ class RuleKind(IntEnum):
     MIN_WINNING_DAYS = 5
     CONSISTENCY = 6
     CONSISTENCY_ADJUST = 7
+    CONSISTENCY_GATE = 8
 
 
 @dataclass(frozen=True)
@@ -346,6 +347,61 @@ class ConsistencyRaisesTargetRule(Rule):
         )
 
 
+@dataclass(frozen=True)
+class ConsistencyGateRule(Rule):
+    """Consistency as a pure *gate* — the mechanic real firms (e.g. Lucid) use.
+
+    The same whole-day predicate as :class:`ConsistencyRule`, but it neither
+    fails nor adjusts: it simply **withholds** a success until the ratio clears.
+    ``gate`` picks *which* success it gates — ``Action.PASS`` (eval: the phase
+    will not clear) or ``Action.PAYOUT`` (funded: the payout will not fire) —
+    and that is the *only* thing that varies between the eval and funded uses.
+    Because it only ever withholds, it carries **no severity and no fail code**,
+    and it needs no ``activate_above`` gate: a spuriously high ratio early on
+    just means "not yet — keep trading" (exactly the firms' own wording), never
+    a spurious kill.
+
+    **Cycle-scoped denominator.** Profit is ``EQUITY − CYCLE_START_EQUITY``, which
+    generalizes for free: in eval there are no payouts so the cycle spans the whole
+    phase (ratio over total phase profit); in funded ``CYCLE_START_EQUITY`` and
+    ``MAX_DAY_PNL`` reset on each payout (§6b.1 ``reset_fields``), so the ratio is
+    automatically "since the last payout" — the firms' "resets after each payout".
+
+    **This gate subsumes the ADJUST variant.** Clearing the gate requires
+    ``total_profit ≥ max_day / threshold``, i.e. the gate *implicitly* raises the
+    effective target to ``max_day / threshold`` — a value that floats with the
+    offending day, so it is a strictly more general (dynamic) version of what
+    :class:`ConsistencyRaisesTargetRule`'s fixed ``raise_to`` does."""
+
+    threshold: float
+    gate: Action = Action.PASS  # PASS (eval) or PAYOUT (funded) — the only variance
+    check_timing: Timing = Timing.EOD  # whole-day property, evaluated at day close
+
+    def __post_init__(self) -> None:
+        if self.gate not in (Action.PASS, Action.PAYOUT):
+            raise ValueError(
+                f"ConsistencyGateRule.gate must be Action.PASS or Action.PAYOUT, "
+                f"not {self.gate!r} — a consistency gate only ever withholds a "
+                f"success, it never fails or adjusts."
+            )
+
+    def requirements(self) -> tuple[StateField, ...]:
+        # Numerator MAX_DAY_PNL; denominator is cycle profit = EQUITY - CYCLE_START.
+        return (
+            StateField.MAX_DAY_PNL,
+            StateField.EQUITY,
+            StateField.CYCLE_START_EQUITY,
+        )
+
+    def compile(self) -> CompiledRule:
+        return CompiledRule(
+            kind=RuleKind.CONSISTENCY_GATE,
+            p0=self.threshold,
+            action=self.gate,
+            check_timing=self.check_timing,
+        )
+
+
 # --------------------------------------------------------------------------- #
 # The rule registry (§5): every kind the kernel implements. A rule class not   #
 # in here CANNOT be simulated, and the compiler hard-fails on its kind.        #
@@ -360,6 +416,7 @@ RULE_REGISTRY: dict[RuleKind, type[Rule]] = {
     RuleKind.MIN_WINNING_DAYS: MinimumWinningDaysRule,
     RuleKind.CONSISTENCY: ConsistencyRule,
     RuleKind.CONSISTENCY_ADJUST: ConsistencyRaisesTargetRule,
+    RuleKind.CONSISTENCY_GATE: ConsistencyGateRule,
 }
 
 
@@ -394,6 +451,7 @@ __all__ = [
     "MinimumWinningDaysRule",
     "ConsistencyRule",
     "ConsistencyRaisesTargetRule",
+    "ConsistencyGateRule",
     "RULE_REGISTRY",
     "UnknownRuleError",
     "assert_kernel_supports",

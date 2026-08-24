@@ -19,6 +19,7 @@ from propfirm_engine.rules import (
     RULE_REGISTRY,
     CompiledRule,
     ConsistencyRaisesTargetRule,
+    ConsistencyGateRule,
     ConsistencyRule,
     DailyLossRule,
     MinimumTradingDaysRule,
@@ -99,6 +100,7 @@ _ALL_RULES: tuple[Rule, ...] = (
     MinimumWinningDaysRule(count=5, threshold=150.0),
     ConsistencyRule(0.5),
     ConsistencyRaisesTargetRule(0.5, raise_to=6000.0),
+    ConsistencyGateRule(0.5, gate=Action.PASS),
 )
 
 
@@ -224,6 +226,66 @@ def test_consistency_adjust_reads_the_full_consistency_state_plus_target():
     }
 
 
+# --- consistency gate (the mechanic our firms actually use) ---------------- #
+
+
+def test_consistency_gate_compiles_to_the_chosen_success_action():
+    # The ONLY thing that varies between eval and funded use is which success it
+    # gates: PASS (eval) vs PAYOUT (funded).
+    assert ConsistencyGateRule(0.5, gate=Action.PASS).compile().action == Action.PASS
+    assert ConsistencyGateRule(0.4, gate=Action.PAYOUT).compile().action == Action.PAYOUT
+
+
+def test_consistency_gate_defaults_to_pass():
+    assert ConsistencyGateRule(0.5).compile().action == Action.PASS
+
+
+@pytest.mark.parametrize("bad", [Action.FAIL, Action.ADJUST])
+def test_consistency_gate_rejects_fail_and_adjust(bad):
+    # A gate only ever withholds a success; it never fails or adjusts. Constructing
+    # one with a non-gate action must fail loudly at instantiation.
+    with pytest.raises(ValueError):
+        ConsistencyGateRule(0.5, gate=bad)
+
+
+def test_consistency_gate_carries_no_severity_or_fail_code():
+    # It never fails, so it carries no failure semantics (unlike ConsistencyRule).
+    for gate in (Action.PASS, Action.PAYOUT):
+        c = ConsistencyGateRule(0.5, gate=gate).compile()
+        assert c.fail_code is None
+        assert c.adjust_field is None
+
+
+def test_consistency_gate_denominator_is_cycle_scoped():
+    # Cycle profit = EQUITY - CYCLE_START_EQUITY generalizes eval (no reset) and
+    # funded (resets per payout). Pin the exact read-set that encodes that.
+    reqs = ConsistencyGateRule(0.5).requirements()
+    assert set(reqs) == {
+        StateField.MAX_DAY_PNL,
+        StateField.EQUITY,
+        StateField.CYCLE_START_EQUITY,
+    }
+    # It must NOT read the un-resettable TOTAL_PNL, or the funded per-cycle reset
+    # would be silently defeated.
+    assert StateField.TOTAL_PNL not in reqs
+
+
+def test_consistency_gate_is_whole_day_eod_by_default():
+    assert ConsistencyGateRule(0.5).compile().check_timing == Timing.EOD
+
+
+def test_consistency_gate_threshold_difference_is_same_type_unequal():
+    a = ConsistencyGateRule(0.4, gate=Action.PAYOUT)
+    b = ConsistencyGateRule(0.5, gate=Action.PAYOUT)
+    assert type(a) is type(b)
+    assert a != b
+    assert a.compile() != b.compile()
+    # gate is part of identity too
+    assert ConsistencyGateRule(0.5, gate=Action.PASS) != ConsistencyGateRule(
+        0.5, gate=Action.PAYOUT
+    )
+
+
 def test_every_requirement_is_a_state_field():
     for rule in _ALL_RULES:
         for sf in rule.requirements():
@@ -249,6 +311,8 @@ def test_compiled_numeric_parameters_match_the_rule_definition():
             ConsistencyRaisesTargetRule(0.4, raise_to=6000.0),
             {"p0": 0.4, "p1": 6000.0},
         ),
+        (ConsistencyGateRule(0.5, gate=Action.PASS), {"p0": 0.5}),
+        (ConsistencyGateRule(0.4, gate=Action.PAYOUT), {"p0": 0.4}),
     ]
     for rule, expected in cases:
         c = rule.compile()
