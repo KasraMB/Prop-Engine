@@ -1,0 +1,26 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "propfirm_engine"
+version = "0.1.0"
+description = "A high-performance Monte Carlo engine for valuing prop-firm trading accounts as convex structured products."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "numpy>=1.26",
+    "numba>=0.59",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/propfirm_engine"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
