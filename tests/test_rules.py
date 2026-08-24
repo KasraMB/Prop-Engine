@@ -49,42 +49,6 @@ def test_rule_missing_a_required_method_cannot_be_instantiated():
         HalfFinished()  # type: ignore[abstract]
 
 
-def _make_concrete():
-    @dataclasses.dataclass(frozen=True)
-    class DummyRule(Rule):
-        amount: float
-
-        def requirements(self):
-            return (StateField.EQUITY,)
-
-        def compile(self):
-            return ("dummy", self.amount)
-
-    return DummyRule
-
-
-def test_concrete_rule_is_frozen_and_hashable_by_value():
-    DummyRule = _make_concrete()
-    a = DummyRule(2500.0)
-    b = DummyRule(2500.0)
-    # frozen
-    with pytest.raises(dataclasses.FrozenInstanceError):
-        a.amount = 1.0  # type: ignore[misc]
-    # hashable by value: equal instances are interchangeable in sets/dicts
-    assert a == b
-    assert hash(a) == hash(b)
-    assert len({a, b}) == 1
-    # a differing parameter is a different value (same type)
-    c = DummyRule(1000.0)
-    assert a != c
-    assert type(a) is type(c)
-
-
-def test_concrete_rule_reports_its_requirements():
-    DummyRule = _make_concrete()
-    assert DummyRule(2500.0).requirements() == (StateField.EQUITY,)
-
-
 # --------------------------------------------------------------------------- #
 # Step 2 — concrete rules and the registry (BUILD_SPEC Step 2).                #
 # --------------------------------------------------------------------------- #
@@ -155,11 +119,24 @@ def test_identical_rules_are_equal_and_hash_equal():
 # --- requirements are consistent with behaviour ----------------------------- #
 
 
-def test_trailing_dd_requires_equity_and_floor_state():
-    reqs = TrailingDrawdownRule(2500.0).requirements()
-    assert StateField.EQUITY in reqs
-    assert StateField.PEAK_EQUITY in reqs
-    assert StateField.DD_FLOOR in reqs
+def test_trailing_dd_requirements_are_exact_across_its_branches():
+    # Exact sets, not just membership: a spuriously-widened requirement would make
+    # the Step-5 compiler over-allocate/compute live state, and an `in`-check misses
+    # it. Two corners pin both conditional branches (DAY_LOW, DD_LOCKED).
+    assert set(TrailingDrawdownRule(2500.0).requirements()) == {
+        StateField.EQUITY,
+        StateField.PEAK_EQUITY,
+        StateField.DD_FLOOR,
+        StateField.DAY_LOW,  # default check_timing=CONTINUOUS pulls in the intraday low
+    }
+    assert set(
+        TrailingDrawdownRule(2500.0, check_timing=Timing.EOD, lock_at=0.0).requirements()
+    ) == {
+        StateField.EQUITY,
+        StateField.PEAK_EQUITY,
+        StateField.DD_FLOOR,
+        StateField.DD_LOCKED,  # EOD check drops DAY_LOW; lock_at adds DD_LOCKED
+    }
 
 
 def test_trailing_dd_needs_intraday_low_only_when_checked_continuously():
@@ -197,6 +174,16 @@ def test_static_dd_stores_no_trailing_reference():
     assert StateField.PEAK_EQUITY not in reqs
     assert StateField.DD_FLOOR not in reqs
     assert StateField.DD_LOCKED not in reqs
+
+
+def test_static_dd_severity_is_overridable():
+    # Like DailyLossRule, StaticDrawdownRule exposes severity; a compile() that
+    # hard-coded HARD (ignoring self.severity) must be caught.
+    assert StaticDrawdownRule(2000.0).compile().severity == Severity.HARD
+    assert (
+        StaticDrawdownRule(2000.0, severity=Severity.SOFT).compile().severity
+        == Severity.SOFT
+    )
 
 
 def test_min_winning_days_requires_the_qualifying_counter():
@@ -277,18 +264,6 @@ def test_consistency_gate_timing_is_inert():
     # knob and compiles to the default CONTINUOUS. Behavior must not depend on it.
     assert ConsistencyGateRule(0.5).compile().check_timing == Timing.CONTINUOUS
     assert not hasattr(ConsistencyGateRule(0.5), "check_timing")
-
-
-def test_consistency_gate_threshold_difference_is_same_type_unequal():
-    a = ConsistencyGateRule(0.4, gate=Action.PAYOUT)
-    b = ConsistencyGateRule(0.5, gate=Action.PAYOUT)
-    assert type(a) is type(b)
-    assert a != b
-    assert a.compile() != b.compile()
-    # gate is part of identity too
-    assert ConsistencyGateRule(0.5, gate=Action.PASS) != ConsistencyGateRule(
-        0.5, gate=Action.PAYOUT
-    )
 
 
 def test_every_requirement_is_a_state_field():

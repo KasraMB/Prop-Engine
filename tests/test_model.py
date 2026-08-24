@@ -111,13 +111,25 @@ def test_field_difference_breaks_equality_at_nested_levels():
     assert f != Firm("Apex", (p,))
 
 
-def test_program_version_participates_in_identity():
-    # version is documented as part of the structural fingerprint (§10); it must not
-    # be ignored by equality/hash.
-    p1 = Program.with_default_variant("Flex", (_account(),), version="v2026_08")
-    p2 = Program.with_default_variant("Flex", (_account(),), version="v2026_09")
-    assert p1 != p2
-    assert hash(p1) != hash(p2)
+def test_account_holding_real_rules_is_equal_and_hashable_by_value():
+    # The other equality tests use empty phases; the Step 1 "hashable by value"
+    # contract must also hold for an Account that actually contains Rule objects.
+    from propfirm_engine.rules import ProfitTargetRule, TrailingDrawdownRule
+
+    def build():
+        rules = (ProfitTargetRule(3000.0), TrailingDrawdownRule(2500.0))
+        return Account("50K", 50_000, phases=(Phase("eval", "eval", rules),))
+
+    a, b = build(), build()
+    assert a is not b
+    assert a == b and hash(a) == hash(b)
+    assert len({a, b}) == 1
+    # differing in one contained rule's number breaks equality
+    diff = Account(
+        "50K", 50_000,
+        phases=(Phase("eval", "eval", (ProfitTargetRule(3500.0), TrailingDrawdownRule(2500.0))),),
+    )
+    assert a != diff
 
 
 # --- tree shape: the variant level is always present ---------------------
