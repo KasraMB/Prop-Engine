@@ -373,11 +373,20 @@ class ConsistencyGateRule(Rule):
     ``total_profit ≥ max_day / threshold``, i.e. the gate *implicitly* raises the
     effective target to ``max_day / threshold`` — a value that floats with the
     offending day, so it is a strictly more general (dynamic) version of what
-    :class:`ConsistencyRaisesTargetRule`'s fixed ``raise_to`` does."""
+    :class:`ConsistencyRaisesTargetRule`'s fixed ``raise_to`` does.
+
+    **Timing is inert for this rule** (MODEL_RISKS §C8). The gate is never
+    evaluated on its own timing axis — it is only ever *read inside the payout/
+    pass conjunction*, at whatever point that conjunction is evaluated (which
+    §C9's fold-then-evaluate already fixes to the day close). So its
+    ``check_timing`` carries no semantic choice: EOD and CONTINUOUS must produce
+    identical behavior because the gate is only consulted when the payout/pass
+    predicate is. It therefore exposes **no timing knob** and compiles to the
+    default ``CONTINUOUS`` — the field is present on the record only because the
+    struct-of-arrays is uniform, and nothing may branch on its value here."""
 
     threshold: float
     gate: Action = Action.PASS  # PASS (eval) or PAYOUT (funded) — the only variance
-    check_timing: Timing = Timing.EOD  # whole-day property, evaluated at day close
 
     def __post_init__(self) -> None:
         if self.gate not in (Action.PASS, Action.PAYOUT):
@@ -396,11 +405,12 @@ class ConsistencyGateRule(Rule):
         )
 
     def compile(self) -> CompiledRule:
+        # No check_timing passed: timing is inert here (see docstring), so the
+        # record takes the default CONTINUOUS and nothing branches on it.
         return CompiledRule(
             kind=RuleKind.CONSISTENCY_GATE,
             p0=self.threshold,
             action=self.gate,
-            check_timing=self.check_timing,
         )
 
 

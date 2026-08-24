@@ -270,8 +270,12 @@ def test_consistency_gate_denominator_is_cycle_scoped():
     assert StateField.TOTAL_PNL not in reqs
 
 
-def test_consistency_gate_is_whole_day_eod_by_default():
-    assert ConsistencyGateRule(0.5).compile().check_timing == Timing.EOD
+def test_consistency_gate_timing_is_inert():
+    # The gate is only ever read inside the payout/pass conjunction (MODEL_RISKS
+    # §C8), so its check_timing carries no semantic choice — it exposes no timing
+    # knob and compiles to the default CONTINUOUS. Behavior must not depend on it.
+    assert ConsistencyGateRule(0.5).compile().check_timing == Timing.CONTINUOUS
+    assert not hasattr(ConsistencyGateRule(0.5), "check_timing")
 
 
 def test_consistency_gate_threshold_difference_is_same_type_unequal():
