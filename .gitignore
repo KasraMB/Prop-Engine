@@ -219,3 +219,7 @@ __marimo__/
 
 # Project data (too large for git; kept local only)
 /Data/
+
+# scratch / scraped temp files
+lucid_tmp.html
+*_tmp.html
