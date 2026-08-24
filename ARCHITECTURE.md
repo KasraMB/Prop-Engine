@@ -106,7 +106,9 @@ class ExitCode(IntEnum):
     FAIL_MIN_DAYS    = 14   # RESERVED — currently unreachable. MinimumTradingDaysRule is a PASS gate
                             #   (it withholds PASSED until enough days), so a shortfall surfaces as
                             #   TIMED_OUT, not this code. Kept for firms that actively FAIL on min-days.
-    FAIL_CONSISTENCY = 15
+    FAIL_CONSISTENCY = 15   # RESERVED / unused — consistency is an eligibility GATE, not a failure
+                            #   (real firms withhold payout/pass, never terminate). Kept only for a
+                            #   hypothetical future firm that genuinely FAILS on consistency. (§5, C8)
     TIMED_OUT      = 20    # ran out of trades without passing
     CAPPED_OUT     = 21    # DEFERRED with the sizing policy (MODEL_RISKS C2/A2): only well-defined once a
                            # minimum-position-size config exists. Reserved but never emitted under a constant
@@ -317,34 +319,51 @@ class MinimumWinningDaysRule(Rule):
                                            action=Action.PAYOUT)
 
 @dataclass(frozen=True)
-class ConsistencyRule(Rule):
-    threshold: float          # e.g. 0.5 => no single day may exceed 50% of total profit
-    severity: Severity = Severity.HARD   # explicit: a consistency breach ends the account (like trailing DD).
-    check_timing: Timing = Timing.EOD    # consistency is a WHOLE-DAY property (like the ADJUST variant, §5):
-                                         # evaluated at day close, never per-trade. A continuous check is
-                                         # degenerate — see activate_above.
-    activate_above: float = 0.0          # only evaluated once TOTAL_PNL exceeds this floor. Below it the
-                                         # ratio max_day_pnl / total_pnl is meaningless (total ≤ 0) or
-                                         # spuriously ~1.0 after a single good day — which would kill the
-                                         # account on day 2. Real firms gate consistency on a min profit /
-                                         # payout-eligibility; this is that gate. (MODEL_RISKS §B1.)
-    def requirements(self): return (StateField.DAY_PNL, StateField.TOTAL_PNL,
-                                     StateField.MAX_DAY_PNL)
-    def compile(self): return CompiledRule(kind=RULE_CONSISTENCY, p0=self.threshold,
-                                           p1=self.activate_above, action=Action.FAIL,
-                                           severity=self.severity, check_timing=self.check_timing,
-                                           fail_code=ExitCode.FAIL_CONSISTENCY)
+class ConsistencyGate(Rule):
+    """Consistency as an ELIGIBILITY GATE, not a failure. Real firms (Lucid Pro/Flex,
+    Topstep, others) never *fail* an account for consistency — they *withhold a positive
+    event* until the ratio is satisfied:
+      - funded: `largest_day_profit / account_profit <= threshold` is required to REQUEST A
+        PAYOUT; if violated the payout simply doesn't fire and the trader keeps earning on
+        other days until the ratio falls (it resets after each payout).
+      - eval: the same ratio is required to UPGRADE (PASS) to funded.
+    So consistency is a CONJUNCT in the PAYOUT predicate (funded) or the PASS predicate (eval),
+    with `action` selecting which. It is NOT a FAIL rule (see MODEL_RISKS §C8 for why the
+    earlier fail-model was wrong and why this framing removes the degeneracy entirely).
+
+    The predicate `max_day_pnl <= threshold * cycle_profit` (cycle_profit = equity -
+    cycle_start_equity) is only ever evaluated as part of a payout/pass conjunction, which
+    already requires meaningful positive profit (min_request, profit target) — so the
+    'profit <= 0' and 'fires on trade 1' degeneracies cannot arise. The denominator is CYCLE
+    profit, not lifetime TOTAL_PNL, because the funded gate RESETS AFTER EACH PAYOUT: "account
+    profit" means profit earned THIS cycle, which also makes the gate agree with the §6b
+    payout-amount arithmetic (cap_fraction * cycle_profit) it sits beside. On eval this is
+    identical to phase profit, since the cycle spans the whole phase when no payout has occurred.
+    No activation gate and no new mechanic: it reads MAX_DAY_PNL and cycle profit (EQUITY -
+    CYCLE_START_EQUITY), all already tracked. `check_timing` is INERT for this rule — the gate is
+    only ever read inside the payout/pass conjunction (evaluated fold-then-evaluate at day close,
+    §C9), so EOD vs CONTINUOUS are behaviorally identical and nothing may branch on it."""
+
+    threshold: float                         # e.g. 0.40 (Pro funded), 0.50 (Flex eval)
+    action: Action = Action.PAYOUT           # PAYOUT on funded, PASS on eval — which event it gates
+    cushion: float = 0.0                     # Flex's small allowance: effective bound is slightly looser
+                                             #   than nominal, computed on actual daily profit (per-firm).
+    def requirements(self): return (StateField.MAX_DAY_PNL, StateField.EQUITY,
+                                    StateField.CYCLE_START_EQUITY)
+    def compile(self): return CompiledRule(kind=RULE_CONSISTENCY_GATE, p0=self.threshold,
+                                           p1=self.cushion, action=self.action)
 ```
 
-Some firms enforce consistency not by failing the trader but by *raising the profit target*. That is the same predicate with a different action — `Action.ADJUST` writing `PROFIT_TARGET` — and is a distinct rule kind so the config picks the behavior explicitly:
+Consistency thus reuses the payout fire-gate machinery (§6b): a payout for which the consistency conjunct is *not satisfied* simply does not fire, exactly like one blocked by `min_request` — the account keeps accumulating, and the reset-after-payout already in the model matches the firms' "resets after each payout." Thresholds (35%/40% Pro, 50% Flex) and the pre/post-2025-11-28 legacy split are config, on the same legacy-date pattern as the payout split tiers (§6b). The Flex **cushion** — a small allowance making the effective bound looser than the nominal percentage, computed on actual daily profit — is a per-firm parameter to calibrate, not a new mechanic.
+
+Some firms enforce consistency instead by *raising the profit target* (never failing, never gating a payout, but making the bar harder). That is the same predicate with a different action — `Action.ADJUST` writing `PROFIT_TARGET`:
 
 ```python
 @dataclass(frozen=True)
 class ConsistencyRaisesTargetRule(Rule):
     threshold: float
     raise_to: float     # new PROFIT_TARGET when the consistency condition is violated
-    check_timing: Timing = Timing.EOD   # consistency is a whole-day property; real firms evaluate it
-                                        # at day close, not intraday — EOD is the deliberate default
+    check_timing: Timing = Timing.EOD   # consistency is a whole-day property; evaluated at day close
     def requirements(self): return (StateField.DAY_PNL, StateField.TOTAL_PNL,
                                      StateField.MAX_DAY_PNL, StateField.PROFIT_TARGET)
     def compile(self): return CompiledRule(kind=RULE_CONSISTENCY_ADJUST, p0=self.threshold,
@@ -353,7 +372,7 @@ class ConsistencyRaisesTargetRule(Rule):
                                            adjust_field=StateField.PROFIT_TARGET)
 ```
 
-`ConsistencyRule(0.4)` and `ConsistencyRule(0.5)` are the same implementation with different data — new *numbers* are new instances, authored in `firms/`; only new *behavior* (fail-vs-adjust) is a new class here.
+`ConsistencyGate(0.4)` and `ConsistencyGate(0.5)` are the same implementation with different data — new *numbers* are new instances, authored in `firms/`; only new *behavior* (gate-vs-adjust) is a new class here.
 
 ### The rule registry (bottom of `rules.py`)
 
@@ -368,7 +387,7 @@ RULE_REGISTRY = {
     RULE_DAILY_LOSS:        DailyLossRule,
     RULE_MIN_DAYS:          MinimumTradingDaysRule,
     RULE_MIN_WINNING_DAYS:  MinimumWinningDaysRule,
-    RULE_CONSISTENCY:       ConsistencyRule,
+    RULE_CONSISTENCY_GATE:  ConsistencyGate,
     RULE_CONSISTENCY_ADJUST: ConsistencyRaisesTargetRule,
 }
 
@@ -1309,11 +1328,11 @@ Deferred without disturbing the model or compiler: regime-aware resampling (`res
 This is the *implementation* sequencing. `BUILD_SPEC.md` gives the *test* sequencing (what each step must pass); the two cover the same work but group it slightly differently — notably this list splits batch-MC (step 9) from the statistics/engine wiring (step 10), whereas `BUILD_SPEC` Step 9 bundles the engine with batch-MC and puts statistics in Step 10. When they differ on grouping, `BUILD_SPEC`'s step boundaries are authoritative for "what must pass before proceeding," since the tests define done (§ the one invariant). The ordering and the gates (Level 0 frozen strategy, Level 1 oracle parity) are identical in both.
 
 1. **`enums.py` + `model.py`** — the integer vocabulary (exit codes incl. `CAPPED_OUT`, state fields incl. the drawdown floor/lock and `DAY_LOW`, actions incl. `ADJUST`, severity, timing, stages) and the DSL tree. Test hashability and immutability.
-2. **`rules.py`** — the starter rules across all four actions (ProfitTarget/MinDays as `PASS`, TrailingDD/DailyLoss/Consistency as `FAIL`, MinWinningDays as `PAYOUT`, ConsistencyRaisesTarget as `ADJUST`), each carrying its timing fields, plus `RULE_REGISTRY`.
+2. **`rules.py`** — the starter rules across all four actions (ProfitTarget/MinDays as `PASS`, TrailingDD/DailyLoss as `FAIL`, MinWinningDays and ConsistencyGate as `PAYOUT`/`PASS` eligibility conjuncts, ConsistencyRaisesTarget as `ADJUST`), each carrying its timing fields, plus `RULE_REGISTRY`.
 3. **`data.py`** — the dataset contract (§11): input-column validation, per-unit-return normalization, `trade_low` derivation from `mae`, session-boundary day indexing, and the per-day table. Get one real trade file in and a `TradeDataset` out before simulating, since every rule reads this.
 4. **`config.py` + `validate.py`** — the three-layer table format, `scaled`/`build_accounts`, and the role-aware validator. One full firm expressed as pure config and passing `validate` before any simulation exists, forcing the model to hold the real taxonomy.
 5. **`compiler.py`** — requirements resolver and struct-of-arrays emission (action, severity, timing, adjust-field, reset-mask).
-6. **Single-path kernel + `reference.py`** — `simulate_one_phase` and the pure-Python oracle together, so the predicate/action semantics (timing-gated update/check, pass conjunction, hard/soft breach, DD lock, end-of-path close, payout+reset, target adjust, stage bits) are tested against each other exhaustively before parallelization. **Oracle equivalence is a hard gate (`MODEL_RISKS.md` §G6, Level 1 of the trust hierarchy):** **bitwise on the per-sim path** (each sim is an independent sequential accumulation with no within-sim reduction, so with `fastmath` off the kernel and reference agree bit-for-bit; a non-bitwise difference is a real bug), exact at the enumerated contract boundaries (equity exactly on the floor, breach-and-target same trade, payout exactly at cap/`cap_fraction`/`min_request`, floor-lock transition, soft-breach-then-EOD, first/last-trade breach, end-of-path close, closing-day pnl in its own EOD predicate, consistency below/above `activate_above`, holding-interval-clipped `trade_low`). Boundary-exactness is why **`fastmath` is off** (C1). Capped-out is **not** on this list — deferred with the sizing policy (§16.1, `MODEL_RISKS.md` §C2/§A2). This gate precedes any Monte Carlo at scale.
+6. **Single-path kernel + `reference.py`** — `simulate_one_phase` and the pure-Python oracle together, so the predicate/action semantics (timing-gated update/check, pass conjunction, hard/soft breach, DD lock, end-of-path close, payout+reset, target adjust, stage bits) are tested against each other exhaustively before parallelization. **Oracle equivalence is a hard gate (`MODEL_RISKS.md` §G6, Level 1 of the trust hierarchy):** **bitwise on the per-sim path** (each sim is an independent sequential accumulation with no within-sim reduction, so with `fastmath` off the kernel and reference agree bit-for-bit; a non-bitwise difference is a real bug), exact at the enumerated contract boundaries (equity exactly on the floor, breach-and-target same trade, payout exactly at cap/`cap_fraction`/`min_request`, floor-lock transition, soft-breach-then-EOD, first/last-trade breach, end-of-path close, closing-day pnl in its own EOD predicate, consistency gate withholds a payout/pass without failing, holding-interval-clipped `trade_low`). Boundary-exactness is why **`fastmath` is off** (C1). Capped-out is **not** on this list — deferred with the sizing policy (§16.1, `MODEL_RISKS.md` §C2/§A2). This gate precedes any Monte Carlo at scale.
 7. **`fingerprint.py` + `cache.py`** — reproducibility locked early.
 8. **`resampling.py`** — IID first, then the stationary bootstrap, resampling **whole days** (§11.4).
 9. **`simulate_batch` (parallel) + `simulate.py`** — batching and Monte Carlo; assert the batch kernel matches the single-path oracle.
