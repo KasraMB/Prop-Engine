@@ -106,10 +106,14 @@
     </div>
     <div class="panel" id="payoutBox" hidden>
       <h2>Request a payout</h2>
-      <div class="stat"><span class="k">Total profit</span><span class="v" id="poTotal">—</span></div>
+      <div class="stat"><span class="k">Qualifying days</span><span class="v" id="poQual">—</span></div>
+      <div class="bar"><i id="poQualBar" style="width:0;background:var(--blue)"></i></div>
+      <div class="stat" style="margin-top:8px"><span class="k">Total profit</span><span class="v" id="poTotal">—</span></div>
       <div class="stat"><span class="k">Cycle profit (since last payout)</span><span class="v" id="poCycle">—</span></div>
-      <div class="stat"><span class="k">Allowed range</span><span class="v" id="poRange">—</span></div>
-      <label>Amount to take ($)</label><input id="poAmt" type="number" step="1" placeholder="500 – max" />
+      <div class="stat"><span class="k">Payouts taken</span><span class="v" id="poCount">—</span></div>
+      <div class="stat"><span class="k">Received (net, 90%)</span><span class="v" id="poReceived">—</span></div>
+      <div class="stat"><span class="k">Allowed request</span><span class="v" id="poRange">—</span></div>
+      <label>Amount to request ($)</label><input id="poAmt" type="number" step="1" placeholder="500 – max" />
       <div style="margin-top:10px"><button class="gold" id="takePayoutBtn">Take payout</button></div>
       <div class="muted" id="poReason" style="margin-top:8px"></div>
     </div>
@@ -171,7 +175,7 @@
 <script src="https://cdn.jsdelivr.net/pyodide/v0.26.4/full/pyodide.js"></script>
 <script>
 const $=id=>document.getElementById(id);
-let registry={}, role="eval", days=[[]], pyEval=null;
+let registry={}, role="eval", days=[[]], pyEval=null, lastPayout=null;
 const money=v=>(v==null?"—":(v<0?"-$":"$")+Math.abs(Math.round(v)).toLocaleString());
 
 async function boot(){
@@ -221,6 +225,8 @@ function initUI(){
     days[days.length-1].push({type:"trade",pnl:p,low});$("pnl").value="";$("low").value="";$("pnl").focus();render();};
   $("takePayoutBtn").onclick=()=>{const a=parseFloat($("poAmt").value);
     if(isNaN(a)){$("err").textContent="Enter a payout amount.";return;}
+    if(lastPayout && (a<lastPayout.min || a>lastPayout.max)){
+      $("err").textContent=`Amount must be between ${money(lastPayout.min)} and ${money(lastPayout.max)}.`;return;}
     days[days.length-1].push({type:"payout",amount:a});$("poAmt").value="";render();};
   document.addEventListener("keydown",e=>{if(e.key==="Enter"&&document.activeElement===$("pnl"))$("addBtn").click();});
   render();
@@ -253,11 +259,15 @@ function render(){
   const hasC=s.consistency_limit!=null; $("consRow").hidden=!hasC;
   if(hasC){const cr=s.consistency_ratio; $("cons").innerHTML=cr==null?"<span class='pill'>n/a</span>"
     :`${Math.round(cr*100)}% <span class="pill ${cr<=s.consistency_limit?'ok':'no'}">limit ${Math.round(s.consistency_limit*100)}%</span>`;}
-  const po=s.payout; $("payoutBox").hidden=!po.enabled;
-  if(po.enabled){$("poTotal").textContent=money(po.total_profit);$("poCycle").textContent=money(po.cycle_profit);
-    $("poRange").textContent=po.max>=po.min?`${money(po.min)} – ${money(po.max)}`:"—";
+  const po=s.payout; $("payoutBox").hidden=!po.enabled; lastPayout=po.enabled?po:null;
+  if(po.enabled){
+    $("poQual").textContent=`${po.qual_days} / ${po.qual_needed}  (≥ ${money(po.min_daily)}/day, closed)`;
+    $("poQualBar").style.width=Math.min(100,100*po.qual_days/po.qual_needed)+"%";
+    $("poTotal").textContent=money(po.total_profit);$("poCycle").textContent=money(po.cycle_profit);
+    $("poCount").textContent=`${po.payouts_taken} / ${po.max_payouts}`;$("poReceived").textContent=money(po.total_received);
+    $("poRange").textContent=po.max>=po.min?`${money(po.min)} – ${money(po.max)}`:`— (max ${money(po.max)})`;
     $("takePayoutBtn").disabled=!po.can_request;
-    $("poReason").textContent=po.can_request?"Choose an amount within the range and take it.":(po.reason||"payout not available right now");}
+    $("poReason").textContent=po.can_request?"Choose an amount in range and take it — you receive 90%.":(po.reason||"payout not available right now");}
 
   drawChart(data.equity_series,s); drawCalendar(data.calendar);
 
@@ -276,7 +286,7 @@ function render(){
   $("addBtn").disabled=done; $("nextDayBtn").disabled=done; if(done)$("takePayoutBtn").disabled=true;
   $("rulesSummary").textContent = role==="eval"
     ? `Eval: reach the profit target with consistency ≤ ${Math.round((req.consistency||0)*100)}% and without breaching the EOD Max Loss Limit.`
-    : `Funded: keep the account above the MLL and request payouts ($500–$2,000, ≤50% of total profit, cycle profit ≥ $1).`;
+    : `Funded: bank 5 qualifying days (≥ the size's min daily), then — the day after — request $500–min(cap, 50% of total profit); you receive 90%. Up to 5 payouts.`;
 }
 
 function drawChart(series,s){

@@ -1,22 +1,19 @@
-"""Test-account registry for the validation dashboard.
+"""LucidFlex accounts for the validation dashboard.
 
-Standalone — imports the engine's DSL only; changes nothing in the pipeline.
+Imports the engine DSL only. The **eval** phase is fully engine-driven (profit
+target + 50% consistency gate + trailing/locking MLL). The **funded** phase used
+by the dashboard is just the MLL (survival) — the LucidFlex payout is a *manual*
+request whose exact rules (5 qualifying days, day-after timing, $500–min(cap, 50%
+of total profit), 90/10 split, 5 max) are enforced in :mod:`bridge`, injected
+into the real simulator as withdrawals so the MLL sees the reduced balance.
 
-The **Test Firm** account (per the current spec):
+Per-size specification (from the firm's published rules):
 
-* **Eval:** a **\\$3,000 profit target**, a **\\$2,000 end-of-day Max Loss Limit**
-  that trails the EOD balance but **stops trailing once the balance reaches
-  \\$52,100** (the floor locks at \\$50,100, i.e. breakeven + \\$100), and a **50%
-  consistency rule** (no single day may exceed 50% of the profit, enforced as a
-  pass gate). Nothing else.
-* **Funded:** the same trailing/locking MLL, and **manual payouts** whose rules
-  (choose the amount and timing; \\$500–\\$2,000; at most 50% of total profit; cycle
-  profit ≥ \\$1) are modeled by the dashboard bridge, not the engine's auto-firing
-  ``PayoutSchema``. So the funded phase here is just the MLL survival rule; the
-  bridge injects a chosen payout as a withdrawal so the real engine's MLL sees the
-  reduced balance.
-
-Sizes scale: the 100K doubles the target/MLL and locks at balance = size + \\$2,100.
+    size     MLL     lock floor    target    min daily    payout cap
+    25K    $1,000    $25,100       $1,250      $100         $1,000
+    50K    $2,000    $50,100       $2,000      $150         $2,000
+    100K   $3,000   $100,100       $6,000      $200         $2,500
+    150K   $4,500   $150,100       $9,000      $250         $3,000
 """
 
 from __future__ import annotations
@@ -31,52 +28,53 @@ from propfirm_engine.rules import (  # noqa: E402
     TrailingDrawdownRule,
 )
 
-# Dashboard-modeled payout rules (funded stage) — NOT the engine's PayoutSchema.
-PAYOUT_MIN = 500.0
-PAYOUT_MAX = 2000.0
-PAYOUT_PCT_OF_TOTAL = 0.5  # a payout may be at most 50% of total profit
-MIN_CYCLE_PROFIT = 1.0  # cycle profit must be at least this to request
+# size -> spec
+SPECS = {
+    "25K": dict(size=25_000, mll=1_000, target=1_250, min_daily=100, cap=1_000),
+    "50K": dict(size=50_000, mll=2_000, target=2_000, min_daily=150, cap=2_000),
+    "100K": dict(size=100_000, mll=3_000, target=6_000, min_daily=200, cap=2_500),
+    "150K": dict(size=150_000, mll=4_500, target=9_000, min_daily=250, cap=3_000),
+}
+
+# LucidFlex funded payout rules (enforced in bridge.py)
+CONSISTENCY = 0.5
+SPLIT = 0.9  # trader receives 90% of the requested amount
+MIN_PAYOUT = 500.0
+PCT_OF_TOTAL = 0.5  # max request = 50% of total profit, up to the per-size cap
+QUALIFYING_DAYS = 5  # closed days with day P&L >= min-daily, reset per payout
+MIN_CYCLE_PROFIT = 1.0
+MAX_PAYOUTS = 5
 
 
-def build_test_account(size: int) -> Account:
-    mll = round(size * 0.04)  # 50K -> 2,000
-    target = round(size * 0.06)  # 50K -> 3,000
-    # the floor locks at breakeven + $100 (reached when balance = size + mll + 100,
-    # i.e. $52,100 for the 50K), and never trails higher after that.
-    lock_at = float(size + 100)
-
-    mll_rule = TrailingDrawdownRule(
-        float(mll), update_timing=Timing.EOD, check_timing=Timing.EOD, lock_at=lock_at
+def build_account(spec) -> Account:
+    size = spec["size"]
+    mll = TrailingDrawdownRule(
+        float(spec["mll"]), update_timing=Timing.EOD, check_timing=Timing.EOD,
+        lock_at=float(size + 100),
     )
-
     eval_phase = Phase(
         "eval", "eval",
-        (
-            ProfitTargetRule(float(target)),
-            mll_rule,
-            ConsistencyGateRule(0.5, gate=Action.PASS),  # 50% consistency to pass
-        ),
+        (ProfitTargetRule(float(spec["target"])), mll,
+         ConsistencyGateRule(CONSISTENCY, gate=Action.PASS)),
     )
-    # funded: just the MLL; payouts are dashboard-modeled (manual) — no schema.
-    funded_phase = Phase("funded", "funded", (mll_rule,))
-
-    return Account(
-        name=f"{size // 1000}K",
-        size=size,
-        phases=(eval_phase, funded_phase),
-        eval_fee=150.0,
-        activation_fee=0.0,
-    )
+    funded_phase = Phase("funded", "funded", (mll,))  # payouts are dashboard-modeled
+    return Account(f"{size // 1000}K", size, phases=(eval_phase, funded_phase),
+                   eval_fee=0.0, activation_fee=0.0)
 
 
-REGISTRY: dict[str, dict[str, dict[str, Account]]] = {
-    "Test Firm": {
-        "Standard": {
-            "50K": build_test_account(50_000),
-            "100K": build_test_account(100_000),
-        },
+REGISTRY = {
+    "LucidFlex": {
+        "Standard": {name: build_account(spec) for name, spec in SPECS.items()},
     },
 }
+
+
+def payout_params(size_name: str) -> dict:
+    s = SPECS[size_name]
+    return dict(cap=float(s["cap"]), min_daily=float(s["min_daily"]),
+                min_payout=MIN_PAYOUT, split=SPLIT, pct=PCT_OF_TOTAL,
+                qualifying_days=QUALIFYING_DAYS, min_cycle=MIN_CYCLE_PROFIT,
+                max_payouts=MAX_PAYOUTS)
 
 
 def list_registry() -> dict:
@@ -88,8 +86,7 @@ def list_registry() -> dict:
             for size_name, acct in sizes.items():
                 out[firm][atype][size_name] = {
                     "phases": [p.role for p in acct.phases],
-                    "eval_fee": acct.eval_fee,
-                    "size": acct.size,
+                    "eval_fee": acct.eval_fee, "size": acct.size,
                 }
     return out
 
