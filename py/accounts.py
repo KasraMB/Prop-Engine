@@ -63,8 +63,8 @@ def build_account(spec) -> Account:
 
 
 REGISTRY = {
-    "LucidFlex": {
-        "Standard": {name: build_account(spec) for name, spec in SPECS.items()},
+    "Lucid": {
+        "LucidFlex": {name: build_account(spec) for name, spec in SPECS.items()},
     },
 }
 
