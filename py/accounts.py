@@ -11,7 +11,7 @@ Per-size specification (from the firm's published rules):
 
     size     MLL     lock floor    target    min daily    payout cap
     25K    $1,000    $25,100       $1,250      $100         $1,000
-    50K    $2,000    $50,100       $2,000      $150         $2,000
+    50K    $2,000    $50,100       $3,000      $150         $2,000
     100K   $3,000   $100,100       $6,000      $200         $2,500
     150K   $4,500   $150,100       $9,000      $250         $3,000
 """
@@ -31,7 +31,7 @@ from propfirm_engine.rules import (  # noqa: E402
 # size -> spec
 SPECS = {
     "25K": dict(size=25_000, mll=1_000, target=1_250, min_daily=100, cap=1_000),
-    "50K": dict(size=50_000, mll=2_000, target=2_000, min_daily=150, cap=2_000),
+    "50K": dict(size=50_000, mll=2_000, target=3_000, min_daily=150, cap=2_000),
     "100K": dict(size=100_000, mll=3_000, target=6_000, min_daily=200, cap=2_500),
     "150K": dict(size=150_000, mll=4_500, target=9_000, min_daily=250, cap=3_000),
 }
