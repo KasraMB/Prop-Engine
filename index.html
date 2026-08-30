@@ -1,0 +1,310 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Prop-Firm Engine — Live Validation Dashboard</title>
+<style>
+  :root{--bg:#0f1420;--panel:#171e2e;--panel2:#1e2739;--line:#2a3550;--text:#e7ecf5;
+    --dim:#8b98b4;--green:#37d67a;--red:#ff5c6c;--blue:#4aa3ff;--amber:#ffb84a;}
+  *{box-sizing:border-box;} body{margin:0;background:var(--bg);color:var(--text);
+    font:14px/1.5 system-ui,Segoe UI,Roboto,sans-serif;}
+  h1{font-size:18px;margin:0;} h2{font-size:12px;text-transform:uppercase;
+    letter-spacing:.06em;color:var(--dim);margin:0 0 10px;}
+  header{padding:14px 20px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:12px;flex-wrap:wrap;}
+  header .sub{color:var(--dim);font-size:12px;}
+  .wrap{display:grid;grid-template-columns:330px 1fr;gap:18px;padding:18px 20px;max-width:1280px;}
+  @media(max-width:820px){.wrap{grid-template-columns:1fr;}}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px;margin-bottom:16px;}
+  label{display:block;color:var(--dim);font-size:12px;margin:10px 0 4px;}
+  select,input,button{font:inherit;color:var(--text);background:var(--panel2);
+    border:1px solid var(--line);border-radius:7px;padding:8px 10px;width:100%;}
+  button{cursor:pointer;background:#26304a;border-color:#3a466a;transition:.12s;}
+  button:hover{background:#2f3b5c;} button.primary{background:#2563eb;border-color:#2563eb;}
+  button.primary:hover{background:#3b76f0;} button:disabled{opacity:.45;cursor:not-allowed;}
+  button.gold{background:#7a5a12;border-color:#a5791a;} button.gold:hover{background:#96700f;}
+  .row{display:flex;gap:8px;} .row>*{flex:1;}
+  .seg{display:flex;gap:6px;} .seg button{background:var(--panel2);}
+  .seg button.active{background:#2563eb;border-color:#2563eb;}
+  .badge{display:inline-block;padding:6px 12px;border-radius:20px;font-weight:600;font-size:13px;}
+  .badge.in_progress{background:#12385f;color:var(--blue);}
+  .badge.passed,.badge.complete{background:#123f2a;color:var(--green);}
+  .badge.failed{background:#3f1620;color:var(--red);}
+  .stat{display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid #212b41;}
+  .stat:last-child{border:0;} .stat .k{color:var(--dim);}
+  .stat .v{font-variant-numeric:tabular-nums;font-weight:600;}
+  .pos{color:var(--green);} .neg{color:var(--red);}
+  .bar{height:8px;background:#212b41;border-radius:5px;overflow:hidden;margin-top:6px;}
+  .bar>i{display:block;height:100%;border-radius:5px;}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px 18px;}
+  table{width:100%;border-collapse:collapse;font-size:13px;}
+  th,td{text-align:right;padding:6px 8px;border-bottom:1px solid #212b41;}
+  th:first-child,td:first-child{text-align:left;}
+  th{color:var(--dim);font-weight:600;font-size:11px;text-transform:uppercase;}
+  .chip{display:inline-block;background:var(--panel2);border:1px solid var(--line);
+    border-radius:6px;padding:3px 8px;margin:3px;font-variant-numeric:tabular-nums;}
+  .muted{color:var(--dim);font-size:12px;} .err{color:var(--red);font-size:12px;margin-top:8px;}
+  .pill{font-size:11px;padding:2px 7px;border-radius:10px;background:#212b41;color:var(--dim);}
+  .pill.ok{background:#123f2a;color:var(--green);} .pill.no{background:#3f1620;color:var(--red);}
+  .cal{display:flex;flex-direction:column;gap:6px;} .calrow{display:flex;gap:6px;align-items:center;}
+  .calrow .wk{width:52px;color:var(--dim);font-size:11px;}
+  .cell{width:56px;height:46px;border-radius:7px;border:1px solid var(--line);background:#141b2a;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:11px;
+    font-variant-numeric:tabular-nums;position:relative;}
+  .cell.empty{opacity:.25;} .cell .d{color:var(--dim);font-size:9px;position:absolute;top:3px;left:5px;}
+  .cell .pay{position:absolute;bottom:2px;right:3px;color:var(--amber);font-size:9px;}
+  .caldays{display:flex;gap:6px;margin-left:52px;margin-bottom:2px;}
+  .caldays span{width:56px;text-align:center;color:var(--dim);font-size:10px;}
+  svg{width:100%;height:230px;display:block;} .legend{display:flex;gap:16px;font-size:12px;margin-top:6px;}
+  .legend i{display:inline-block;width:14px;height:3px;vertical-align:middle;margin-right:5px;border-radius:2px;}
+  #boot{position:fixed;inset:0;background:rgba(10,14,22,.95);display:flex;flex-direction:column;
+    align-items:center;justify-content:center;z-index:50;text-align:center;padding:20px;}
+  #boot .spin{width:38px;height:38px;border:4px solid #2a3550;border-top-color:var(--blue);
+    border-radius:50%;animation:sp 1s linear infinite;margin-bottom:16px;}
+  @keyframes sp{to{transform:rotate(360deg)}}
+  #bootMsg{color:var(--dim);max-width:440px;}
+</style>
+</head>
+<body>
+<div id="boot">
+  <div class="spin"></div>
+  <h1>Booting the real Python engine…</h1>
+  <p id="bootMsg">Loading Pyodide + NumPy and the propfirm_engine source (~10&nbsp;MB the first time,
+    then cached). Every number you'll see is computed by the actual reference simulator running in your browser.</p>
+</div>
+
+<header>
+  <h1>Prop-Firm Engine</h1>
+  <span class="sub">live validation dashboard · the real reference simulator, running client-side via Pyodide</span>
+</header>
+
+<div class="wrap">
+  <div>
+    <div class="panel">
+      <h2>Account</h2>
+      <label>Firm</label><select id="firm"></select>
+      <label>Account type</label><select id="atype"></select>
+      <label>Size</label><select id="size"></select>
+      <label>Stage</label>
+      <div class="seg" id="phaseSeg">
+        <button data-role="eval" class="active">Eval</button>
+        <button data-role="funded">Funded</button>
+      </div>
+      <div style="margin-top:12px"><button class="primary" id="startBtn">Start / Reset account</button></div>
+      <div class="muted" id="rulesSummary" style="margin-top:10px"></div>
+    </div>
+    <div class="panel">
+      <h2>Enter a trade</h2>
+      <label>Trade P&amp;L ($)</label><input id="pnl" type="number" step="1" placeholder="e.g. 250 or -400" />
+      <label>Intraday low ($, optional)</label><input id="low" type="number" step="1" placeholder="defaults to min(pnl, 0)" />
+      <div class="row" style="margin-top:12px">
+        <button class="primary" id="addBtn">Add trade</button>
+        <button id="nextDayBtn">Next day →</button>
+      </div>
+      <div class="muted" id="dayHint" style="margin-top:8px"></div>
+      <div class="err" id="err"></div>
+    </div>
+    <div class="panel" id="payoutBox" hidden>
+      <h2>Request a payout</h2>
+      <div class="stat"><span class="k">Total profit</span><span class="v" id="poTotal">—</span></div>
+      <div class="stat"><span class="k">Cycle profit (since last payout)</span><span class="v" id="poCycle">—</span></div>
+      <div class="stat"><span class="k">Allowed range</span><span class="v" id="poRange">—</span></div>
+      <label>Amount to take ($)</label><input id="poAmt" type="number" step="1" placeholder="500 – max" />
+      <div style="margin-top:10px"><button class="gold" id="takePayoutBtn">Take payout</button></div>
+      <div class="muted" id="poReason" style="margin-top:8px"></div>
+    </div>
+  </div>
+
+  <div>
+    <div class="panel">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+        <h2 style="margin:0">Account status</h2>
+        <span id="statusBadge" class="badge in_progress">In progress</span>
+      </div>
+      <div class="grid2">
+        <div>
+          <div class="stat"><span class="k">Balance</span><span class="v" id="balance">—</span></div>
+          <div class="stat"><span class="k">Total P&amp;L (trading)</span><span class="v" id="totalPnl">—</span></div>
+          <div class="stat"><span class="k">Current day P&amp;L</span><span class="v" id="dayPnl">—</span></div>
+          <div class="stat"><span class="k">Trading days</span><span class="v" id="nDays">—</span></div>
+        </div>
+        <div>
+          <div class="stat"><span class="k">Max Loss Limit (floor, EOD)</span><span class="v" id="mllFloor">—</span></div>
+          <div class="stat"><span class="k">Distance to MLL</span><span class="v" id="mllDist">—</span></div>
+          <div class="bar"><i id="mllBar" style="width:0;background:var(--amber)"></i></div>
+          <div class="stat" id="targetRow" style="margin-top:8px"><span class="k">Profit target</span><span class="v" id="target">—</span></div>
+          <div class="stat" id="targetDistRow"><span class="k">To go</span><span class="v" id="targetDist">—</span></div>
+          <div class="stat" id="consRow"><span class="k">Consistency (max day / profit)</span><span class="v" id="cons">—</span></div>
+        </div>
+      </div>
+      <div class="muted" id="mllNote" style="margin-top:8px"></div>
+    </div>
+
+    <div class="panel">
+      <h2>Equity curve · MLL floor · profit target</h2>
+      <svg id="chart" viewBox="0 0 800 230" preserveAspectRatio="none"></svg>
+      <div class="legend">
+        <span><i style="background:var(--blue)"></i>Equity</span>
+        <span><i style="background:var(--amber)"></i>MLL floor (EOD)</span>
+        <span id="legTarget"><i style="background:var(--green)"></i>Profit target</span>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>P&amp;L calendar (each square = one trading day, rows = weeks Mon–Fri)</h2>
+      <div class="caldays"><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span></div>
+      <div class="cal" id="calendar"></div>
+    </div>
+
+    <div class="panel">
+      <h2>Day-by-day log</h2>
+      <table>
+        <thead><tr><th>Day</th><th>Trades</th><th>Day P&amp;L</th><th>Payout</th><th>Balance</th><th>MLL floor</th><th>State</th></tr></thead>
+        <tbody id="logBody"><tr><td colspan="7" class="muted">No days yet.</td></tr></tbody>
+      </table>
+      <h2 style="margin-top:16px">Current day</h2>
+      <div id="currentTrades" class="muted">—</div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/pyodide/v0.26.4/full/pyodide.js"></script>
+<script>
+const $=id=>document.getElementById(id);
+let registry={}, role="eval", days=[[]], pyEval=null;
+const money=v=>(v==null?"—":(v<0?"-$":"$")+Math.abs(Math.round(v)).toLocaleString());
+
+async function boot(){
+  try{
+    $("bootMsg").textContent="Loading Pyodide runtime…";
+    const pyodide=await loadPyodide({indexURL:"https://cdn.jsdelivr.net/pyodide/v0.26.4/full/"});
+    $("bootMsg").textContent="Loading NumPy…";
+    await pyodide.loadPackage("numpy");
+    $("bootMsg").textContent="Loading the propfirm_engine source…";
+    const manifest=await (await fetch("py/manifest.json")).json();
+    pyodide.FS.mkdirTree("/pkg/propfirm_engine");
+    for(const path of manifest){
+      const src=await (await fetch("py/"+path)).text();
+      pyodide.FS.writeFile("/pkg/"+path, src);
+    }
+    pyodide.runPython(`
+import sys, json
+sys.path.insert(0, "/pkg")
+from bridge import evaluate as _evaluate
+from accounts import list_registry as _list_registry
+def _eval(firm, atype, size, role, days_json):
+    return json.dumps(_evaluate(firm, atype, size, role, json.loads(days_json)))
+def _registry():
+    return json.dumps(_list_registry())
+`);
+    registry=JSON.parse(pyodide.runPython("_registry()"));
+    pyEval=pyodide.globals.get("_eval");
+    initUI();
+    $("boot").style.display="none";
+  }catch(e){
+    $("bootMsg").innerHTML="<span style='color:var(--red)'>Failed to boot: "+e+"</span><br>Try reloading.";
+    console.error(e);
+  }
+}
+
+function initUI(){
+  $("firm").innerHTML=""; Object.keys(registry).forEach(f=>$("firm").add(new Option(f,f))); fillTypes();
+  $("firm").onchange=fillTypes; $("atype").onchange=fillSizes;
+  document.querySelectorAll("#phaseSeg button").forEach(b=>b.onclick=()=>{
+    document.querySelectorAll("#phaseSeg button").forEach(x=>x.classList.remove("active"));
+    b.classList.add("active"); role=b.dataset.role; days=[[]]; render();});
+  $("startBtn").onclick=()=>{days=[[]];render();};
+  $("nextDayBtn").onclick=()=>{if(days[days.length-1].length===0)return;days.push([]);render();};
+  $("addBtn").onclick=()=>{const p=parseFloat($("pnl").value);
+    if(isNaN(p)){$("err").textContent="Enter a numeric trade P&L.";return;}
+    const lr=$("low").value;const low=lr===""?null:parseFloat(lr);
+    days[days.length-1].push({type:"trade",pnl:p,low});$("pnl").value="";$("low").value="";$("pnl").focus();render();};
+  $("takePayoutBtn").onclick=()=>{const a=parseFloat($("poAmt").value);
+    if(isNaN(a)){$("err").textContent="Enter a payout amount.";return;}
+    days[days.length-1].push({type:"payout",amount:a});$("poAmt").value="";render();};
+  document.addEventListener("keydown",e=>{if(e.key==="Enter"&&document.activeElement===$("pnl"))$("addBtn").click();});
+  render();
+}
+function fillTypes(){const f=$("firm").value;$("atype").innerHTML="";Object.keys(registry[f]).forEach(t=>$("atype").add(new Option(t,t)));fillSizes();}
+function fillSizes(){const f=$("firm").value,t=$("atype").value;$("size").innerHTML="";Object.keys(registry[f][t]).forEach(s=>$("size").add(new Option(s,s)));}
+
+function render(){
+  $("err").textContent="";
+  let data;
+  try{ data=JSON.parse(pyEval($("firm").value,$("atype").value,$("size").value,role,JSON.stringify(days))); }
+  catch(e){ $("err").textContent=String(e); return; }
+  if(data.error){$("err").textContent=data.error;return;}
+  const s=data.snapshot, req=s.requirements;
+
+  const badge=$("statusBadge"); badge.className="badge "+s.status; badge.textContent=s.status_label;
+  $("balance").textContent=money(s.balance);
+  const tp=$("totalPnl"); tp.textContent=money(s.total_pnl); tp.className="v "+(s.total_pnl>=0?"pos":"neg");
+  const curEmpty=days[days.length-1].length===0;
+  const dp=$("dayPnl"); const dpv=curEmpty?0:s.day_pnl; dp.textContent=money(dpv); dp.className="v "+(dpv>=0?"pos":"neg");
+  $("nDays").textContent=s.n_days;
+  $("mllFloor").textContent=money(s.mll_floor)+(s.mll_locked?" 🔒 locked":"");
+  const md=$("mllDist"); md.textContent=money(s.mll_distance); md.className="v "+(s.mll_distance>0?"pos":"neg");
+  const mllPct=Math.max(0,Math.min(100,100*s.mll_distance/(s.mll_amount||1)));
+  $("mllBar").style.width=mllPct+"%"; $("mllBar").style.background=mllPct<25?"var(--red)":mllPct<60?"var(--amber)":"var(--green)";
+  $("mllNote").textContent=`The MLL is end-of-day: the floor holds during the day and only moves when you click "Next day".`
+    + (s.lock_at?` It stops trailing once the balance reaches ${money(s.lock_at+s.mll_amount)} (floor locks at ${money(s.lock_at)}).`:``);
+  const hasT=s.profit_target_level!=null; $("targetRow").hidden=!hasT; $("targetDistRow").hidden=!hasT;
+  if(hasT){$("target").textContent=money(s.profit_target_level);$("targetDist").textContent=money(s.profit_target_distance);}
+  const hasC=s.consistency_limit!=null; $("consRow").hidden=!hasC;
+  if(hasC){const cr=s.consistency_ratio; $("cons").innerHTML=cr==null?"<span class='pill'>n/a</span>"
+    :`${Math.round(cr*100)}% <span class="pill ${cr<=s.consistency_limit?'ok':'no'}">limit ${Math.round(s.consistency_limit*100)}%</span>`;}
+  const po=s.payout; $("payoutBox").hidden=!po.enabled;
+  if(po.enabled){$("poTotal").textContent=money(po.total_profit);$("poCycle").textContent=money(po.cycle_profit);
+    $("poRange").textContent=po.max>=po.min?`${money(po.min)} – ${money(po.max)}`:"—";
+    $("takePayoutBtn").disabled=!po.can_request;
+    $("poReason").textContent=po.can_request?"Choose an amount within the range and take it.":(po.reason||"payout not available right now");}
+
+  drawChart(data.equity_series,s); drawCalendar(data.calendar);
+
+  $("logBody").innerHTML=data.days_log.length? data.days_log.map(d=>{
+    const cls=d.status==="failed"?"neg":(d.status==="passed"||d.status==="complete")?"pos":"";
+    return `<tr><td>${d.day+1}</td><td>${d.trades}</td><td class="${d.day_pnl>=0?'pos':'neg'}">${money(d.day_pnl)}</td>
+      <td>${d.payout?money(d.payout):'—'}</td><td>${money(d.balance)}</td><td>${money(d.mll_floor)}</td>
+      <td class="${cls}">${d.status}</td></tr>`;}).join("") : `<tr><td colspan="7" class="muted">No days yet.</td></tr>`;
+  const cur=days[days.length-1];
+  $("currentTrades").innerHTML=cur.length? cur.map(e=>e.type==="payout"
+      ? `<span class="chip" style="color:var(--amber)">payout −${money(e.amount)}</span>`
+      : `<span class="chip ${e.pnl>=0?'pos':'neg'}">${money(e.pnl)}${e.low!=null?` (low ${money(e.low)})`:''}</span>`).join("")
+    : "<span class='muted'>Day "+(days.length)+" — nothing yet.</span>";
+  $("dayHint").textContent=`On day ${days.length}. "Add trade" appends to it; "Next day" starts a new one.`;
+  const done=s.status==="passed"||s.status==="failed"||s.status==="complete";
+  $("addBtn").disabled=done; $("nextDayBtn").disabled=done; if(done)$("takePayoutBtn").disabled=true;
+  $("rulesSummary").textContent = role==="eval"
+    ? `Eval: reach the profit target with consistency ≤ ${Math.round((req.consistency||0)*100)}% and without breaching the EOD Max Loss Limit.`
+    : `Funded: keep the account above the MLL and request payouts ($500–$2,000, ≤50% of total profit, cycle profit ≥ $1).`;
+}
+
+function drawChart(series,s){
+  const svg=$("chart"),W=800,H=230,pad=34; const pts=series.points; if(pts.length<2){svg.innerHTML="";return;}
+  let lo=Infinity,hi=-Infinity; pts.forEach(p=>{lo=Math.min(lo,p.equity,p.floor);hi=Math.max(hi,p.equity,p.floor);});
+  if(series.target!=null){hi=Math.max(hi,series.target);lo=Math.min(lo,series.target);}
+  const padV=(hi-lo)*0.08||100; lo-=padV; hi+=padV;
+  const x=i=>pad+(W-2*pad)*i/(pts.length-1), y=v=>H-pad-(H-2*pad)*(v-lo)/(hi-lo);
+  const line=(k,c,d)=>`<polyline fill="none" stroke="${c}" stroke-width="2" ${d?'stroke-dasharray="5 4"':''} points="${pts.map((p,i)=>x(i)+','+y(p[k])).join(' ')}"/>`;
+  let tgt=""; if(series.target!=null){tgt=`<line x1="${pad}" y1="${y(series.target)}" x2="${W-pad}" y2="${y(series.target)}" stroke="var(--green)" stroke-width="2" stroke-dasharray="6 4"/>`;$("legTarget").style.display="";}else $("legTarget").style.display="none";
+  const labels=[hi,(hi+lo)/2,lo].map(v=>`<text x="4" y="${y(v)+4}" fill="var(--dim)" font-size="10">${money(v)}</text>`).join("");
+  svg.innerHTML=labels+line("floor","var(--amber)")+tgt+line("equity","var(--blue)");
+}
+function drawCalendar(cells){
+  const cal=$("calendar"); if(!cells.length){cal.innerHTML="<div class='muted'>No trading days yet.</div>";return;}
+  const weeks=Math.max(...cells.map(c=>c.week))+1, byPos={}; cells.forEach(c=>byPos[c.week*5+c.weekday]=c);
+  const maxAbs=Math.max(1,...cells.map(c=>Math.abs(c.pnl))); let html="";
+  for(let w=0;w<weeks;w++){html+=`<div class="calrow"><span class="wk">Week ${w+1}</span>`;
+    for(let d=0;d<5;d++){const c=byPos[w*5+d];
+      if(!c){html+=`<div class="cell empty"></div>`;continue;}
+      const t=Math.min(1,Math.abs(c.pnl)/maxAbs);
+      const bg=c.pnl>=0?`rgba(55,214,122,${0.12+0.5*t})`:`rgba(255,92,108,${0.12+0.5*t})`;
+      html+=`<div class="cell" style="background:${bg}"><span class="d">D${c.day+1}</span>
+        <b class="${c.pnl>=0?'pos':'neg'}">${money(c.pnl)}</b>${c.payout?`<span class="pay">−${money(c.payout)}</span>`:''}</div>`;}
+    html+=`</div>`;}
+  cal.innerHTML=html;
+}
+boot();
+</script>
+</body>
+</html>
