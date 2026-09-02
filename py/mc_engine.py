@@ -26,7 +26,11 @@ import numpy as np
 from propfirm_engine import renewal as rn  # noqa: E402
 from propfirm_engine import statistics as st  # noqa: E402
 from propfirm_engine.compiler import compile_phase  # noqa: E402
-from propfirm_engine.data import InvalidTradeDataError, preprocess  # noqa: E402
+from propfirm_engine.data import (  # noqa: E402
+    InvalidTradeDataError,
+    TradeDataset,
+    preprocess,
+)
 from propfirm_engine.engine import Engine, RunConfig  # noqa: E402
 from propfirm_engine.enums import ExitCode  # noqa: E402
 from propfirm_engine.feasibility import FeasibilitySpec  # noqa: E402
@@ -205,6 +209,25 @@ class UploadedTrades:
             "days_per_week": round(float(ds.trading_days_per_week), 2)})
 
 
+def _slice_days(ds: TradeDataset, d0: int, d1: int) -> TradeDataset:
+    """A contiguous day-range [d0, d1) of a dataset as its own TradeDataset, days
+    re-based to 0. Used to hold out a test split of the user's real days for the
+    optimizer (every day index carries ≥1 trade, so the side table stays dense)."""
+    mask = (ds.day >= d0) & (ds.day < d1)
+    day = (ds.day[mask] - d0).astype(np.int32)
+    n_days = int(d1 - d0)
+    day_count = np.bincount(day, minlength=n_days).astype(np.int32)
+    day_first = np.zeros(n_days, dtype=np.int32)
+    day_first[1:] = np.cumsum(day_count)[:-1]
+    # replace() keeps every other field (cadence, symbol_names, session_reset, ...).
+    return replace(ds, ret=ds.ret[mask], day=day, trade_low=ds.trade_low[mask],
+                   symbol=ds.symbol[mask], day_first=day_first, day_count=day_count,
+                   n_days=n_days)
+
+
+_MIN_OPT_DAYS = 6  # fewer real days than this can't hold out a meaningful test split
+
+
 def _run_uploaded(params: dict) -> dict:
     """Run the standard (constant-size) pipeline on the user's own trades: their
     realized days become the empirical pool the Monte Carlo bootstraps, so every
@@ -219,8 +242,24 @@ def _run_uploaded(params: dict) -> dict:
     feas = _feasibility(params)
     seed = int(params.get("seed", 1))
     n_paths = int(params.get("n_paths", 4000))
-    cfg = _run_config(params, n_paths, seed)
     src = UploadedTrades(dataset)
+
+    if params.get("optimize"):
+        # Hold out a test split of the user's OWN days (time-based walk-forward): fit
+        # the sizing policy on the earlier days, report on the later ones. The Monte
+        # Carlo bootstraps within each split, so this is nested OOS on real data.
+        n = dataset.n_days
+        if n < _MIN_OPT_DAYS:
+            return {"error": f"Optimizing needs at least {_MIN_OPT_DAYS} distinct "
+                    f"trading days to hold out a test set; your file has {n}. "
+                    "Add more trades, or run without Optimize for the plain stats."}
+        split = max(2, int(round(0.7 * n)))
+        train, test = _slice_days(dataset, 0, split), _slice_days(dataset, split, n)
+        result = _optimize_on(params, src, acct, feas, train, test, seed, n_paths)
+        result["uploaded"] = dict(src.provenance.params)
+        return result
+
+    cfg = _run_config(params, n_paths, seed)
     o = _ENGINE.run(acct, dataset, cfg, feasibility=feas)
     result = _build(o, src, feas, dataset, cfg, acct, None)
     result["mode"] = "single"
@@ -274,10 +313,17 @@ def _run_optimized(params, gen, acct, feas, n_days, seed, n_paths):
     """Fit a Tier-1 sizing policy with CMA-ES on a TRAIN stream, then chart the
     baseline and fitted policies on an independent HELD-OUT stream (nested OOS,
     §16.7). Returns both chart blocks plus the optimizer summary."""
-    from dataclasses import replace as _replace
-
     train = preprocess(gen.generate(n_days=n_days, seed=seed).rows)
     test = preprocess(gen.generate(n_days=n_days, seed=seed + 9999).rows)  # held out
+    return _optimize_on(params, gen, acct, feas, train, test, seed, n_paths)
+
+
+def _optimize_on(params, source, acct, feas, train, test, seed, n_paths):
+    """Shared optimize core: fit on ``train``, report/chart on the held-out ``test``.
+    ``source`` supplies edge/breakeven/provenance for the chart blocks (a generator or
+    the :class:`UploadedTrades` shim)."""
+    from dataclasses import replace as _replace
+
     base_cfg = _run_config(params, n_paths, seed)
     # Account-aware multiplier bound (ceiling = risk the whole MLL in one trade), so
     # the reachable effective size is independent of size_base (§16.3).
@@ -311,10 +357,10 @@ def _run_optimized(params, gen, acct, feas, n_days, seed, n_paths):
     }
     return {
         "mode": "optimized",
-        "baseline": _build(o_base, gen, feas, test, eval_cfg, acct, base_policy),
-        "optimized": _build(o_opt, gen, feas, test, eval_cfg, acct, fitted),
+        "baseline": _build(o_base, source, feas, test, eval_cfg, acct, base_policy),
+        "optimized": _build(o_opt, source, feas, test, eval_cfg, acct, fitted),
         "optimizer": optimizer,
-        "provenance": _provenance(gen),
+        "provenance": _provenance(source),
     }
 
 
