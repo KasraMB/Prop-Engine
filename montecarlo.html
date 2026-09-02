@@ -1,0 +1,549 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Prop-Firm Engine — Monte Carlo Explorer</title>
+<style>
+  :root{--bg:#0f1420;--panel:#171e2e;--panel2:#1e2739;--line:#2a3550;--text:#e7ecf5;
+    --dim:#8b98b4;--green:#37d67a;--red:#ff5c6c;--blue:#4aa3ff;--amber:#ffb84a;--violet:#a78bfa;}
+  *{box-sizing:border-box;} body{margin:0;background:var(--bg);color:var(--text);
+    font:14px/1.5 system-ui,Segoe UI,Roboto,sans-serif;}
+  h1{font-size:18px;margin:0;} h2{font-size:12px;text-transform:uppercase;
+    letter-spacing:.06em;color:var(--dim);margin:0 0 10px;}
+  header{padding:14px 20px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:12px;}
+  header .sub{color:var(--dim);font-size:12px;}
+  nav{margin-left:auto;display:flex;gap:8px;}
+  nav a{padding:7px 13px;border-radius:7px;text-decoration:none;font-size:13px;}
+  nav a.on{background:#2563eb;color:#fff;} nav a.off{background:#26304a;color:var(--text);border:1px solid #3a466a;}
+  .wrap{display:grid;grid-template-columns:320px 1fr;gap:18px;padding:18px 20px;max-width:1500px;}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px;margin-bottom:16px;}
+  .controls{position:sticky;top:16px;max-height:calc(100vh - 40px);overflow:auto;}
+  label{display:block;color:var(--dim);font-size:12px;margin:9px 0 3px;}
+  select,input,button{font:inherit;color:var(--text);background:var(--panel2);
+    border:1px solid var(--line);border-radius:7px;padding:8px 10px;width:100%;}
+  button{cursor:pointer;background:#26304a;border-color:#3a466a;transition:.12s;}
+  button.primary{background:#2563eb;border-color:#2563eb;} button.primary:hover{background:#3b76f0;}
+  button:disabled{opacity:.5;cursor:not-allowed;}
+  .row{display:flex;gap:8px;} .row>*{flex:1;}
+  .seg{display:flex;gap:6px;} .seg button{background:var(--panel2);}
+  .seg button.active{background:#2563eb;border-color:#2563eb;}
+  .muted{color:var(--dim);font-size:12px;} .err{color:var(--red);font-size:12px;margin-top:8px;}
+  .cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;}
+  .card{background:var(--panel2);border:1px solid var(--line);border-radius:9px;padding:11px 13px;}
+  .card .k{color:var(--dim);font-size:11px;text-transform:uppercase;letter-spacing:.04em;}
+  .card .v{font-size:20px;font-weight:700;font-variant-numeric:tabular-nums;margin-top:3px;}
+  .card .h{color:var(--dim);font-size:11px;margin-top:2px;}
+  .pos{color:var(--green);} .neg{color:var(--red);} .accent{color:var(--blue);}
+  .charts{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+  @media(max-width:1050px){.charts{grid-template-columns:1fr;} .wrap{grid-template-columns:1fr;}}
+  .chart{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px;}
+  .chart.wide{grid-column:1 / -1;}
+  svg{width:100%;display:block;} text{fill:var(--dim);font-size:10px;}
+  .legend{display:flex;gap:14px;font-size:12px;margin-top:6px;flex-wrap:wrap;}
+  .legend i{display:inline-block;width:12px;height:12px;border-radius:3px;vertical-align:middle;margin-right:5px;}
+  .overlay{position:fixed;inset:0;background:rgba(10,14,22,.6);display:none;align-items:center;
+    justify-content:center;font-size:15px;color:var(--text);z-index:9;}
+  .overlay.on{display:flex;} .spin{width:16px;height:16px;border:2px solid #3a466a;border-top-color:var(--blue);
+    border-radius:50%;display:inline-block;margin-right:10px;animation:sp .8s linear infinite;}
+  @keyframes sp{to{transform:rotate(360deg)}}
+  details summary{cursor:pointer;color:var(--dim);font-size:12px;margin:8px 0;}
+  .hint{color:var(--dim);font-size:11px;margin-top:8px;line-height:1.45;}
+  #boot{position:fixed;inset:0;background:rgba(10,14,22,.96);display:flex;flex-direction:column;
+    align-items:center;justify-content:center;text-align:center;padding:24px;z-index:20;}
+  #bootMsg{color:var(--dim);max-width:460px;}
+</style>
+</head>
+<body>
+<header>
+  <h1>Prop-Firm Engine</h1>
+  <span class="sub">Monte Carlo explorer · a trade-stream generator run through the real batch engine</span>
+  <nav>
+    <a href="index.html" class="off">Interactive</a>
+    <a href="montecarlo.html" class="on">Monte Carlo</a>
+  </nav>
+</header>
+
+<div id="boot">
+  <div class="spin" style="width:38px;height:38px;border-width:4px;margin-bottom:16px"></div>
+  <p id="bootMsg">Loading Pyodide + NumPy and the propfirm_engine source (~10&nbsp;MB the first
+    time, then cached). Everything runs in your browser — no server.</p>
+</div>
+<div class="overlay" id="overlay"><span class="spin"></span><span id="ovtext">Running the engine…</span></div>
+
+<div class="wrap">
+  <div>
+    <div class="panel controls">
+      <h2>Trade-stream generator</h2>
+      <div class="seg" id="genSeg">
+        <button data-gen="iid" class="active">IID</button>
+        <button data-gen="regime">Regime</button>
+        <button data-gen="stochvol">Stoch-vol</button>
+      </div>
+      <div class="row"><div><label>Win rate</label><input id="win_rate" type="number" step="0.01" value="0.52"></div>
+        <div><label>Reward:risk (RR)</label><input id="rr" type="number" step="0.1" value="1.5"></div></div>
+      <label>Trades / day</label><input id="trades_per_day" type="number" step="1" value="4">
+      <div id="regimeParams" hidden>
+        <div class="row"><div><label>Persistence</label><input id="persistence" type="number" step="0.01" value="0.9"></div>
+          <div><label>Spread</label><input id="spread" type="number" step="0.05" value="0.2"></div></div>
+      </div>
+      <div id="stochvolParams" hidden>
+        <div class="row"><div><label>Vol φ</label><input id="vol_phi" type="number" step="0.05" value="0.9"></div>
+          <div><label>Vol σ</label><input id="vol_sigma" type="number" step="0.05" value="0.6"></div></div>
+      </div>
+      <div class="hint" id="edgeHint"></div>
+    </div>
+
+    <div class="panel controls" style="position:static">
+      <h2>Account</h2>
+      <label>Firm</label><select id="firm"></select>
+      <label>Account type</label><select id="atype"></select>
+      <label>Size</label><select id="size"></select>
+      <div class="row"><div><label>Eval fee ($)</label><input id="eval_fee" type="number" step="10" value="150"></div>
+        <div><label>Activation fee ($)</label><input id="activation_fee" type="number" step="10" value="100"></div></div>
+
+      <h2 style="margin-top:16px">Monte Carlo</h2>
+      <div class="row"><div><label>Paths</label><input id="n_paths" type="number" step="500" value="4000"></div>
+        <div><label>Source days</label><input id="n_days" type="number" step="20" value="160"></div></div>
+      <div class="row"><div><label>L eval</label><input id="L_eval" type="number" step="5" value="30"></div>
+        <div><label>L funded</label><input id="L_funded" type="number" step="5" value="60"></div></div>
+      <div class="row"><div><label>$/R (size_base)</label><input id="size_base" type="number" step="10" value="100"></div>
+        <div><label>Seed</label><input id="seed" type="number" step="1" value="1"></div></div>
+      <div class="row"><div><label>Per-trade cost ($)</label><input id="trade_cost" type="number" step="1" value="0"></div>
+        <div><label>Resampler mean-block</label><input id="mean_block" type="number" step="1" value="1"></div></div>
+
+      <details>
+        <summary>Feasibility projection (advanced)</summary>
+        <label><input type="checkbox" id="feasibility" style="width:auto;vertical-align:middle"> enable executable-position projection</label>
+        <label>Hard drawdown floor ($)</label><input id="hard_floor" type="number" step="50" value="100">
+        <div class="hint">Positions are sized so a stop-out lands on the MLL (breach = stop-out,
+          not an MAE breach); the account caps out once less than this much drawdown remains.</div>
+      </details>
+
+      <details>
+        <summary>win-rate × RR surface (extra runs)</summary>
+        <label><input type="checkbox" id="surface" style="width:auto;vertical-align:middle"> compute the surface</label>
+        <label>Surface metric</label>
+        <select id="surface_metric">
+          <option value="reached_funded">Eval pass rate</option>
+          <option value="prob_profitable">P(profitable)</option>
+          <option value="r_renewal_week">Renewal rate ($/wk)</option>
+          <option value="return_on_fee_year">Return on fee (/yr)</option>
+        </select>
+      </details>
+
+      <details>
+        <summary>Optimize sizing (Tier-1 CMA-ES, slower)</summary>
+        <label><input type="checkbox" id="optimize" style="width:auto;vertical-align:middle"> fit a per-stage sizing policy</label>
+        <label>Generations</label><input id="opt_generations" type="number" step="1" value="12">
+        <div class="hint">Searches a risk-multiplier per stage regime to maximize the renewal
+          reward rate, fitted on a TRAIN stream and reported on an independent HELD-OUT
+          stream (nested OOS). Takes ~10–30 s.</div>
+      </details>
+
+      <div style="margin-top:14px"><button class="primary" id="runBtn">Run Monte Carlo</button></div>
+      <div class="err" id="err"></div>
+    </div>
+  </div>
+
+  <div id="results">
+    <div class="panel" id="optPanel" hidden>
+      <h2>Optimizer — Tier-1 sizing policy (CMA-ES, held-out / OOS)</h2>
+      <div class="cards" id="optScores"></div>
+      <h2 style="margin-top:14px">Fitted risk multiplier per stage regime</h2>
+      <svg id="c_mults" viewBox="0 0 700 130"></svg>
+      <div class="hint" id="optNote"></div>
+    </div>
+
+    <div class="panel" id="policyPanel" hidden style="padding:11px 16px">
+      <div style="display:flex;align-items:center;gap:14px">
+        <span class="muted">Charts below show:</span>
+        <div class="seg" id="policySeg" style="max-width:340px">
+          <button data-p="baseline">Baseline sizing</button>
+          <button data-p="optimized" class="active">Optimized sizing</button>
+        </div>
+        <span class="muted" id="policyNote"></span>
+      </div>
+    </div>
+
+    <div class="panel"><h2>Headline statistics</h2><div class="cards" id="cards">
+      <div class="muted">Set generator + account parameters and click <b>Run Monte Carlo</b>.</div>
+    </div><div class="hint" id="provHint"></div></div>
+
+    <div class="charts" id="charts" hidden>
+      <div class="chart"><h2>Outcome breakdown</h2><svg id="c_outcomes" viewBox="0 0 400 190"></svg></div>
+      <div class="chart"><h2>Payout-count distribution — P(k payouts)</h2><svg id="c_paycount" viewBox="0 0 400 190"></svg></div>
+      <div class="chart"><h2>Net payoff per attempt ($, payouts − fees)</h2><svg id="c_payoff" viewBox="0 0 400 190"></svg>
+        <div class="legend" id="payoffQ"></div></div>
+      <div class="chart"><h2>Return on fee per attempt (×)</h2><svg id="c_rof" viewBox="0 0 400 190"></svg></div>
+      <div class="chart"><h2>Attempt duration (calendar weeks)</h2><svg id="c_weeks" viewBox="0 0 400 190"></svg></div>
+      <div class="chart"><h2>Time to first payout (weeks)</h2><svg id="c_ttfp" viewBox="0 0 400 190"></svg></div>
+      <div class="chart wide"><h2>Reward vs time — each dot is one attempt</h2><svg id="c_scatter" viewBox="0 0 900 300"></svg>
+        <div class="legend"><span><i style="background:var(--green)"></i>profitable</span>
+          <span><i style="background:var(--red)"></i>unprofitable</span>
+          <span class="muted">y = net payoff ($), x = attempt duration (weeks)</span></div></div>
+      <div class="chart wide"><h2>Sample equity curves (eval phase, a few resampled paths)</h2>
+        <svg id="c_equity" viewBox="0 0 900 260"></svg></div>
+      <div class="chart wide" id="surfaceBox" hidden><h2 id="surfaceTitle">win-rate × RR surface</h2>
+        <svg id="c_surface" viewBox="0 0 900 340"></svg>
+        <div class="legend" id="surfaceLegend"></div></div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/pyodide/v0.26.4/full/pyodide.js"></script>
+<script>
+const $=id=>document.getElementById(id);
+let genKind="iid", registry={};
+let pyRun=null, pyRegistry=null;   // set once Pyodide + the engine are loaded
+
+async function boot(){
+  try{
+    $("bootMsg").textContent="Loading Pyodide runtime…";
+    const pyodide=await loadPyodide({indexURL:"https://cdn.jsdelivr.net/pyodide/v0.26.4/full/"});
+    $("bootMsg").textContent="Loading NumPy…";
+    await pyodide.loadPackage("numpy");
+    $("bootMsg").textContent="Loading the propfirm_engine source…";
+    const manifest=await (await fetch("py/manifest_mc.json")).json();
+    pyodide.FS.mkdirTree("/pkg/propfirm_engine/firms");
+    for(const path of manifest){
+      const src=await (await fetch("py/"+path)).text();
+      pyodide.FS.writeFile("/pkg/"+path, src);
+    }
+    pyodide.runPython(`
+import sys, json
+sys.path.insert(0, "/pkg")
+import mc_engine as _mc
+def _run(params_json):
+    return json.dumps(_mc.run(json.loads(params_json)))
+def _registry():
+    return json.dumps(_mc.registry())
+`);
+    pyRun=pyodide.globals.get("_run");
+    pyRegistry=pyodide.globals.get("_registry");
+    loadRegistry();
+    updateEdge();
+    $("boot").style.display="none";
+  }catch(e){
+    $("bootMsg").innerHTML="<span style='color:var(--red)'>Failed to boot: "+e+"</span><br>Try reloading.";
+    console.error(e);
+  }
+}
+const pct=v=>v==null?"—":(100*v).toFixed(1)+"%";
+const money=v=>v==null?"—":(v<0?"-$":"$")+Math.abs(v).toLocaleString(undefined,{maximumFractionDigits:0});
+const num=(v,d=2)=>v==null?"—":(+v).toLocaleString(undefined,{maximumFractionDigits:d});
+
+// ---- controls ----
+document.querySelectorAll("#genSeg button").forEach(b=>b.onclick=()=>{
+  document.querySelectorAll("#genSeg button").forEach(x=>x.classList.remove("active"));
+  b.classList.add("active"); genKind=b.dataset.gen;
+  $("regimeParams").hidden=genKind!=="regime"; $("stochvolParams").hidden=genKind!=="stochvol";
+  updateEdge();
+});
+["win_rate","rr"].forEach(id=>$(id).addEventListener("input",updateEdge));
+function updateEdge(){
+  const wr=+$("win_rate").value, rr=+$("rr").value;
+  const edge=wr*(rr+1)-1, be=1/(rr+1);
+  $("edgeHint").innerHTML=`Derived edge <b class="${edge>=0?'pos':'neg'}">${edge>=0?'+':''}${edge.toFixed(3)} R/trade</b> · breakeven win-rate <b>${(100*be).toFixed(1)}%</b> (edge is derived, never an input)`;
+}
+function loadRegistry(){
+  registry=JSON.parse(pyRegistry());
+  $("firm").innerHTML=""; Object.keys(registry).forEach(f=>$("firm").add(new Option(f,f))); fillTypes();
+}
+function fillTypes(){const f=$("firm").value;$("atype").innerHTML="";Object.keys(registry[f]).forEach(t=>$("atype").add(new Option(t,t)));fillSizes();}
+function fillSizes(){const f=$("firm").value,t=$("atype").value;$("size").innerHTML="";registry[f][t].forEach(s=>$("size").add(new Option(s,s)));}
+$("firm").onchange=fillTypes; $("atype").onchange=fillSizes;
+
+function collect(){
+  const g=id=>$(id).value, n=id=>+$(id).value;
+  return {generator:genKind, win_rate:n("win_rate"), rr:n("rr"), trades_per_day:n("trades_per_day"),
+    persistence:n("persistence"), spread:n("spread"), vol_phi:n("vol_phi"), vol_sigma:n("vol_sigma"),
+    firm:g("firm"), atype:g("atype"), size:g("size"), eval_fee:n("eval_fee"), activation_fee:n("activation_fee"),
+    n_paths:n("n_paths"), n_days:n("n_days"), L_eval:n("L_eval"), L_funded:n("L_funded"),
+    size_base:n("size_base"), seed:n("seed"), mean_block:n("mean_block"), trade_cost:n("trade_cost"),
+    feasibility:$("feasibility").checked, hard_floor:n("hard_floor"),
+    surface:$("surface").checked, surface_metric:g("surface_metric"),
+    optimize:$("optimize").checked, opt_generations:n("opt_generations")};
+}
+
+$("runBtn").onclick=async()=>{
+  if(!pyRun){$("err").textContent="Still loading the engine — one moment.";return;}
+  $("err").textContent=""; $("overlay").classList.add("on");
+  $("ovtext").textContent=$("optimize").checked?"Fitting the sizing policy (CMA-ES) — this runs in-browser and can take a minute…"
+    :$("surface").checked?"Running the engine + surface sweep…":"Running the engine…";
+  // let the overlay paint before the (synchronous, blocking) Pyodide call
+  await new Promise(r=>setTimeout(r,40));
+  try{
+    const data=JSON.parse(pyRun(JSON.stringify(collect())));
+    if(data.error){$("err").textContent=data.error;$("overlay").classList.remove("on");return;}
+    draw(data);
+  }catch(e){$("err").textContent=String(e);}
+  $("overlay").classList.remove("on");
+};
+
+// ---- rendering ----
+let mcData=null, policyView="optimized";
+
+function draw(d){
+  mcData=d; $("charts").hidden=false;
+  const p=d.provenance;
+  $("provHint").innerHTML=`Generator <b>${p.generator}</b> · ${Object.entries(p.params).map(([k,v])=>`${k}=${v}`).join(" · ")} — every number computed by the real batch engine.`;
+  if(d.mode==="optimized"){
+    $("optPanel").hidden=false; $("policyPanel").hidden=false;
+    renderOptimizer(d.optimizer);
+    policyView="optimized";
+    document.querySelectorAll("#policySeg button").forEach(b=>b.classList.toggle("active",b.dataset.p==="optimized"));
+    renderView();
+    $("surfaceBox").hidden=true;
+  } else {
+    $("optPanel").hidden=true; $("policyPanel").hidden=true;
+    renderBlock(d, null);
+    if(d.surface){ $("surfaceBox").hidden=false; surface3d("c_surface", d.surface); }
+    else $("surfaceBox").hidden=true;
+  }
+}
+
+function renderView(){
+  const opt=policyView==="optimized";
+  const block=opt?mcData.optimized:mcData.baseline;
+  const base=opt?mcData.baseline.numbers:null;   // deltas shown vs baseline
+  renderBlock(block, base);
+  $("policyNote").textContent=opt?"fitted policy on held-out data (Δ vs baseline)":"constant-size baseline on held-out data";
+}
+
+document.querySelectorAll("#policySeg button").forEach(b=>b.onclick=()=>{
+  document.querySelectorAll("#policySeg button").forEach(x=>x.classList.remove("active"));
+  b.classList.add("active"); policyView=b.dataset.p; renderView();
+});
+
+const DELTA_KEYS={reached_funded:"pp",prob_profitable:"pp",nontradable_rate:"pp",
+  breached_before_payout:"pp",mean_net_payoff:"$",mean_payout:"$",payout_velocity_month:"$",
+  r_renewal_week:"$",fee_bankroll_efficiency:"$",return_on_fee_year:"x",
+  mean_weeks_to_pass_eval:"wk",mean_weeks_to_first_payout:"wk"};
+function deltaChip(key,cur,base){
+  if(base==null||cur==null||base[key]==null) return "";
+  const d=cur-base[key], t=DELTA_KEYS[key]; if(!t||Math.abs(d)<1e-9) return "";
+  const s=d>0?"+":"", cls=d>0?"pos":"neg";
+  const txt=t==="pp"?`${s}${(100*d).toFixed(1)}pp`:t==="x"?`${s}${d.toFixed(2)}×`
+    :t==="wk"?`${s}${d.toFixed(1)}wk`:`${s}${money(d)}`;
+  return ` <span class="${cls}" style="font-size:11px">(${txt})</span>`;
+}
+
+function renderBlock(block, base){
+  const n=block.numbers;
+  const card=(k,v,h,cls="",dk=null)=>`<div class="card"><div class="k">${k}</div>
+    <div class="v ${cls}">${v}</div><div class="h">${(h||"")+(dk?deltaChip(dk,n[dk],base):"")}</div></div>`;
+  $("cards").innerHTML=[
+    card("Eval pass rate",pct(n.reached_funded),"cleared eval → funded","accent","reached_funded"),
+    card("P(profitable)",pct(n.prob_profitable),"net payouts &gt; fees","","prob_profitable"),
+    card("Edge",(n.edge>=0?"+":"")+num(n.edge,3)+" R","breakeven "+pct(n.breakeven_win_rate),n.edge>=0?"pos":"neg"),
+    card("Mean net payoff",money(n.mean_net_payoff),"per attempt, after fees",n.mean_net_payoff>=0?"pos":"neg","mean_net_payoff"),
+    card("Mean payout",money(n.mean_payout),"gross, funded","","mean_payout"),
+    card("Payout velocity",money(n.payout_velocity_month)+"/mo","expected, calendar","","payout_velocity_month"),
+    card("Return on fee",num(n.return_on_fee_year,2)+"×/yr","annualized","","return_on_fee_year"),
+    card("Renewal rate",money(n.r_renewal_week)+"/wk","E[reward]/E[cycle time]",n.r_renewal_week>=0?"pos":"neg","r_renewal_week"),
+    card("Fee-bankroll eff.",money(n.fee_bankroll_efficiency),"$/mo per $1k of fees","","fee_bankroll_efficiency"),
+    card("Median duration",num(n.median_weeks,1)+" wk","per attempt"),
+    card("Time to pass eval",num(n.mean_weeks_to_pass_eval,1)+" wk","mean, cleared eval","accent","mean_weeks_to_pass_eval"),
+    card("Time to first payout",num(n.mean_weeks_to_first_payout,1)+" wk","mean, from eval start","","mean_weeks_to_first_payout"),
+    card("Breached before payout",pct(n.breached_before_payout),"lost, no payout","neg","breached_before_payout"),
+    n.nontradable_rate!=null?card("Non-tradable rate",pct(n.nontradable_rate),"withered (CAPPED_OUT)","neg","nontradable_rate"):"",
+    card("Paths",n.n_paths.toLocaleString(),"Monte Carlo attempts"),
+  ].join("");
+
+  barCats("c_outcomes", block.outcomes.map(o=>o.code), block.outcomes.map(o=>o.count), codeColor);
+  const pc=block.payout_count_dist;
+  barCats("c_paycount", pc.map((_,i)=>i+""), pc.map(x=>x), ()=> "var(--blue)", v=>(100*v).toFixed(0)+"%");
+  histogram("c_payoff", block.hist_net_payoff, "var(--green)");
+  const q=block.payoff_quantiles; $("payoffQ").innerHTML=q.q.map((qq,i)=>`<span class="muted">p${qq}: <b>${money(q.v[i])}</b></span>`).join("");
+  histogram("c_rof", block.hist_return_on_fee, "var(--violet)");
+  histogram("c_weeks", block.hist_weeks, "var(--amber)");
+  histogram("c_ttfp", block.hist_time_to_first_payout, "var(--blue)");
+  scatter("c_scatter", block.scatter);
+  equity("c_equity", block.equity_paths);
+}
+
+function renderOptimizer(o){
+  const card=(k,v,h,cls="")=>`<div class="card"><div class="k">${k}</div><div class="v ${cls}">${v}</div><div class="h">${h||""}</div></div>`;
+  const imp=o.oos_improvement;
+  $("optScores").innerHTML=[
+    card("OOS objective (fitted)",money(o.oos_score)+"/wk","renewal rate, held-out","pos"),
+    card("OOS objective (baseline)",money(o.baseline_oos_score)+"/wk","constant-size, held-out"),
+    card("OOS improvement",(imp>=0?"+":"")+money(imp)+"/wk","fitted − baseline",imp>=0?"pos":"neg"),
+    card("Train objective (fitted)",money(o.train_score)+"/wk","in-sample"),
+    card("Generations",o.generations,"CMA-ES iterations"),
+  ].join("");
+  multsChart("c_mults", o.multipliers);
+  $("optNote").innerHTML=`Objective: <b>${o.objective}</b>. Fitted on a TRAIN stream, scored on an independent HELD-OUT stream (nested OOS, §16.7). The multipliers scale the base size in each stage regime; 1.0× = the constant-size baseline.`;
+}
+
+function multsChart(id, mults){
+  const W=700,H=130,padL=150,padR=40,padT=8,padB=8, svg=$(id);
+  const max=Math.max(5,...mults.map(m=>m.mult)), n=mults.length, bh=(H-padT-padB)/n-8;
+  const x1=v=>padL+(W-padL-padR)*Math.min(v,max)/max;
+  let h=`<line x1="${x1(1)}" y1="${padT}" x2="${x1(1)}" y2="${H-padB}" stroke="#55617f" stroke-dasharray="3 3"/>
+    <text x="${x1(1)}" y="${H-padB+ (0)}" fill="var(--dim)"></text>`;
+  mults.forEach((m,i)=>{const y=padT+i*(H-padT-padB)/n;
+    const col=m.mult>=1?"var(--green)":"var(--amber)";
+    h+=`<text x="${padL-8}" y="${y+bh/2+3}" text-anchor="end">${m.regime}</text>`;
+    h+=`<rect x="${padL}" y="${y}" width="${Math.max(1,x1(m.mult)-padL)}" height="${bh}" rx="3" fill="${col}"/>`;
+    h+=`<text x="${x1(m.mult)+5}" y="${y+bh/2+3}" fill="var(--text)">${m.mult.toFixed(2)}×</text>`;});
+  svg.innerHTML=h;
+}
+
+function codeColor(code){return code.startsWith("FAIL")||code==="CAPPED_OUT"?"var(--red)"
+  :code==="MAXED_OUT"?"var(--green)":code==="TIMED_OUT"?"var(--blue)":"var(--amber)";}
+
+// horizontal category bars
+function barCats(id, cats, vals, color, fmt){
+  const W=400,H=190,padL=90,padR=14,padT=8,padB=8, svg=$(id);
+  const max=Math.max(...vals,1e-9), n=cats.length, bh=(H-padT-padB)/n-6;
+  let h="";
+  cats.forEach((c,i)=>{
+    const y=padT+i*(H-padT-padB)/n, w=(W-padL-padR)*vals[i]/max;
+    h+=`<text x="${padL-6}" y="${y+bh/2+3}" text-anchor="end">${c}</text>`;
+    h+=`<rect x="${padL}" y="${y}" width="${Math.max(1,w)}" height="${bh}" rx="3" fill="${color(c)}"/>`;
+    h+=`<text x="${padL+w+5}" y="${y+bh/2+3}" fill="var(--text)">${fmt?fmt(vals[i]):vals[i].toLocaleString()}</text>`;
+  });
+  svg.innerHTML=h;
+}
+
+function histogram(id, hist, color){
+  const W=400,H=190,padL=40,padR=10,padT=10,padB=22, svg=$(id);
+  if(!hist.counts.length){svg.innerHTML=`<text x="${W/2}" y="${H/2}" text-anchor="middle">no data</text>`;return;}
+  const cts=hist.counts, edges=hist.edges, max=Math.max(...cts,1), n=cts.length;
+  const bw=(W-padL-padR)/n; let h="";
+  const y=v=>H-padB-(H-padT-padB)*v/max;
+  for(const t of [0,.5,1]){const v=max*t;h+=`<line x1="${padL}" y1="${y(v)}" x2="${W-padR}" y2="${y(v)}" stroke="#212b41"/>
+    <text x="${padL-5}" y="${y(v)+3}" text-anchor="end">${Math.round(v)}</text>`;}
+  cts.forEach((c,i)=>{const bh=H-padB-y(c);
+    h+=`<rect x="${padL+i*bw+1}" y="${y(c)}" width="${bw-1.5}" height="${Math.max(0,bh)}" fill="${color}" opacity="0.85"/>`;});
+  [0,Math.floor(n/2),n].forEach(i=>{const e=edges[Math.min(i,edges.length-1)];
+    h+=`<text x="${padL+i*bw}" y="${H-6}" text-anchor="middle">${(+e).toLocaleString(undefined,{maximumFractionDigits:1})}</text>`;});
+  svg.innerHTML=h;
+}
+
+function scatter(id, s){
+  const W=900,H=300,padL=54,padR=14,padT=12,padB=28, svg=$(id);
+  if(!s.weeks.length){svg.innerHTML="";return;}
+  const xs=s.weeks, ys=s.net, xmax=Math.max(...xs,1), ymin=Math.min(0,...ys), ymax=Math.max(...ys,1);
+  const x=v=>padL+(W-padL-padR)*v/xmax, y=v=>H-padB-(H-padT-padB)*(v-ymin)/(ymax-ymin||1);
+  let h=`<line x1="${padL}" y1="${y(0)}" x2="${W-padR}" y2="${y(0)}" stroke="#33405f"/>`;
+  for(const t of [0,.25,.5,.75,1]){const v=ymin+(ymax-ymin)*t;
+    h+=`<text x="${padL-6}" y="${y(v)+3}" text-anchor="end">${money(v)}</text>`;}
+  for(const t of [0,.25,.5,.75,1]){const v=xmax*t;
+    h+=`<text x="${x(v)}" y="${H-8}" text-anchor="middle">${v.toFixed(0)}w</text>`;}
+  for(let i=0;i<xs.length;i++)
+    h+=`<circle cx="${x(xs[i]).toFixed(1)}" cy="${y(ys[i]).toFixed(1)}" r="2.2" fill="${s.profitable[i]?'var(--green)':'var(--red)'}" opacity="0.55"/>`;
+  svg.innerHTML=h;
+}
+
+function equity(id, paths){
+  const W=900,H=260,padL=54,padR=14,padT=12,padB=22, svg=$(id);
+  if(!paths.length){svg.innerHTML="";return;}
+  let lo=Infinity,hi=-Infinity,maxN=0;
+  paths.forEach(p=>{p.equity.forEach(v=>{lo=Math.min(lo,v);hi=Math.max(hi,v);});maxN=Math.max(maxN,p.equity.length);});
+  const pad=(hi-lo)*0.08||100; lo-=pad;hi+=pad;
+  const x=i=>padL+(W-padL-padR)*i/Math.max(1,maxN-1), y=v=>H-padB-(H-padT-padB)*(v-lo)/(hi-lo);
+  const cols=["var(--blue)","var(--green)","var(--amber)","var(--violet)","var(--red)","#5ad1c8"];
+  let h="";
+  for(const t of [0,.5,1]){const v=lo+(hi-lo)*t;h+=`<line x1="${padL}" y1="${y(v)}" x2="${W-padR}" y2="${y(v)}" stroke="#212b41"/>
+    <text x="${padL-6}" y="${y(v)+3}" text-anchor="end">${money(v)}</text>`;}
+  paths.forEach((p,k)=>{const col=p.code.startsWith("FAIL")||p.code==="CAPPED_OUT"?"var(--red)":cols[k%cols.length];
+    h+=`<polyline fill="none" stroke="${col}" stroke-width="1.6" opacity="0.9" points="${p.equity.map((v,i)=>x(i).toFixed(1)+','+y(v).toFixed(1)).join(' ')}"/>`;});
+  svg.innerHTML=h;
+}
+
+function surfRamp(t){ // dark-blue -> teal -> amber
+  const c1=[30,39,57],c2=[74,163,255],c3=[255,184,74];
+  const mix=(a,b,u)=>a.map((x,i)=>Math.round(x+(b[i]-x)*u));
+  const c=t<0.5?mix(c1,c2,t*2):mix(c2,c3,(t-0.5)*2); return c;}
+
+// An interactive, drag-to-rotate 3-D surface (height = the metric).
+let surf={az:0.7, el:0.95, drag:null, s:null, id:null};
+const SURF_W=900, SURF_H=420, SURF_CX=410, SURF_CY=230, SURF_SC=230;
+
+function surface3d(id, s){
+  surf.s=s; surf.id=id;
+  const svg=$(id); svg.setAttribute("viewBox",`0 0 ${SURF_W} ${SURF_H}`);
+  svg.style.cursor="grab"; svg.style.touchAction="none";
+  svg.onpointerdown=e=>{surf.drag={x:e.clientX,y:e.clientY,az:surf.az,el:surf.el};
+    svg.setPointerCapture(e.pointerId); svg.style.cursor="grabbing";};
+  svg.onpointermove=e=>{if(!surf.drag)return;
+    surf.az=surf.drag.az+(e.clientX-surf.drag.x)*0.01;
+    surf.el=Math.max(0.12,Math.min(1.48,surf.drag.el-(e.clientY-surf.drag.y)*0.008));
+    surfRender();};
+  svg.onpointerup=svg.onpointercancel=()=>{surf.drag=null; svg.style.cursor="grab";};
+  $("surfaceLegend").innerHTML=`<span class="muted">drag to rotate · height = <b>${metricLabel(s.metric)}</b></span>`;
+  surfRender();
+}
+
+function surfRender(){
+  const s=surf.s, svg=$(surf.id); if(!s) return;
+  const rows=s.win_rate.length, cols=s.rr.length;
+  let flat=[]; s.z.forEach(r=>r.forEach(v=>{if(v!=null)flat.push(v);}));
+  const lo=Math.min(...flat), hi=Math.max(...flat), span=hi-lo||1;
+  const tof=v=> v==null?0:(v-lo)/span;
+  const cosA=Math.cos(surf.az),sinA=Math.sin(surf.az),cosE=Math.cos(surf.el),sinE=Math.sin(surf.el);
+  const HAMT=0.85;
+  // grid (i,j,z-normalized) -> centered model coords -> rotate(az about vertical),
+  // tilt(el) -> orthographic. Returns {x,y(screen), d(depth for painter sort)}.
+  const P=(i,j,t)=>{
+    const x=(j/(cols-1)-0.5), y=(i/(rows-1)-0.5), z=(t-0.5)*HAMT;
+    const X=x*cosA - y*sinA, Y=x*sinA + y*cosA;
+    const d=Y*cosE - z*sinE, up=Y*sinE + z*cosE;
+    return {x:SURF_CX+X*SURF_SC, y:SURF_CY-up*SURF_SC, d};
+  };
+  const shade=(t,lit)=>{const c=surfRamp(t).map(x=>Math.max(0,Math.min(255,Math.round(x*lit))));
+    return `rgb(${c[0]},${c[1]},${c[2]})`;};
+  let h="";
+
+  // base grid at z=0 (depth reference)
+  const drawLine=(a,b,st)=>`<line x1="${a.x.toFixed(1)}" y1="${a.y.toFixed(1)}" x2="${b.x.toFixed(1)}" y2="${b.y.toFixed(1)}" stroke="${st}" stroke-width="0.7"/>`;
+  for(let i=0;i<rows;i++) h+=drawLine(P(i,0,0),P(i,cols-1,0),"#20294a");
+  for(let j=0;j<cols;j++) h+=drawLine(P(0,j,0),P(rows-1,j,0),"#20294a");
+
+  // surface quads, back-to-front (draw farthest first)
+  const cells=[];
+  for(let i=0;i<rows-1;i++)for(let j=0;j<cols-1;j++){
+    const zs=[tof(s.z[i][j]),tof(s.z[i][j+1]),tof(s.z[i+1][j+1]),tof(s.z[i+1][j])];
+    const c=[P(i,j,zs[0]),P(i,j+1,zs[1]),P(i+1,j+1,zs[2]),P(i+1,j,zs[3])];
+    cells.push({c,zs,d:(c[0].d+c[1].d+c[2].d+c[3].d)/4});
+  }
+  cells.sort((a,b)=>b.d-a.d);   // far (large depth) first
+  for(const cell of cells){
+    const tavg=(cell.zs[0]+cell.zs[1]+cell.zs[2]+cell.zs[3])/4;
+    const slope=(cell.zs[1]+cell.zs[2])/2-(cell.zs[0]+cell.zs[3])/2;
+    const lit=Math.max(0.55,Math.min(1.3,1+slope*1.5));
+    const pts=cell.c.map(p=>p.x.toFixed(1)+','+p.y.toFixed(1)).join(' ');
+    h+=`<polygon points="${pts}" fill="${shade(tavg,lit)}" stroke="#0f1420" stroke-width="0.5"/>`;
+  }
+
+  // axis ticks along the i=0 (win-rate) and j=0 (RR) base edges
+  for(let j=0;j<cols;j+=Math.ceil(cols/5)){const p=P(0,j,0);
+    h+=`<text x="${p.x.toFixed(1)}" y="${(p.y+4).toFixed(1)}" text-anchor="middle">${s.rr[j].toFixed(1)}</text>`;}
+  for(let i=0;i<rows;i+=Math.ceil(rows/5)){const p=P(i,0,0);
+    h+=`<text x="${p.x.toFixed(1)}" y="${(p.y+4).toFixed(1)}" text-anchor="middle">${(100*s.win_rate[i]).toFixed(0)}%</text>`;}
+  const rrMid=P(0,cols-1,0), wMid=P(rows-1,0,0);
+  h+=`<text x="${rrMid.x.toFixed(1)}" y="${(rrMid.y+16).toFixed(1)}" text-anchor="middle" fill="var(--blue)">RR</text>`;
+  h+=`<text x="${wMid.x.toFixed(1)}" y="${(wMid.y+16).toFixed(1)}" text-anchor="middle" fill="var(--blue)">win-rate</text>`;
+
+  // vertical colour legend
+  const lx=SURF_W-40, ly0=40, lh=260;
+  for(let k=0;k<40;k++){const c=surfRamp(1-k/39);
+    h+=`<rect x="${lx}" y="${(ly0+k*lh/40).toFixed(1)}" width="14" height="${(lh/40+1).toFixed(1)}" fill="rgb(${c[0]},${c[1]},${c[2]})"/>`;}
+  h+=`<text x="${lx-4}" y="${ly0+6}" text-anchor="end">${fmtMetric(s.metric,hi)}</text>`;
+  h+=`<text x="${lx-4}" y="${ly0+lh}" text-anchor="end">${fmtMetric(s.metric,lo)}</text>`;
+
+  $("surfaceTitle").textContent=`win-rate × RR surface — ${metricLabel(s.metric)} (drag to rotate)`;
+  svg.innerHTML=h;
+}
+function metricLabel(m){return {reached_funded:"eval pass rate",prob_profitable:"P(profitable)",
+  r_renewal_week:"renewal rate ($/wk)",return_on_fee_year:"return on fee (/yr)"}[m]||m;}
+function fmtMetric(m,v){if(m==="reached_funded"||m==="prob_profitable")return (100*v).toFixed(0)+"%";
+  if(m==="r_renewal_week")return "$"+v.toFixed(0); return v.toFixed(1);}
+
+boot();
+</script>
+</body>
+</html>

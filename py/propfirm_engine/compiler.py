@@ -82,6 +82,8 @@ class CompiledPayoutSchema:
     reset_fields: np.ndarray  # int8[*] — StateField codes zeroed each payout (§6b.1)
     withdraw_reduces_equity: bool
     recompute_floor_on_payout: bool
+    resets_qualifying_days: bool  # precomputed: is N_QUALIFYING_DAYS in reset_fields?
+    #                               (hoisted out of the per-attempt hot loop)
 
     def dollar_cap_at(self, payout_index: int) -> float:
         """Per-request ceiling for the ``payout_index``-th payout; last repeats."""
@@ -152,6 +154,8 @@ def _compile_payout_schema(schema: PayoutSchema) -> CompiledPayoutSchema:
         reset_fields=np.asarray([int(f) for f in schema.reset_fields], dtype=np.int8),
         withdraw_reduces_equity=bool(schema.withdraw_reduces_equity),
         recompute_floor_on_payout=bool(schema.recompute_floor_on_payout),
+        resets_qualifying_days=int(StateField.N_QUALIFYING_DAYS)
+        in [int(f) for f in schema.reset_fields],
     )
 
 

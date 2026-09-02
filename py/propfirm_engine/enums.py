@@ -41,8 +41,15 @@ class ExitCode(IntEnum):
 
     # --- non-failure terminals ---
     TIMED_OUT = 20  # ran out of trades without passing
-    CAPPED_OUT = 21  # DEFERRED with the sizing policy (MODEL_RISKS C2/A2); reserved
-    #                  but never emitted under a constant-size policy.
+    CAPPED_OUT = 21  # NON-TRADABLE: the buffer fell below one minimum executable
+    #                  loss (alpha*B < L_min), so no position — not even q_min — is
+    #                  expressible (feasibility.py, §16.4b). Emitted only under the
+    #                  feasibility projection; inert under a constant-size policy
+    #                  (the projection never binds). Kept a DISTINCT terminal from
+    #                  FAIL_TRAILING_DD so diagnostics separate "blew up" (breach)
+    #                  from "withered" (non-tradable, MODEL_RISKS §C2). Like
+    #                  TIMED_OUT it is a non-breach terminal (not is_failure): the
+    #                  account did not breach a rule, it ran out of tradability.
     MAXED_OUT = 22  # funded: reached max_payouts — an economic SUCCESS, distinct
     #                 from eval PASSED (MODEL_RISKS H3).
 

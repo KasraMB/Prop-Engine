@@ -39,6 +39,7 @@ from dataclasses import dataclass, field
 import numpy as np
 
 from .enums import ExitCode, Severity, Stage, StateField, Timing
+from .feasibility import project_position
 from .rules import RuleKind
 
 _CONTINUOUS = int(Timing.CONTINUOUS)
@@ -49,6 +50,7 @@ _ALIVE = int(ExitCode.ALIVE)
 _PASSED = int(ExitCode.PASSED)
 _TIMED_OUT = int(ExitCode.TIMED_OUT)
 _MAXED_OUT = int(ExitCode.MAXED_OUT)
+_CAPPED_OUT = int(ExitCode.CAPPED_OUT)
 
 
 @dataclass
@@ -60,6 +62,7 @@ class SimResult:
     payout_days: list[int] = field(default_factory=list)
     total_trading_days: int = 0  # trading days this attempt actually ran (§14.4)
     trace: list[dict] = field(default_factory=list)
+    feasibility: object = None  # a FeasibilityDiag when the projection was active (§16.9)
 
     @property
     def payouts_taken(self) -> int:
@@ -81,13 +84,17 @@ def size_for(stage_mask: int, policy_params: np.ndarray, size_base: float) -> fl
 class _ReferenceSim:
     """One attempt, run as a mutable object so ``_close_day`` shares state plainly."""
 
-    def __init__(self, cp, size_base, policy_params, start_equity, trace):
+    def __init__(self, cp, size_base, policy_params, start_equity, trace,
+                 feasibility=None, diag=None, trade_cost=0.0):
         self.cp = cp
         self.schema = cp.payout
         self.size_base = size_base
         self.policy = np.asarray(policy_params, dtype=np.float64)
         self.start_equity = start_equity
+        self.trade_cost = float(trade_cost)
         self.want_trace = trace
+        self.feasibility = feasibility
+        self.diag = diag  # a FeasibilityDiag to fill, or None
 
         self.equity = start_equity
         self.peak = start_equity
@@ -103,7 +110,10 @@ class _ReferenceSim:
         self.n_days = 0
         self.n_qual_days = 0
         self.payouts_taken = 0
-        self.stage_mask = 0
+        self.is_funded = cp.role == "funded"
+        # sizing regime index (§16.4): 0 = eval; funded = 1..4 over in-profit ×
+        # pre/post-first-payout. First funded trade is flat & pre-payout (index 1).
+        self.stage_mask = 1 if self.is_funded else 0
         self.cur_day = -1
 
         self.res = SimResult(code=_ALIVE)
@@ -113,13 +123,21 @@ class _ReferenceSim:
     def _has_trailing(self) -> bool:
         return np.isfinite(self.cp.dd_amount)
 
+    def _mark_breach(self, code) -> None:
+        # Side record only (§16.9): a rule-breach terminal, for the optimizer's
+        # "blew up vs withered" split. Never influences control flow (parity-safe).
+        if self.diag is not None and 10 <= code < _TIMED_OUT:
+            self.diag.breached = True
+            self.diag.time_to_breach = self.n_days
+
     def _stage_mask(self) -> int:
-        mask = 0
-        if self.equity > self.start_equity:
-            mask |= 1 << int(Stage.IN_PROFIT)
-        if self.payouts_taken == 0:
-            mask |= 1 << int(Stage.PRE_FIRST_PAYOUT)
-        return mask
+        # Phase-aware sizing regime index (matches the kernel bit-for-bit): eval is a
+        # single regime (0); funded splits 1..4 over in-profit × pre/post-first-payout.
+        if not self.is_funded:
+            return 0
+        ip = 1 if self.equity > self.start_equity else 0
+        post = 0 if self.payouts_taken == 0 else 1
+        return 1 + post * 2 + ip
 
     def _first_fail(self, phase, test_equity):
         """First fail rule (rule order) whose predicate holds among those whose
@@ -222,7 +240,7 @@ class _ReferenceSim:
         if schema.recompute_floor_on_payout and not self.dd_locked and self._has_trailing():
             self.peak = self.equity
             self.dd_floor = self.equity - self.cp.dd_amount
-        if int(StateField.N_QUALIFYING_DAYS) in [int(x) for x in schema.reset_fields]:
+        if schema.resets_qualifying_days:  # precomputed at compile time (§6b)
             self.n_qual_days = 0
         self.cycle_start_equity = self.equity
         return self.payouts_taken >= schema.max_payouts
@@ -268,6 +286,13 @@ class _ReferenceSim:
 
     def run(self, ret, day, trade_low) -> SimResult:
         cp = self.cp
+        # Feasibility binds only with a spec AND a trailing buffer (§16.4b).
+        feas = self.feasibility
+        feas_active = feas is not None and self._has_trailing()
+        if feas_active:
+            feas_lmin = feas.q_min * feas.unit_loss
+        if self.diag is not None:
+            self.res.feasibility = self.diag
         N = ret.shape[0]
         t = 0
         while t < N:
@@ -276,6 +301,7 @@ class _ReferenceSim:
                 if self.cur_day != -1:
                     code = self._close_day(self.equity, winning_allowed=True)
                     if code != _ALIVE:
+                        self._mark_breach(code)
                         self.res.code = code
                         self.res.total_trading_days = self.n_days
                         return self.res
@@ -285,11 +311,36 @@ class _ReferenceSim:
                 self.n_days += 1
 
             size = size_for(self.stage_mask, self.policy, self.size_base)
-            p = size * float(ret[t])
+            if feas_active:
+                # Project desired -> executable against the pre-trade buffer (§16.4b).
+                desired = size
+                buffer = self.equity - self.dd_floor
+                size, capped, reduced, at_cap = project_position(
+                    desired, buffer, feas.q_min, feas.unit_loss, feas.alpha,
+                    feas.min_buffer
+                )
+                if capped:
+                    if self.diag is not None:
+                        self.diag.capped_out = True
+                        self.diag.time_to_nontradable = self.n_days
+                        self.diag.record_cap(buffer, feas_lmin)
+                    self.res.code = _CAPPED_OUT
+                    self.res.total_trading_days = self.n_days
+                    return self.res
+                if self.diag is not None:
+                    self.diag.record_trade(desired, size, buffer, feas_lmin,
+                                           reduced, at_cap)
+            entry_eq = self.equity
+            r = float(ret[t])
+            p = size * r - self.trade_cost   # realized P&L net of the per-trade cost
             self.equity += p
             self.day_pnl += p
             self.total_pnl += p
-            trade_floor = self.equity + size * float(trade_low[t])
+            # True intra-trade floating low FROM ENTRY: the lower of the close and the
+            # MAE excursion (trade_low = -mae). Pre-cost (a commission settles at close).
+            tl = float(trade_low[t])
+            exc = r if r < tl else tl        # min(ret, trade_low)
+            trade_floor = entry_eq + size * exc
             if trade_floor < self.day_low:
                 self.day_low = trade_floor
 
@@ -306,6 +357,7 @@ class _ReferenceSim:
             hit, severity, fail_code = self._first_fail(_CONTINUOUS, self.day_low)
             if hit:
                 if severity == _HARD:
+                    self._mark_breach(fail_code)
                     self.res.code = fail_code
                     self.res.total_trading_days = self.n_days
                     return self.res
@@ -313,6 +365,7 @@ class _ReferenceSim:
                 # (the last executed) trade; not a winning day (§C5).
                 code = self._close_day(self.equity, winning_allowed=False)
                 if code != _ALIVE:
+                    self._mark_breach(code)
                     self.res.code = code
                     self.res.total_trading_days = self.n_days
                     return self.res
@@ -350,6 +403,7 @@ class _ReferenceSim:
         if self.cur_day != -1:
             code = self._close_day(self.equity, winning_allowed=True)
             if code != _ALIVE:
+                self._mark_breach(code)
                 self.res.code = code
                 self.res.total_trading_days = self.n_days
                 return self.res
@@ -377,9 +431,21 @@ def simulate_reference(
     start_equity: float,
     *,
     trace: bool = False,
+    feasibility=None,
+    diag=None,
+    trade_cost: float = 0.0,
 ) -> SimResult:
-    """Simulate one attempt of compiled phase ``cp`` over a fixed trade path."""
-    sim = _ReferenceSim(cp, size_base, policy_params, start_equity, trace)
+    """Simulate one attempt of compiled phase ``cp`` over a fixed trade path.
+
+    ``feasibility`` (a :class:`~propfirm_engine.feasibility.FeasibilitySpec` or
+    ``None``) activates the executable-position projection (§16.4b); ``None``
+    reproduces the constant-position path **bit-for-bit** (the projection never
+    runs). ``diag`` (a :class:`~propfirm_engine.feasibility.FeasibilityDiag`) is
+    filled with per-attempt feasibility diagnostics when supplied — a side record
+    that never changes the outcome (so the Level-1 gate holds with the projection
+    active)."""
+    sim = _ReferenceSim(cp, size_base, policy_params, start_equity, trace,
+                        feasibility=feasibility, diag=diag, trade_cost=trade_cost)
     return sim.run(ret, day, trade_low)
 
 

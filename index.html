@@ -12,6 +12,9 @@
   h1{font-size:18px;margin:0;} h2{font-size:12px;text-transform:uppercase;
     letter-spacing:.06em;color:var(--dim);margin:0 0 10px;}
   header{padding:14px 20px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:12px;flex-wrap:wrap;}
+  nav{margin-left:auto;display:flex;gap:8px;}
+  nav a{padding:7px 13px;border-radius:7px;text-decoration:none;font-size:13px;}
+  nav a.on{background:#2563eb;color:#fff;} nav a.off{background:#26304a;color:var(--text);border:1px solid #3a466a;}
   header .sub{color:var(--dim);font-size:12px;}
   .wrap{display:grid;grid-template-columns:330px 1fr;gap:18px;padding:18px 20px;max-width:1280px;}
   @media(max-width:820px){.wrap{grid-template-columns:1fr;}}
@@ -76,6 +79,10 @@
 <header>
   <h1>Prop-Firm Engine</h1>
   <span class="sub">live validation dashboard · the real reference simulator, running client-side via Pyodide</span>
+  <nav>
+    <a href="index.html" class="on">Interactive</a>
+    <a href="montecarlo.html" class="off">Monte Carlo</a>
+  </nav>
 </header>
 
 <div class="wrap">
