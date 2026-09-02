@@ -347,7 +347,7 @@ function renderBlock(block, base){
     card("Fee-bankroll eff.",money(n.fee_bankroll_efficiency),"$/mo per $1k of fees","","fee_bankroll_efficiency"),
     card("Median duration",num(n.median_weeks,1)+" wk","per attempt"),
     card("Time to pass eval",num(n.mean_weeks_to_pass_eval,1)+" wk","mean, cleared eval","accent","mean_weeks_to_pass_eval"),
-    card("Time to first payout",num(n.mean_weeks_to_first_payout,1)+" wk","mean, from eval start","","mean_weeks_to_first_payout"),
+    card("Time to first payout",num(n.mean_weeks_to_first_payout,1)+" wk","from zero, incl. failed accounts","","mean_weeks_to_first_payout"),
     card("Breached before payout",pct(n.breached_before_payout),"lost, no payout","neg","breached_before_payout"),
     n.nontradable_rate!=null?card("Non-tradable rate",pct(n.nontradable_rate),"withered (CAPPED_OUT)","neg","nontradable_rate"):"",
     card("Paths",n.n_paths.toLocaleString(),"Monte Carlo attempts"),

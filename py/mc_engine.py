@@ -265,9 +265,23 @@ def _build(o, gen, feas, dataset, cfg, acct, policy):
                   if o.eval_trading_days is not None else None)
     mean_pass = (float(np.mean(eval_weeks[reached]))
                  if eval_weeks is not None and reached.any() else None)
-    # first payout is attempt-relative (from eval start, §H4) -> time to first payout.
-    mean_ttfp = (float(np.mean(st.calendar_weeks(o.first_payout_day[paid],
-                 o.trading_days_per_week))) if paid.any() else None)
+    # Time to first payout FROM ZERO, including the accounts that failed first: a
+    # failed attempt means buying a fresh eval and starting over, so the realistic
+    # wait is a renewal (geometric-retry) expectation, not just the winners' average.
+    # With p = P(an attempt reaches a payout), the number of non-paying attempts before
+    # the first paying one is geometric with mean (1-p)/p; each such attempt runs to
+    # termination (its full duration), then the paying attempt reaches its first payout:
+    #   E[T] = mean_time_to_first_payout(paid) + (1-p)/p * mean_full_duration(not paid)
+    # (exact in expectation by Wald's identity, attempts being iid).
+    p_pay = float(np.mean(paid)) if b else 0.0
+    if paid.any():
+        t_pay = float(np.mean(st.calendar_weeks(o.first_payout_day[paid],
+                                                 o.trading_days_per_week)))
+        nonpaid = ~paid
+        t_fail = (float(np.mean(weeks[nonpaid])) if nonpaid.any() else 0.0)
+        mean_ttfp = t_pay + (1.0 - p_pay) / p_pay * t_fail
+    else:
+        mean_ttfp = None  # no attempt ever pays -> undefined (shown as "—")
     # lost (breach FAIL_* or wither CAPPED_OUT) with NO payout ever taken.
     lost = ((o.code >= 10) & (o.code < 20)) | (o.code == int(ExitCode.CAPPED_OUT))
     breached_before_payout = float(np.mean((o.payouts_taken == 0) & lost)) if b else None
