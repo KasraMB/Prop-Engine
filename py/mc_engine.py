@@ -13,9 +13,12 @@ fee/renewal metrics are well posed.
 
 from __future__ import annotations
 
+import csv
+import io
 import os
 import sys
 from dataclasses import replace
+from types import SimpleNamespace
 
 import numpy as np
 
@@ -23,7 +26,7 @@ import numpy as np
 from propfirm_engine import renewal as rn  # noqa: E402
 from propfirm_engine import statistics as st  # noqa: E402
 from propfirm_engine.compiler import compile_phase  # noqa: E402
-from propfirm_engine.data import preprocess  # noqa: E402
+from propfirm_engine.data import InvalidTradeDataError, preprocess  # noqa: E402
 from propfirm_engine.engine import Engine, RunConfig  # noqa: E402
 from propfirm_engine.enums import ExitCode  # noqa: E402
 from propfirm_engine.feasibility import FeasibilitySpec  # noqa: E402
@@ -141,12 +144,100 @@ def _f(x):
 # --------------------------------------------------------------------------- #
 
 
+# --------------------------------------------------------------------------- #
+# Uploaded real trades — same pipeline, empirical day pool instead of a generator #
+# --------------------------------------------------------------------------- #
+
+# columns preprocess understands (case-insensitive); we keep only these.
+_CSV_NUMERIC = ("return", "pnl", "size", "mae")
+
+
+def _rows_from_csv(text: str) -> list[dict]:
+    """Parse an uploaded trades CSV into the raw row-mappings :func:`preprocess`
+    consumes. Required: ``timestamp`` + either ``return`` or (``pnl`` and ``size``);
+    optional ``mae``. Friendly ``ValueError`` on anything malformed."""
+    text = (text or "").lstrip("﻿")  # drop a UTF-8 BOM if present
+    reader = csv.DictReader(io.StringIO(text))
+    if not reader.fieldnames:
+        raise ValueError("The file is empty or has no header row.")
+    headers = {(h or "").strip().lower() for h in reader.fieldnames}
+    if "timestamp" not in headers:
+        raise ValueError("Missing a 'timestamp' column.")
+    if "return" not in headers and not ({"pnl", "size"} <= headers):
+        raise ValueError("Provide a 'return' column, or both 'pnl' and 'size'.")
+    rows: list[dict] = []
+    for i, raw in enumerate(reader, start=1):
+        rl = {(k or "").strip().lower(): v for k, v in raw.items()}
+        ts = (rl.get("timestamp") or "").strip()
+        if not ts:
+            raise ValueError(f"Row {i}: missing timestamp.")
+        row: dict = {"timestamp": ts}
+        for key in _CSV_NUMERIC:
+            v = rl.get(key)
+            if v is not None and str(v).strip() != "":
+                try:
+                    row[key] = float(v)
+                except ValueError:
+                    raise ValueError(f"Row {i}: '{key}' value {v!r} is not a number.")
+        rows.append(row)
+    if not rows:
+        raise ValueError("No trade rows found under the header.")
+    return rows
+
+
+class UploadedTrades:
+    """Stands in for a generator so :func:`_build` gets the same ``edge`` /
+    ``breakeven`` / provenance interface — but computed empirically from the
+    uploaded trades rather than from generator parameters."""
+
+    def __init__(self, ds):
+        ret = ds.ret
+        wins, losses = ret[ret > 0], ret[ret < 0]
+        wr = float(wins.size) / ret.size if ret.size else 0.0
+        aw = float(np.mean(wins)) if wins.size else 0.0
+        al = float(-np.mean(losses)) if losses.size else 0.0
+        self.edge = float(np.mean(ret)) if ret.size else 0.0  # E[R] per trade
+        self.breakeven_win_rate = al / (aw + al) if (aw + al) > 0 else float("nan")
+        self.provenance = SimpleNamespace(params={
+            "source": "your uploaded trades", "trades": int(ret.size),
+            "days": int(ds.n_days), "win_rate": round(wr, 3),
+            "avg_R_win": round(aw, 3), "avg_R_loss": round(al, 3),
+            "days_per_week": round(float(ds.trading_days_per_week), 2)})
+
+
+def _run_uploaded(params: dict) -> dict:
+    """Run the standard (constant-size) pipeline on the user's own trades: their
+    realized days become the empirical pool the Monte Carlo bootstraps, so every
+    headline stat is computed exactly as in generator mode."""
+    try:
+        rows = _rows_from_csv(params["uploaded_csv"])
+        dataset = preprocess(rows)
+    except (ValueError, InvalidTradeDataError) as e:
+        return {"error": f"Could not read your trades: {e}"}
+    acct = _account(params["size"], params.get("eval_fee", 150.0),
+                    params.get("activation_fee", 100.0))
+    feas = _feasibility(params)
+    seed = int(params.get("seed", 1))
+    n_paths = int(params.get("n_paths", 4000))
+    cfg = _run_config(params, n_paths, seed)
+    src = UploadedTrades(dataset)
+    o = _ENGINE.run(acct, dataset, cfg, feasibility=feas)
+    result = _build(o, src, feas, dataset, cfg, acct, None)
+    result["mode"] = "single"
+    result["provenance"] = _provenance(src)
+    result["uploaded"] = dict(src.provenance.params)
+    return result
+
+
 def run(params: dict) -> dict:
     """Run the full pipeline for ``params`` and return numbers + chart data.
 
-    Two modes: the default single (constant-size baseline) run, and — when
-    ``optimize`` is set — a Tier-1 sizing optimization whose baseline and fitted
-    policies are both charted on **held-out** data (see :func:`_run_optimized`)."""
+    Three modes: the default single (constant-size baseline) run; a Tier-1 sizing
+    optimization (``optimize``) charted on **held-out** data (see
+    :func:`_run_optimized`); and — when ``uploaded_csv`` is supplied — the single
+    run driven by the user's own trades (see :func:`_run_uploaded`)."""
+    if params.get("uploaded_csv"):
+        return _run_uploaded(params)
     gen = _make_generator(params)
     acct = _account(params["size"], params.get("eval_fee", 150.0),
                     params.get("activation_fee", 100.0))

@@ -143,6 +143,37 @@
 
       <div style="margin-top:14px"><button class="primary" id="runBtn">Run Monte Carlo</button></div>
       <div class="err" id="err"></div>
+
+      <div style="margin-top:12px"><button id="uploadToggle">📁 Use my own trades (CSV)</button></div>
+      <div id="uploadPanel" hidden style="margin-top:10px;border-top:1px solid var(--line);padding-top:12px">
+        <div id="dropZone" style="border:1.6px dashed var(--line);border-radius:9px;padding:18px;text-align:center;cursor:pointer;color:var(--dim)">
+          <b style="color:var(--text)">Drag &amp; drop</b> your <code>trades.csv</code> here<br>
+          <span style="font-size:12px">or click to choose a file</span>
+        </div>
+        <input id="csvFile" type="file" accept=".csv,text/csv" hidden>
+        <div id="uploadStatus" class="hint"></div>
+        <div class="hint" style="margin-top:8px">
+          One row per <b>closed trade</b>. Required: a <code>timestamp</code> column, and either a
+          <code>return</code> column (result in <b>R multiples</b> — e.g. <code>1.5</code> for a 1.5R win,
+          <code>-1</code> for a full-stop loss), or both <code>pnl</code> and <code>size</code> (dollar P&amp;L and
+          the dollar risked, so return = pnl ÷ size). Optional <code>mae</code>: the worst adverse excursion
+          reached during the trade, in R (a positive number). Your realized days become the pool the Monte
+          Carlo resamples; sizing, fees, the drawdown floor and the horizon come from the controls above.
+        </div>
+        <div style="overflow-x:auto;margin-top:8px">
+          <table style="font-size:12px;min-width:100%">
+            <thead><tr><th>timestamp</th><th>return</th><th>mae</th></tr></thead>
+            <tbody>
+              <tr><td>2024-03-04 09:35</td><td>1.5</td><td>0.40</td></tr>
+              <tr><td>2024-03-04 10:10</td><td>-1</td><td>1.00</td></tr>
+              <tr><td>2024-03-04 11:05</td><td>0.8</td><td>0.55</td></tr>
+              <tr><td>2024-03-05 09:32</td><td>-1</td><td>0.95</td></tr>
+              <tr><td>2024-03-05 13:20</td><td>2.1</td><td>0.30</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div style="margin-top:10px"><button class="primary" id="runUploadBtn" disabled>Run on my trades</button></div>
+      </div>
     </div>
   </div>
 
@@ -268,19 +299,44 @@ function collect(){
     optimize:$("optimize").checked, opt_generations:n("opt_generations")};
 }
 
-$("runBtn").onclick=async()=>{
+async function runParams(params, ovtext){
   if(!pyRun){$("err").textContent="Still loading the engine — one moment.";return;}
-  $("err").textContent=""; $("overlay").classList.add("on");
-  $("ovtext").textContent=$("optimize").checked?"Fitting the sizing policy (CMA-ES) — this runs in-browser and can take a minute…"
-    :$("surface").checked?"Running the engine + surface sweep…":"Running the engine…";
+  $("err").textContent=""; $("overlay").classList.add("on"); $("ovtext").textContent=ovtext;
   // let the overlay paint before the (synchronous, blocking) Pyodide call
   await new Promise(r=>setTimeout(r,40));
   try{
-    const data=JSON.parse(pyRun(JSON.stringify(collect())));
+    const data=JSON.parse(pyRun(JSON.stringify(params)));
     if(data.error){$("err").textContent=data.error;$("overlay").classList.remove("on");return;}
     draw(data);
   }catch(e){$("err").textContent=String(e);}
   $("overlay").classList.remove("on");
+}
+$("runBtn").onclick=()=>runParams(collect(),
+  $("optimize").checked?"Fitting the sizing policy (CMA-ES) — this runs in-browser and can take a minute…"
+    :$("surface").checked?"Running the engine + surface sweep…":"Running the engine…");
+
+// ---- CSV upload ----
+let uploadedCsv=null;
+$("uploadToggle").onclick=()=>{ const p=$("uploadPanel"); p.hidden=!p.hidden; };
+$("dropZone").onclick=()=>$("csvFile").click();
+$("csvFile").onchange=e=>{ if(e.target.files.length) readCsv(e.target.files[0]); };
+["dragover","dragenter"].forEach(ev=>$("dropZone").addEventListener(ev,e=>{e.preventDefault();$("dropZone").style.borderColor="var(--blue)";}));
+["dragleave","dragend"].forEach(ev=>$("dropZone").addEventListener(ev,e=>{e.preventDefault();$("dropZone").style.borderColor="var(--line)";}));
+$("dropZone").addEventListener("drop",e=>{e.preventDefault();$("dropZone").style.borderColor="var(--line)";
+  const f=e.dataTransfer.files[0]; if(f) readCsv(f);});
+function readCsv(file){
+  const rd=new FileReader();
+  rd.onload=()=>{ uploadedCsv=rd.result;
+    const rows=uploadedCsv.trim().split(/\r?\n/).length-1;
+    $("uploadStatus").innerHTML=`Loaded <b>${file.name}</b> — ${rows} row${rows===1?"":"s"}. Set sizing/fees above, then run.`;
+    $("runUploadBtn").disabled=false; };
+  rd.onerror=()=>{ $("uploadStatus").textContent="Could not read that file."; };
+  rd.readAsText(file);
+}
+$("runUploadBtn").onclick=()=>{
+  if(!uploadedCsv){$("err").textContent="Choose a CSV first.";return;}
+  const p=collect(); p.uploaded_csv=uploadedCsv; p.optimize=false; p.surface=false;
+  runParams(p,"Running the engine on your trades…");
 };
 
 // ---- rendering ----
@@ -289,7 +345,10 @@ let mcData=null, policyView="optimized";
 function draw(d){
   mcData=d; $("charts").hidden=false;
   const p=d.provenance;
-  $("provHint").innerHTML=`Generator <b>${p.generator}</b> · ${Object.entries(p.params).map(([k,v])=>`${k}=${v}`).join(" · ")} — every number computed by the real batch engine.`;
+  $("provHint").innerHTML=(d.uploaded
+    ? `<b>Your uploaded trades</b> · ${d.uploaded.trades} trades over ${d.uploaded.days} days · win-rate ${(100*d.uploaded.win_rate).toFixed(0)}% · avg win ${d.uploaded.avg_R_win}R / avg loss ${d.uploaded.avg_R_loss}R`
+    : `Generator <b>${p.generator}</b> · ${Object.entries(p.params).map(([k,v])=>`${k}=${v}`).join(" · ")}`)
+    + ` — every number computed by the real batch engine.`;
   if(d.mode==="optimized"){
     $("optPanel").hidden=false; $("policyPanel").hidden=false;
     renderOptimizer(d.optimizer);
