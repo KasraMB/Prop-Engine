@@ -204,10 +204,12 @@ async function boot(){
     $("bootMsg").textContent="Loading NumPy…";
     await pyodide.loadPackage("numpy");
     $("bootMsg").textContent="Loading the propfirm_engine source…";
-    const manifest=await (await fetch("py/manifest_mc.json")).json();
+    // {cache:"reload"} forces fresh copies: the engine .py files share URLs with the
+    // Interactive page, so a stale browser cache can otherwise mix old + new modules.
+    const manifest=await (await fetch("py/manifest_mc.json",{cache:"reload"})).json();
     pyodide.FS.mkdirTree("/pkg/propfirm_engine/firms");
     for(const path of manifest){
-      const src=await (await fetch("py/"+path)).text();
+      const src=await (await fetch("py/"+path,{cache:"reload"})).text();
       pyodide.FS.writeFile("/pkg/"+path, src);
     }
     pyodide.runPython(`
