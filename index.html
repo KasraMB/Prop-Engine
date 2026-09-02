@@ -193,7 +193,7 @@ async function boot(){
     await pyodide.loadPackage("numpy");
     $("bootMsg").textContent="Loading the propfirm_engine source…";
     const manifest=await (await fetch("py/manifest.json",{cache:"reload"})).json();
-    pyodide.FS.mkdirTree("/pkg/propfirm_engine");
+    pyodide.FS.mkdirTree("/pkg/propfirm_engine/firms");
     for(const path of manifest){
       const src=await (await fetch("py/"+path,{cache:"reload"})).text();
       pyodide.FS.writeFile("/pkg/"+path, src);

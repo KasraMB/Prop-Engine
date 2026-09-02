@@ -18,6 +18,8 @@ Per-size specification (from the firm's published rules):
 
 from __future__ import annotations
 
+import os
+import sys
 
 
 from propfirm_engine.enums import Action, Timing  # noqa: E402
