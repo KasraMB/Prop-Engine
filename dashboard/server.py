@@ -15,6 +15,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 sys.path.insert(0, os.path.dirname(__file__))
 
 import montecarlo as mc  # noqa: E402
+import replay  # noqa: E402
 from accounts import list_registry  # noqa: E402
 from bridge import evaluate  # noqa: E402
 
@@ -33,7 +34,11 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         if self.path in ("/", "/index.html"):
+            self._file("replay.html")
+        elif self.path in ("/interactive", "/interactive.html"):
             self._file("index.html")
+        elif self.path in ("/replay.js", "/replay.css"):
+            self._file(self.path[1:], "text/javascript" if self.path.endswith(".js") else "text/css")
         elif self.path in ("/montecarlo", "/montecarlo.html"):
             self._file("montecarlo.html")
         elif self.path == "/api/registry":
@@ -43,16 +48,24 @@ class Handler(BaseHTTPRequestHandler):
         else:
             self._send(404, {"error": "not found"})
 
-    def _file(self, name):
+    def _file(self, name, ctype="text/html"):
         with open(os.path.join(_HERE, name), "rb") as f:
-            self._send(200, f.read(), "text/html")
+            content = f.read()
+        if name == "replay.html":
+            content = content.replace(b'data-runtime="browser"', b'data-runtime="server"')
+        self._send(200, content, ctype)
 
     def do_POST(self):
-        length = int(self.headers.get("Content-Length", "0"))
-        raw = self.rfile.read(length) or b"{}"
         try:
+            length = int(self.headers.get("Content-Length", "0"))
+            if not 0 <= length <= 6_000_000:
+                self._send(413, {"error": "Request exceeds the 6 MB limit"})
+                return
+            raw = self.rfile.read(length) or b"{}"
             req = json.loads(raw)
-            if self.path == "/api/evaluate":
+            if self.path == "/api/replay":
+                result = replay.run(req)
+            elif self.path == "/api/evaluate":
                 result = evaluate(req["firm"], req["atype"], req["size"],
                                   req["role"], req.get("days", []),
                                   intraday_mode=req.get("intraday_mode", "strict"))

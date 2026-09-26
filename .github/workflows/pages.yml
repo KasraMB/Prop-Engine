@@ -1,0 +1,49 @@
+name: Pages
+
+on:
+  workflow_run:
+    workflows: [Tests]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: github-pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python dashboard/build_pages.py
+      - name: Refuse to deploy a superseded main commit
+        env:
+          RELEASE_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: test "$(git ls-remote origin refs/heads/main | cut -f1)" = "$RELEASE_SHA"
+      - name: Verify generated files and identify release
+        env:
+          RELEASE_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          git diff --exit-code -- docs
+          python -c 'import json, os; from pathlib import Path; Path("docs/version.json").write_text(json.dumps({"commit": os.environ["RELEASE_SHA"]}) + "\n")'
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4

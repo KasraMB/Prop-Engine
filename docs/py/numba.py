@@ -1,7 +1,6 @@
 """Browser (Pyodide) numba shim: ``@njit`` becomes a no-op so the compiled kernels
-run as plain Python. This is bit-identical to the real numba path — the engine's
-Level-1 parity gate proves kernel == pure-Python reference for every input, and the
-whole-pipeline golden hash reproduces under this shim."""
+run as plain Python. Regression and browser tests cover supported workflows;
+this shim is not a guarantee of universal runtime or numerical equivalence."""
 
 
 def njit(*args, **kwargs):

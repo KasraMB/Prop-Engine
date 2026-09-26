@@ -13,6 +13,8 @@
 "propfirm_engine/execution.py",
 "propfirm_engine/feasibility.py",
 "propfirm_engine/fingerprint.py",
+"propfirm_engine/firms/__init__.py",
+"propfirm_engine/firms/lucidflex.py",
 "propfirm_engine/fitting.py",
 "propfirm_engine/kernels.py",
 "propfirm_engine/ladder.py",
@@ -30,8 +32,6 @@
 "propfirm_engine/statistics.py",
 "propfirm_engine/synthetic.py",
 "propfirm_engine/validate.py",
-"propfirm_engine/firms/__init__.py",
-"propfirm_engine/firms/lucidflex.py",
 "accounts.py",
 "bridge.py"
 ]

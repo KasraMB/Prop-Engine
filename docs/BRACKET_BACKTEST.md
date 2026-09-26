@@ -12,8 +12,9 @@ CMA-ES search. There is no independent replacement rule engine.
 
 The fast, resampled `Engine.run` API is unchanged except for reserving its
 per-trade cost during feasibility projection. Its closed-summary strict guard
-remains active. New replay functionality is not exposed through the legacy
-dashboard UI, although its Python modules are included in the browser source mirror.
+remains active. The dashboard homepage exposes chronological replay and holdout
+fitting through a shared Python adapter in local HTTP and browser-worker modes.
+Legacy trace/Monte Carlo pages remain separate and require their approximation opt-in.
 
 ## Trading inputs
 

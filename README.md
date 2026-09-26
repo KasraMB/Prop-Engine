@@ -146,6 +146,28 @@ Its strict capability guard is unchanged: arbitrary closed summaries cannot
 certify intraday compliance. Choosing bracket replay explicitly asserts the
 ideal sequential stop/target contract; it does not relabel arbitrary MAE data.
 
+## Dashboard
+
+Open the [live dashboard](https://kasramb.github.io/Prop-Engine/) or run locally:
+
+```sh
+python dashboard/server.py
+# Open http://localhost:8000
+```
+
+Upload the bracket CSV described above, set your fees/costs/delays, confirm the
+input contract, and configure ordered dollar-risk regimes. The default workflow
+fits on 70% of complete sessions and shows only the final 30% as headline OOS
+performance, with the initial policy evaluated on the same holdout. A fixed-policy
+full-history replay is available separately and is explicitly not labeled OOS.
+Download the full JSON for scenario inputs, policy, split, fingerprints and ledgers.
+
+The hosted replay runs in a browser worker; trade contents are not uploaded.
+Local mode sends them to your loopback Python server. Runtime dependencies load
+from external CDNs on Pages. The synthetic example is a UI demonstration, not
+market data or evidence of strategy profitability. Legacy trace/Monte Carlo
+tools remain clearly separated. See [dashboard setup and deployment](dashboard/README.md).
+
 ## Repository guide
 
 - `src/propfirm_engine/`: canonical package, generic rules, execution and optimization.
@@ -153,7 +175,7 @@ ideal sequential stop/target contract; it does not relabel arbitrary MAE data.
 - `docs/`: maintained API contracts, model limitations and browser distribution.
 - `Test_Strategies/`: standalone input producers; strategies are not engine API features.
 - `benchmarks/`: reproducible performance/model-comparison programs, not scratch scripts.
-- `dashboard/`: legacy research interface; not the chronological replay API.
+- `dashboard/`: chronological replay/holdout UI, shared adapter and legacy research tools.
 
 See [contributing](CONTRIBUTING.md), the [design overview](docs/DESIGN.md) and
 the [execution contract](docs/BRACKET_BACKTEST.md) for supported behavior,

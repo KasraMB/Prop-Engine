@@ -1,0 +1,141 @@
+{
+  "bundle_sha256": "7e39debeb8f21fd92585f26e4865ca2412ebe738c71748398c8bbd47d7f18132",
+  "files": [
+    {
+      "path": "numba.py",
+      "sha256": "83378c4b5ab2e9ed77d30c39ea8165eb94cae95f3df942767eaca9aa81a4310d"
+    },
+    {
+      "path": "propfirm_engine/__init__.py",
+      "sha256": "916373405e87cf83e2afdfdf0064445bd0adad234fbd927027af00985ac6848a"
+    },
+    {
+      "path": "propfirm_engine/analytical.py",
+      "sha256": "c2f06ddd2916c6e53154d2c6ba510f06cef535dd8b0b3f6f833861fc3e47abc0"
+    },
+    {
+      "path": "propfirm_engine/backtest.py",
+      "sha256": "c0b73b32511decfe59e612536f2fe3a5f38ad5507d8fe78b1f526e8eda91ce1f"
+    },
+    {
+      "path": "propfirm_engine/cache.py",
+      "sha256": "e2e122d1ae37fba3d08275f5a2e914f54b4b65b2971809a76c39120563874e37"
+    },
+    {
+      "path": "propfirm_engine/cashflows.py",
+      "sha256": "37417d3bffbde1b05a70f8d72b11430c6c20e5bef812c30c3d9212e2d4352e9e"
+    },
+    {
+      "path": "propfirm_engine/compiler.py",
+      "sha256": "934ea14a0a0a716131cd3dbd6b84376c8dd77e4ea562fb64a79858091c87151a"
+    },
+    {
+      "path": "propfirm_engine/config.py",
+      "sha256": "c1224278feb7afe3fe5fb22f6faf36fcee7b82b9b6ba4b083a61027d9318fb90"
+    },
+    {
+      "path": "propfirm_engine/data.py",
+      "sha256": "ab9ee8c4868fe4aa0862571c27ca687f6a99612c4350bf1b0c7337e591c6b6f3"
+    },
+    {
+      "path": "propfirm_engine/engine.py",
+      "sha256": "60212886183824bbc999973895927ee0c1467f5f1cb84faf6504c443aa55c64f"
+    },
+    {
+      "path": "propfirm_engine/enums.py",
+      "sha256": "10dad3ccffd95eb185ba2316c35048da96efba5f1a2d8bce1e191d1d49b3a105"
+    },
+    {
+      "path": "propfirm_engine/execution.py",
+      "sha256": "2cc70df6212a9aceb755c4ceea8b66f46d53f7bc7e54c3113a98543062894601"
+    },
+    {
+      "path": "propfirm_engine/feasibility.py",
+      "sha256": "266f4bc44ac936a354fca5384d1693963957b5ff976ff9fcae8d9a71e60633f9"
+    },
+    {
+      "path": "propfirm_engine/fingerprint.py",
+      "sha256": "b48acaac45f68dccb02aae56a079820535c59d6a025df4cd5c73992480058203"
+    },
+    {
+      "path": "propfirm_engine/firms/__init__.py",
+      "sha256": "874f1590d99f962a056c0ac9888b138a1b42f230f88c4df38a45faea4b7496ce"
+    },
+    {
+      "path": "propfirm_engine/firms/lucidflex.py",
+      "sha256": "1879065310a2d7fbaab1c7e77fd66d1d0679a34110724badd50d083485eca295"
+    },
+    {
+      "path": "propfirm_engine/fitting.py",
+      "sha256": "6f075565e3da7dfe4413bcce3f51236a84a88ad360c75b8a3ca91572453fe5d4"
+    },
+    {
+      "path": "propfirm_engine/kernels.py",
+      "sha256": "318b23b13402da2600ea723f4e14a1a24887ddaa7300c39bd769bdf19f600962"
+    },
+    {
+      "path": "propfirm_engine/ladder.py",
+      "sha256": "23257741133d9fb65f90fcf84b21a242c1b06ebc731dba4e35365d16142453cd"
+    },
+    {
+      "path": "propfirm_engine/model.py",
+      "sha256": "eb525110af0f3a4f7c958aae1411fccfe3bb7dae6ac1fa7b1f7bc14cef17f3ca"
+    },
+    {
+      "path": "propfirm_engine/objectives.py",
+      "sha256": "dbc98d01e2f9f782f317181c090988ce92a4acb6ceb4de9383f37e6b972b08e4"
+    },
+    {
+      "path": "propfirm_engine/optimizer.py",
+      "sha256": "98fa0373d9c0040fd8fe7c0e560e130d9fa16341ccb196503e4c3feb611b71c9"
+    },
+    {
+      "path": "propfirm_engine/payouts.py",
+      "sha256": "73086069ad98926b8c6d1cd505c3b311aa4bc2b40f0d087b20ea6e11e89d8383"
+    },
+    {
+      "path": "propfirm_engine/reference.py",
+      "sha256": "6f81da27137249823434586b88a87da7b2dd2788badfe221f5fc6200f0d66811"
+    },
+    {
+      "path": "propfirm_engine/renewal.py",
+      "sha256": "114d5c3a76ee4e99263c4ec9570bd1dbf1ff479be0fae6b1a3d5ea4ea29dcf30"
+    },
+    {
+      "path": "propfirm_engine/resampling.py",
+      "sha256": "75da996314f97a225510cd4ed7ba9ef321f6dd486ce54173276bf3dc8c9f9083"
+    },
+    {
+      "path": "propfirm_engine/results.py",
+      "sha256": "873ef3bd64b5b3a55e7284d878516025419b7ab7b98327139355c0ff3092f3ee"
+    },
+    {
+      "path": "propfirm_engine/rules.py",
+      "sha256": "b223803be0614d5d1c6919df167914933dbeda46a07a0705f5db94298c48677f"
+    },
+    {
+      "path": "propfirm_engine/schema.py",
+      "sha256": "6f5219064f1b2ec28e58cc070210338b1aca8e6cc12e0f59f4326c3fb48a7b8f"
+    },
+    {
+      "path": "propfirm_engine/simulate.py",
+      "sha256": "b3af77cdb8fe09d11942e56eef3509b040023441948ad87b8f5b321a673b3d04"
+    },
+    {
+      "path": "propfirm_engine/statistics.py",
+      "sha256": "c152c31b39d48d2313239e2ba7c7b04349229474f4a2a3c7c524866805bf6a28"
+    },
+    {
+      "path": "propfirm_engine/synthetic.py",
+      "sha256": "484bc302f73a42e34f3ac0e9fc78074d3c79e193cce0cad829871dd552411bc3"
+    },
+    {
+      "path": "propfirm_engine/validate.py",
+      "sha256": "3ec30653536b370ac40f92b2a886cede52bc37913412c01a0c142aded65023a1"
+    },
+    {
+      "path": "replay.py",
+      "sha256": "b54154baa570f1e97cc966e48ab97918525e408e889466bed0dc94eecff9b2a5"
+    }
+  ]
+}

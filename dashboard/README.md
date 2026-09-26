@@ -1,100 +1,78 @@
-# Validation dashboard (testing only)
+# Strategy replay dashboard
 
-A small **standalone** tool to drive the engine and check its behavior. Two pages:
+Updated 2026-09-26. The homepage calls `Engine.backtest` or `Engine.fit` through
+`replay.py`; it contains no separate accounting or optimization implementation.
 
-- **Interactive** (`/`) — hand-enter trades day by day and watch one account's rule
-  decisions, computed by the real `propfirm_engine.reference` oracle.
-- **Monte Carlo** (`/montecarlo`) — pick trade-stream **generator** parameters
-  (win-rate, RR, generator type + its dependence params) and an account, run the
-  *full batch engine* (generator → `preprocess` → `Engine.run` over thousands of
-  resampled attempts → statistics/renewal), and see the results as **headline
-  numbers** plus a set of **charts**: outcome breakdown, payout-count distribution,
-  net-payoff & return-on-fee histograms, attempt-duration & time-to-first-payout
-  histograms, a reward-vs-time scatter, sample equity curves, and an optional
-  win-rate × RR **surface**. Uses the real firm accounts (with payout schemas) and
-  user-set fees, so the fee/renewal metrics are well posed. Optionally enable the
-  feasibility projection to see attempts wither (`CAPPED_OUT`). An **Optimize
-  sizing** toggle runs the Tier-1 CMA-ES `walk_forward` (fit on a TRAIN stream,
-  reported on an independent HELD-OUT stream — nested OOS) and charts the baseline
-  vs the fitted policy side by side, with the fitted per-stage risk multipliers and
-  the OOS improvement in a dedicated optimizer panel.
+## Run locally
 
-It is deliberately *not* part of the pipeline — it only **imports** the engine.
-Every number shown is the engine's own.
-
-## Run it
-
-```bash
+```sh
+python -m pip install -e ".[dev]"
 python dashboard/server.py
-# then open http://localhost:8000  (Interactive)
-#           http://localhost:8000/montecarlo  (Monte Carlo explorer)
 ```
 
-No third-party dependencies — standard library only, plus the engine in `src/`
-(the scripts add `src/` to the path themselves). Set `PORT=1234` to change port.
+Open `http://localhost:8000`. Set `PORT` to change the loopback port.
+The local endpoint is `POST /api/replay`; it accepts the same JSON scenario used
+by the browser worker. It is a local research server, not a public API service.
 
-Prefer the terminal? `python dashboard/selfcheck.py` prints a handful of
-hand-checkable eval/funded scenarios and the engine's verdict on each.
+1. Upload a six-column bracket CSV: `entry_at,exit_at,session,stop_loss,take_profit,won`.
+2. Set the contract type, dated account fees, trading costs, wallet and processing delays.
+3. Confirm the [ideal-fill input contract](../docs/BRACKET_BACKTEST.md).
+4. Configure ordered regimes and search bounds before inspecting OOS results.
+5. Optimize on the first 70% of whole sessions; report the final 30%. Both selected
+   and initial policies start fresh accounts/wallets on the same OOS period.
+6. Export the full JSON before changing inputs; edits invalidate the displayed result.
 
-## What you can do
+The fixed-policy alternative replays the entire history, clearly labeled **not OOS**.
+Headline economics are received payouts minus account fees, per elapsed calendar day
+or in total. Trading balance, outstanding payouts and unvalued live handoff are distinct.
+The ledger display is capped at 500 events; JSON retains all events and the full model
+configuration. The original CSV is not included; preserve it alongside its export hash.
 
-1. **Browse** the implemented firms → account types → sizes (top-left). Only the
-   built-in *Test Firm* demo accounts exist today; real firm configs will appear
-   here automatically once they're added under `propfirm_engine/firms/`.
-2. Pick a **stage** (Eval or Funded) and click **Start / Reset account**.
-3. **Add a trade** by entering its P&L (and optionally its intraday floating low).
-   Watch the balance, day P&L, the **Max Loss Limit** floor, and the distance to
-   the profit target update.
-4. **Next day →** closes the current day and starts a new one — this is when
-   end-of-day rules fire (the MLL trails your EOD balance, winning days are
-   counted, consistency is checked, payouts are released).
-5. The status badge tells you **PASSED / FAILED / in-progress** (eval) or shows
-   **payouts** and **COMPLETE** (funded).
+Dashboard limits: 5 MB, 20,000 trades, 32 regimes, 100 generations, 32 candidates per
+generation and two million candidate-trade evaluations. Use the Python API for larger
+jobs and custom callable objectives. Arbitrary Python text is never executed by the UI.
 
-## The test account
+## Pages and reproducible builds
 
-As requested: a **50K** account whose eval is exactly a **\$2,000 end-of-day Max
-Loss Limit** (a drawdown that trails your EOD balance by \$2k and is checked at
-day close) and a **\$3,000 profit target**, and nothing else. The **100K** size
-scales both. The **funded** stage of the same account adds winning-day,
-consistency, and payout mechanics so those can be exercised too:
-
-- **3 qualifying days** each ≥ \$150,
-- **cycle profit ≥ \$500** to request,
-- **consistency ≤ 40%** (no single day may exceed 40% of the cycle's profit),
-- payout = 90% of the released amount (cap \$2,000), up to **5 payouts**.
-
-Payouts **fire automatically at a day's close** once every condition holds — that
-is exactly what the engine's `PayoutSchema` models — so you validate the payout
-logic by engineering days that should (or shouldn't) trigger one and watching the
-balance drop and the qualifying-day counter reset.
-
-## How it stays faithful
-
-Each action re-sends the full day/trade list; the server builds the path arrays,
-runs `_ReferenceSim` over them, and reads its internal state (equity, the trailing
-floor, `max_day_pnl`, qualifying days, cycle profit, payouts, the terminal exit
-code). Because the last (in-progress) day is closed by the engine's end-of-path
-logic, the panel shows its **projected end-of-day** state — add a recovery trade
-and it updates, which is exactly how an EOD limit behaves. Nothing here
-re-implements a rule; the engine makes every decision.
-
-## GitHub Pages (browser build)
-
-`docs/` is the static Pages site — both pages run the **real engine in the browser**
-via Pyodide (pure Python, no server). `index.html` is the interactive validator
-(reference simulator); `montecarlo.html` is the Monte Carlo explorer (full batch
-engine + optimizer). The `@njit` kernels run as plain Python through a tiny `numba`
-shim — bit-identical to the compiled path (the Level-1 parity gate and the golden
-hash both hold under the shim).
-
-Rebuild the Monte Carlo Python bundle after engine changes with:
-
-```
+```sh
 python dashboard/build_pages.py
 ```
 
-It copies the exact `propfirm_engine` modules the pipeline imports into `docs/py/`,
-writes the `numba` shim and `mc_engine.py`, and regenerates `py/manifest_mc.json`
-(the file list the page fetches). Keep `ENGINE_MODULES` in that script in sync if
-`montecarlo.py`'s imports change.
+The build normalizes line endings, mirrors every canonical package module, copies
+the shared adapter and replay assets, and writes content hashes in
+`docs/py/manifest_replay.json`. The worker refuses a mixed or incomplete bundle.
+The homepage runs Python in a worker with Pyodide 0.26.4, its NumPy package and
+tzdata 2025.2. Trade contents stay in the browser; dependencies come from external
+CDNs/PyPI. No backend or credential is needed. Cancel terminates the worker and
+reloads the runtime. The local server mode does not expose cancellation.
+
+`Tests` checks Python 3.11–3.13, generated-file synchronization and real Chromium
+integration. After those checks pass on `main`, `Pages` publishes the `docs/`
+artifact using GitHub Actions. Configure the repository's Pages source as
+**GitHub Actions**, not the older `gh-pages` branch. Deployment identifies the
+tested source commit in `version.json`. Failed tests never trigger publication.
+
+## Tests
+
+```sh
+python -m pytest -q
+python -m pip install playwright
+python -m playwright install chromium
+# Set RUN_BROWSER_TESTS=1 in your shell, then:
+python -m pytest tests/test_dashboard_browser.py -q
+```
+
+Browser tests start temporary loopback servers, upload a CSV, fit/report/export,
+compare real browser results against canonical Python, check validation recovery
+and narrow-screen overflow. They require network access for runtime dependencies.
+Without the environment opt-in they skip. `BROWSER_SCREENSHOT_DIR` optionally
+collects screenshots; `BROWSER_BASE_URL` tests an already deployed static site.
+
+## Legacy research interfaces
+
+- `/interactive.html`: manual trace explorer with explicit summary-approximation opt-in.
+- `/montecarlo.html`: resampled Monte Carlo research with its own legacy sizing fitter.
+
+Neither is the chronological replay workflow. Their approximation warnings remain
+active. Fees, holidays, discretionary enforcement, live value and execution realism
+are not made verified simply by displaying a result. Read the execution contract.

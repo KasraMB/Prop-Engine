@@ -147,7 +147,7 @@ def test_manual_consumers_default_to_rejection_and_record_opt_in(path, monkeypat
 
 
 @pytest.mark.parametrize("path", [
-    "dashboard/index.html", "docs/index.html",
+    "dashboard/index.html", "docs/interactive.html",
     "dashboard/montecarlo.html", "docs/montecarlo.html",
 ])
 def test_ui_opt_in_is_unchecked_and_transmits_explicit_mode(path):

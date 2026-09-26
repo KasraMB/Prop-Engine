@@ -1,11 +1,10 @@
-"""Assemble the GitHub Pages Python bundle for the Monte Carlo explorer.
+"""Assemble deterministic browser assets from the canonical engine and dashboard.
 
 The Pages site runs the engine in the browser via Pyodide (pure Python, no numba).
 This copies the exact set of ``propfirm_engine`` modules the Monte Carlo pipeline
 imports into ``docs/py/``, drops in a tiny ``numba`` shim so the ``@njit`` kernels
-run as plain Python (bit-identical to the compiled path — guarded by the parity
-gate), copies ``montecarlo.py`` as ``mc_engine.py``, and writes ``manifest_mc.json``
-listing everything for the loader to fetch.
+run as plain Python. Copies the shared replay adapter and UI, preserves the
+legacy entry points, and writes manifests including replay integrity hashes.
 
 Run from anywhere:  python dashboard/build_pages.py
 """
@@ -13,7 +12,7 @@ Run from anywhere:  python dashboard/build_pages.py
 from __future__ import annotations
 
 import json
-import shutil
+from hashlib import sha256
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -21,22 +20,13 @@ SRC_ENG = ROOT / "src" / "propfirm_engine"
 DASH = ROOT / "dashboard"
 DOCS_PY = ROOT / "docs" / "py"
 
-# The exact propfirm_engine modules the Monte Carlo pipeline pulls in (transitive
-# closure of dashboard/montecarlo.py's imports). Keep in sync if imports change.
-ENGINE_MODULES = [
-    "__init__.py", "cache.py", "compiler.py", "config.py", "data.py", "engine.py",
-    "enums.py", "feasibility.py", "fingerprint.py", "kernels.py", "ladder.py",
-    "model.py", "objectives.py", "optimizer.py", "reference.py", "renewal.py",
-    "resampling.py", "results.py", "rules.py", "schema.py", "simulate.py",
-    "statistics.py", "synthetic.py", "validate.py",
-    "firms/__init__.py", "firms/lucidflex.py",
-]
+# Include the canonical package automatically; never maintain a partial closure.
+ENGINE_MODULES = sorted(p.relative_to(SRC_ENG).as_posix() for p in SRC_ENG.rglob("*.py"))
 
 NUMBA_SHIM = '''\
 """Browser (Pyodide) numba shim: ``@njit`` becomes a no-op so the compiled kernels
-run as plain Python. This is bit-identical to the real numba path — the engine's
-Level-1 parity gate proves kernel == pure-Python reference for every input, and the
-whole-pipeline golden hash reproduces under this shim."""
+run as plain Python. Regression and browser tests cover supported workflows;
+this shim is not a guarantee of universal runtime or numerical equivalence."""
 
 
 def njit(*args, **kwargs):
@@ -57,7 +47,7 @@ def _copy_engine() -> list[str]:
         src = SRC_ENG / rel
         dst = DOCS_PY / "propfirm_engine" / rel
         dst.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(src, dst)
+        dst.write_text(src.read_text(encoding="utf-8"), encoding="utf-8", newline="\n")
         manifest.append(f"propfirm_engine/{rel}")
     return manifest
 
@@ -68,24 +58,34 @@ def _write_browser_copy(src_name: str, dst_name: str) -> None:
     text = (DASH / src_name).read_text(encoding="utf-8")
     lines = [ln for ln in text.splitlines()
              if 'sys.path.insert(0, os.path.join(os.path.dirname(__file__)' not in ln]
-    (DOCS_PY / dst_name).write_text("\n".join(lines) + "\n", encoding="utf-8")
+    (DOCS_PY / dst_name).write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
 
 
 def main() -> None:
     DOCS_PY.mkdir(parents=True, exist_ok=True)
     manifest = _copy_engine()
-    (DOCS_PY / "numba.py").write_text(NUMBA_SHIM, encoding="utf-8")
+    (DOCS_PY / "numba.py").write_text(NUMBA_SHIM, encoding="utf-8", newline="\n")
     _write_browser_copy("montecarlo.py", "mc_engine.py")  # Monte Carlo entry
     _write_browser_copy("bridge.py", "bridge.py")          # Interactive entry
     _write_browser_copy("accounts.py", "accounts.py")      # Interactive registry
+    _write_browser_copy("replay.py", "replay.py")
+    for source, target in (("replay.html", "index.html"), ("replay.css", "replay.css"),
+                           ("replay.js", "replay.js"), ("replay-worker.js", "replay-worker.js")):
+        (ROOT / "docs" / target).write_text((DASH / source).read_text(encoding="utf-8"),
+                                           encoding="utf-8", newline="\n")
     # propfirm_engine/__init__ eagerly imports the whole package (kernels, engine,
     # optimizer, firms, statistics, ...), so BOTH pages need the full module closure
     # plus the numba shim; they differ only in their entry module. The old hand-written
     # minimal manifest.json is intentionally replaced here.
     mc = ["numba.py"] + manifest + ["mc_engine.py"]        # Monte Carlo page
     idx = ["numba.py"] + manifest + ["accounts.py", "bridge.py"]  # Interactive page
-    (DOCS_PY / "manifest_mc.json").write_text(json.dumps(mc, indent=0), encoding="utf-8")
-    (DOCS_PY / "manifest.json").write_text(json.dumps(idx, indent=0), encoding="utf-8")
+    (DOCS_PY / "manifest_mc.json").write_text(json.dumps(mc, indent=0), encoding="utf-8", newline="\n")
+    (DOCS_PY / "manifest.json").write_text(json.dumps(idx, indent=0), encoding="utf-8", newline="\n")
+    files = [{"path": p, "sha256": sha256((DOCS_PY / p).read_bytes()).hexdigest()}
+             for p in ["numba.py"] + manifest + ["replay.py"]]
+    version = sha256(json.dumps(files, sort_keys=True).encode()).hexdigest()
+    (DOCS_PY / "manifest_replay.json").write_text(
+        json.dumps({"bundle_sha256": version, "files": files}, indent=2) + "\n", encoding="utf-8", newline="\n")
     print(f"wrote engine bundle to {DOCS_PY}: "
           f"manifest.json ({len(idx)} files), manifest_mc.json ({len(mc)} files)")
 
