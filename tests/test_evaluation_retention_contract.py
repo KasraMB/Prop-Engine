@@ -92,12 +92,3 @@ def test_retaining_details_does_not_resimulate_or_alias_raw_outcomes():
     saved = result.outcomes.net_payout.copy()
     calls[0].net_payout[:] = -999
     np.testing.assert_array_equal(result.outcomes.net_payout, saved)
-
-
-@pytest.mark.parametrize("filename", ["dashboard/montecarlo.py", "docs/py/mc_engine.py"])
-def test_dashboard_charts_reuse_the_scored_outcomes(filename):
-    # Static consumer guard; not a browser/Pyodide integration claim.
-    from pathlib import Path
-    source = (Path(__file__).resolve().parents[1] / filename).read_text(encoding="utf-8")
-    assert "o_base = wf.baseline_evaluation.outcomes" in source
-    assert "o_opt = wf.oos_evaluation.outcomes" in source

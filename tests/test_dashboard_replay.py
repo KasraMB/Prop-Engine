@@ -22,7 +22,6 @@ def request_fixture():
         lines.append(f"{day}T10:00:00-04:00,{day}T10:05:00-04:00,{day},100,{target},true")
         day += timedelta(days=1)
     return {"profile": "lucidflex_50k_dll_off", "mode": "backtest", "csv": "\n".join(lines),
-            "accept_bracket_contract": True,
             "account": {"eval_fee": 105.2, "reset_fee": 105, "contract_type": "micro"},
             "config": {"cost_per_contract": 0, "cost_per_trade": 0, "payment_fee": 0,
                        "initial_wallet": 2000, "approval_delay_hours": 0,
@@ -67,7 +66,7 @@ def test_fit_headline_is_oos_and_future_outcomes_do_not_select_policy():
     json.dumps(first, allow_nan=False)
 
 
-@pytest.mark.parametrize("key,value", [("accept_bracket_contract", False), ("mode", "other"),
+@pytest.mark.parametrize("key,value", [("mode", "other"),
     ("profile", "unknown"), ("objective", "lambda r: r.net_cash"), ("csv", "timestamp,pnl\nx,10"),
     ("csv", ""), ("regimes", [])])
 def test_invalid_contracts_refused(key, value):
@@ -111,7 +110,8 @@ def test_bundle_build_contains_all_canonical_modules_and_is_reproducible(tmp_pat
 
 def test_committed_replay_assets_and_bridge_are_synchronized():
     root = Path(__file__).resolve().parents[1]
-    for name, target in (("replay.html", "index.html"), ("replay.js", "replay.js"),
+    for name, target in (("replay.html", "index.html"), ("replay.html", "trace.html"),
+                         ("history.js", "history.js"), ("trace.js", "trace.js"), ("replay.js", "replay.js"),
                          ("replay.css", "replay.css"), ("replay-worker.js", "replay-worker.js")):
         assert (root / "dashboard" / name).read_text(encoding="utf-8") == (root / "docs" / target).read_text(encoding="utf-8")
     source = (root / "dashboard/replay.py").read_text(encoding="utf-8")

@@ -1,6 +1,10 @@
 "use strict";
 const $ = (id) => document.getElementById(id);
 const local = document.body.dataset.runtime === "server";
+const traceView = /\/(?:trace|interactive)(?:\.html)?$/.test(location.pathname);
+let operationSerial = 0,
+  rpcSerial = 0;
+const pending = new Map();
 let worker,
   ready = false,
   busy = false,
@@ -45,6 +49,7 @@ function addRegime(values) {
   };
   for (const [key, value] of Object.entries({ ...defaults, ...values })) {
     const td = cell(row, "");
+    if (key === "minimum" || key === "maximum") td.classList.add("fit-only");
     let field;
     if (["phase", "in_profit", "after_payout"].includes(key)) {
       field = document.createElement("select");
@@ -104,6 +109,11 @@ function addRegime(values) {
     actions.append(button);
   }
   $("regimes").append(row);
+  if (traceView)
+    row.querySelectorAll(".fit-only").forEach((e) => {
+      e.hidden = true;
+      e.querySelector("input").disabled = true;
+    });
 }
 [
   { name: "evaluation", phase: "eval", risk_dollars: 200 },
@@ -123,7 +133,8 @@ function invalidate() {
 function setBusy(value) {
   busy = value;
   $("controls").disabled = value;
-  $("run").disabled = !ready || value;
+  for (const id of ["run", "generate", "addWin", "addLoss"])
+    $(id).disabled = !ready || value;
   $("cancel").hidden = !value || local;
 }
 function fail(message) {
@@ -133,21 +144,44 @@ function fail(message) {
   $("status").textContent =
     "No result produced. Review the inputs or engine error below.";
 }
+function rpc(action, request) {
+  if (local)
+    return fetch("api/" + (action === "run" ? "replay" : action), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(request),
+    }).then(async (response) => {
+      const result = await response.json();
+      if (!response.ok)
+        throw new Error(result.error || "Engine request failed");
+      return result;
+    });
+  return new Promise((resolve, reject) => {
+    const id = ++rpcSerial;
+    pending.set(id, { resolve, reject });
+    worker.postMessage({ id, action, request });
+  });
+}
+function resetWorker() {
+  if (worker) worker.terminate();
+  for (const { reject } of pending.values()) reject(new Error("Run canceled"));
+  pending.clear();
+}
 function startEngine() {
   ready = false;
   $("retryBoot").hidden = true;
-  $("run").disabled = true;
+  for (const id of ["run", "generate", "addWin", "addLoss"])
+    $(id).disabled = true;
   if (local) {
     ready = true;
     $("runtime").textContent = "Local Python engine";
-    $("privacy").textContent =
-      "Trade contents are sent only to your local dashboard server, not to GitHub.";
+    $("privacy").textContent = "Engine runs on your local Python server.";
     $("status").textContent =
-      "Ready. Load a history and confirm its input contract.";
+      "Ready. Generate, upload or enter a trade history.";
     setBusy(false);
     return;
   }
-  if (worker) worker.terminate();
+  resetWorker();
   worker = new Worker("replay-worker.js");
   worker.onmessage = ({ data }) => {
     if (data.type === "status") $("runtime").textContent = data.message;
@@ -157,11 +191,17 @@ function startEngine() {
       $("build").textContent =
         "Verified bundle " + data.version + " · Pyodide 0.26.4";
       $("status").textContent =
-        "Ready. Load a history and confirm its input contract.";
+        "Ready. Generate, upload or enter a trade history.";
       setBusy(false);
     }
-    if (data.type === "result") complete(data.result);
-    if (data.type === "error") fail(data.message);
+    if (data.type === "result" || data.type === "error") {
+      const call = pending.get(data.id);
+      if (call) {
+        pending.delete(data.id);
+        if (data.type === "result") call.resolve(data.result);
+        else call.reject(new Error(data.message));
+      }
+    }
     if (data.type === "boot-error") {
       ready = false;
       fail(data.message);
@@ -171,11 +211,12 @@ function startEngine() {
   };
   worker.onerror = (event) => {
     ready = false;
+    resetWorker();
     fail(event.message || "Browser worker failed");
     $("retryBoot").hidden = false;
   };
 }
-function collect() {
+function collect(modeOverride = null) {
   if (!csvText) throw new Error("Load a bracket-history CSV first.");
   const regimes = [],
     risk_bounds = {};
@@ -200,9 +241,9 @@ function collect() {
   }
   return {
     profile: "lucidflex_50k_dll_off",
-    mode: $("mode").value,
+    mode: modeOverride || (traceView ? "backtest" : $("mode").value),
     csv: csvText,
-    accept_bracket_contract: $("accept").checked,
+    history_source: sourceMetadata,
     objective: $("objective").value,
     account: {
       eval_fee: Number($("eval_fee").value),
@@ -222,30 +263,28 @@ function collect() {
     ),
   };
 }
-$("replayForm").onsubmit = async (event) => {
-  event.preventDefault();
+async function runCurrent(modeOverride = null) {
   if (!ready || busy) return;
   invalidate();
+  const serial = ++operationSerial;
+  setBusy(true);
   try {
-    const request = collect();
-    setBusy(true);
+    await ensureHistory();
+    if (serial !== operationSerial) return;
+    const request = collect(modeOverride);
     $("status").textContent =
       request.mode === "fit"
-        ? "Fitting on IS only, then evaluating the frozen policy on OOS…"
-        : "Replaying the full history with the fixed policy…";
-    if (local) {
-      const response = await fetch("api/replay", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(request),
-      });
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error || "Replay failed");
-      complete(result);
-    } else worker.postMessage({ type: "run", request });
+        ? "Fitting IS, then evaluating the frozen policy on OOS…"
+        : "Replaying the account lifecycle…";
+    const result = await rpc("run", request);
+    if (serial === operationSerial) complete(result);
   } catch (error) {
-    fail(String(error));
+    if (serial === operationSerial) fail(String(error));
   }
+}
+$("replayForm").onsubmit = (event) => {
+  event.preventDefault();
+  runCurrent();
 };
 function complete(result) {
   latest = {
@@ -258,8 +297,9 @@ function complete(result) {
   $("status").textContent =
     "Completed. Changing inputs clears these results; preserve the JSON before editing.";
   render(latest);
+  if (traceView) renderTrace(latest.headline);
 }
-function metric(label, value, detail, sign) {
+function metric(label, value, detail, sign, target = "metrics") {
   const box = document.createElement("div");
   box.className = "metric";
   const name = document.createElement("span");
@@ -271,7 +311,7 @@ function metric(label, value, detail, sign) {
   const note = document.createElement("small");
   note.textContent = detail;
   box.append(name, number, note);
-  $("metrics").append(box);
+  $(target).append(box);
 }
 function render(result) {
   const r = result.headline,
@@ -365,6 +405,8 @@ function render(result) {
   $("provenance").textContent = JSON.stringify(
     {
       source: sourceName,
+      history_source: result.request.history_source,
+      execution_model: result.execution_model,
       csv_sha256: result.csv_sha256,
       history_fingerprint: r.history_fingerprint,
       objective: result.objective,
@@ -454,28 +496,6 @@ function drawCash(result, baseline) {
     result.end.slice(0, 10),
   );
 }
-function demoCsv() {
-  const lines = ["entry_at,exit_at,session,stop_loss,take_profit,won"];
-  const day = new Date("2026-01-05T00:00:00Z");
-  let count = 0,
-    state = 73;
-  while (count < 80) {
-    if (day.getUTCDay() !== 0 && day.getUTCDay() !== 6) {
-      const date = day.toISOString().slice(0, 10);
-      for (let trade = 0; trade < 4; trade++) {
-        state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
-        const minute = String(trade * 10).padStart(2, "0"),
-          exit = String(trade * 10 + 5).padStart(2, "0");
-        lines.push(
-          `${date}T15:${minute}:00+00:00,${date}T15:${exit}:00+00:00,${date},100,${trade % 2 ? 150 : 200},${state / 2 ** 32 < 0.55}`,
-        );
-      }
-      count++;
-    }
-    day.setUTCDate(day.getUTCDate() + 1);
-  }
-  return lines.join("\n") + "\n";
-}
 function download(name, text, type) {
   const url = URL.createObjectURL(new Blob([text], { type }));
   const link = document.createElement("a");
@@ -484,30 +504,6 @@ function download(name, text, type) {
   link.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
-$("csvFile").onchange = async () => {
-  invalidate();
-  csvText = "";
-  const file = $("csvFile").files[0];
-  if (!file) return;
-  if (file.size > 5_000_000) {
-    fail("CSV exceeds the 5 MB dashboard limit.");
-    return;
-  }
-  csvText = await file.text();
-  sourceName = file.name;
-  $("fileStatus").textContent =
-    `${file.name} · ${file.size.toLocaleString()} bytes. Validation runs before replay.`;
-};
-$("demo").onclick = () => {
-  invalidate();
-  csvText = demoCsv();
-  sourceName = "synthetic-example.csv";
-  $("csvFile").value = "";
-  $("fileStatus").textContent =
-    "Synthetic example · 80 weekday sessions · 320 trades · variable reward/risk. Not market data; no holiday filtering or profitability claim.";
-};
-$("template").onclick = () =>
-  download("synthetic-example.csv", demoCsv(), "text/csv");
 $("download").onclick = () => {
   if (latest)
     download(
@@ -522,14 +518,19 @@ $("addRegime").onclick = () => {
 };
 $("replayForm").addEventListener("input", invalidate);
 $("mode").onchange = () => {
-  const fit = $("mode").value === "fit";
-  $("run").textContent = fit ? "Optimize & evaluate" : "Replay fixed policy";
+  const fit = !traceView && $("mode").value === "fit";
+  $("run").textContent = traceView
+    ? "Run trace"
+    : fit
+      ? "Optimize & evaluate"
+      : "Replay fixed policy";
   ["generations", "population", "seed"].forEach(
     (id) => ($(id).disabled = !fit),
   );
 };
 $("cancel").onclick = () => {
-  worker.terminate();
+  ++operationSerial;
+  resetWorker();
   invalidate();
   setBusy(false);
   startEngine();

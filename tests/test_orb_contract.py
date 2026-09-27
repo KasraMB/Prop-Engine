@@ -200,5 +200,5 @@ def test_strategy_is_not_packaged_with_engine_or_browser():
     root = Path(__file__).resolve().parents[1]
     assert not (root / "src/propfirm_engine/orb.py").exists()
     assert not (root / "docs/py/propfirm_engine/orb.py").exists()
-    manifest = json.loads((root / "docs/py/manifest.json").read_text(encoding="utf-8"))
-    assert "propfirm_engine/orb.py" not in manifest
+    manifest = json.loads((root / "docs/py/manifest_replay.json").read_text(encoding="utf-8"))
+    assert "propfirm_engine/orb.py" not in {entry["path"] for entry in manifest["files"]}

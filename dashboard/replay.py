@@ -16,6 +16,9 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from propfirm_engine import BacktestConfig, BracketHistory, DollarPolicy, Engine, RiskRegime
 from propfirm_engine.firms.lucidflex import replay_50k
+from propfirm_engine.synthetic import IIDGenerator, RegimeSwitchingGenerator, StochasticVolGenerator
+from zoneinfo import ZoneInfo
+import numpy as np
 
 MAX_CSV_BYTES = 5_000_000
 MAX_TRADES = 20_000
@@ -23,6 +26,111 @@ OBJECTIVES = {
     "net_cash_per_day": lambda result: result.net_cash_per_day,
     "net_cash": lambda result: result.net_cash,
 }
+CSV_COLUMNS = ("entry_at", "exit_at", "session", "stop_loss", "take_profit", "won")
+NY = ZoneInfo("America/New_York")
+
+
+def _finite(value, name, minimum=0, maximum=math.inf, *, integer=False):
+    if (isinstance(value, bool) or not isinstance(value, (int, float))
+            or not math.isfinite(value) or not minimum <= value <= maximum
+            or (integer and type(value) is not int)):
+        raise ValueError(f"{name} must be {'an integer' if integer else 'finite'} in [{minimum}, {maximum}]")
+    return value
+
+
+def _history_payload(records, provenance):
+    history = BracketHistory.from_records(records)
+    stream = StringIO(newline="")
+    writer = csv.DictWriter(stream, fieldnames=CSV_COLUMNS, lineterminator="\n")
+    writer.writeheader()
+    for t in history.trades:
+        writer.writerow(dict(entry_at=t.entry_at.isoformat(), exit_at=t.exit_at.isoformat(),
+                             session=t.session.isoformat(), stop_loss=t.stop_loss,
+                             take_profit=t.take_profit, won=str(t.won).lower()))
+    wins = sum(t.won for t in history.trades)
+    return {"csv": stream.getvalue(), "provenance": provenance,
+            "stats": {**_partition(history), "wins": wins, "losses": len(history.trades) - wins,
+                      "win_rate": wins / len(history.trades),
+                      "mean_rr": sum(t.take_profit / t.stop_loss for t in history.trades) / len(history.trades),
+                      "mean_stop": sum(t.stop_loss for t in history.trades) / len(history.trades)}}
+
+
+def generate(params):
+    """Adapt the existing synthetic generators to an explicit bracket history.
+
+    The generated scale is known: return is +rr*scale or -scale. This mapping
+    is valid only for these synthetic models, not an inference from real P&L.
+    Stochastic volatility scales both stop and target, preserving their ratio.
+    """
+    required = {"generator", "win_rate", "rr", "stop_loss", "trades_per_day", "sessions", "seed", "start_date"}
+    kinds = {"iid": (IIDGenerator, set()),
+             "regime": (RegimeSwitchingGenerator, {"spread", "persistence"}),
+             "stochvol": (StochasticVolGenerator, {"vol_phi", "vol_sigma"})}
+    if not isinstance(params, dict) or params.get("generator") not in kinds:
+        raise ValueError("generator must be iid, regime or stochvol")
+    factory, extras = kinds[params["generator"]]
+    if set(params) != required | extras:
+        raise ValueError("Generator parameters must match the selected model")
+    for key, lower, upper, integer in (
+        ("win_rate", 0, 1, False), ("rr", 1e-9, 1e9, False),
+        ("stop_loss", 1e-9, 1e9, False), ("trades_per_day", 1, 100, True),
+        ("sessions", 1, MAX_TRADES, True), ("seed", 0, 2**32 - 1, True),
+    ):
+        _finite(params[key], key, lower, upper, integer=integer)
+    if params["sessions"] * params["trades_per_day"] > MAX_TRADES:
+        raise ValueError("Generated history exceeds 20,000 trades")
+    for key in extras:
+        _finite(params[key], key, 0, 1 if key in ("persistence", "vol_phi", "spread") else 5)
+    first = date.fromisoformat(params["start_date"])
+    generator = factory(win_rate=params["win_rate"], rr=params["rr"],
+                        trades_per_day=params["trades_per_day"],
+                        start=datetime.combine(first, time(9, 30)),
+                        **{key: params[key] for key in extras})
+    try:
+        with np.errstate(over="raise", invalid="raise"):
+            source = generator.generate(params["sessions"], params["seed"])
+    except (OverflowError, FloatingPointError) as exc:
+        raise ValueError("Generator scale overflow; reduce volatility parameters") from exc
+    records = []
+    for stamp, value in zip(source.rows["timestamp"], source.rows["return"]):
+        scale = value / params["rr"] if value > 0 else -value
+        stop = params["stop_loss"] * scale
+        exit_at = stamp.replace(tzinfo=NY)
+        records.append(dict(entry_at=exit_at - timedelta(minutes=1), exit_at=exit_at,
+                            session=exit_at.date(), stop_loss=stop,
+                            take_profit=stop * params["rr"], won=value > 0))
+    provenance = {"kind": "synthetic", "parameters": dict(params),
+                  "model": _jsonable(source.provenance),
+                  "calendar": "weekday sessions; no exchange-holiday filter",
+                  "execution": "one-minute ideal brackets; volatility scales stop and target"}
+    return _history_payload(records, provenance)
+
+
+def manual(params):
+    """Convert hand-entered Eastern wall-clock brackets; execute via run(), never here."""
+    if not isinstance(params, dict) or set(params) != {"trades"}:
+        raise ValueError("Manual history needs a trades list")
+    rows = params["trades"]
+    if not isinstance(rows, list) or not 1 <= len(rows) <= MAX_TRADES:
+        raise ValueError("Manual history needs 1 to 20,000 trades")
+    records = []
+    for row in rows:
+        if set(row) != {"session", "entry_time", "duration_minutes", "stop_loss", "take_profit", "won"}:
+            raise ValueError("Manual trade needs session, entry_time, duration_minutes, stop_loss, take_profit, won")
+        session = date.fromisoformat(row["session"])
+        wall_time = time.fromisoformat(row["entry_time"])
+        if wall_time.tzinfo is not None or not time(9, 30) <= wall_time < time(16, 45):
+            raise ValueError("Manual editor uses 09:30–16:45 Eastern; use CSV for other session hours")
+        duration = _finite(row["duration_minutes"], "duration_minutes", 1, 435)
+        for field in ("stop_loss", "take_profit"):
+            _finite(row[field], field, 1e-9)
+        entry = datetime.combine(session, wall_time, NY)
+        exit_at = entry + timedelta(minutes=duration)
+        if session.weekday() >= 5 or exit_at.time() > time(16, 45):
+            raise ValueError("Manual trade lies outside the session")
+        records.append(dict(entry_at=entry, exit_at=exit_at, session=session,
+                            stop_loss=row["stop_loss"], take_profit=row["take_profit"], won=row["won"]))
+    return _history_payload(records, {"kind": "manual", "timezone": "America/New_York", "trades": rows})
 
 
 def _jsonable(value):
@@ -45,7 +153,7 @@ def parse_history(text):
     if not isinstance(text, str) or len(text.encode("utf-8")) > MAX_CSV_BYTES:
         raise ValueError("CSV must be text of at most 5 MB")
     reader = csv.DictReader(StringIO(text.lstrip("\ufeff")), strict=True)
-    columns = ("entry_at", "exit_at", "session", "stop_loss", "take_profit", "won")
+    columns = CSV_COLUMNS
     if not reader.fieldnames or len(set(reader.fieldnames)) != len(reader.fieldnames):
         raise ValueError("CSV must have unique column names")
     if set(reader.fieldnames) != set(columns):
@@ -77,8 +185,6 @@ def run(request):
     """Replay or fit with explicit assumptions and an OOS-only headline on fit."""
     if not isinstance(request, dict):
         raise ValueError("request must be a JSON object")
-    if request.get("accept_bracket_contract") is not True:
-        raise ValueError("Confirm the sequential ideal stop-or-target input contract first")
     mode = request.get("mode")
     if mode not in ("backtest", "fit"):
         raise ValueError("mode must be backtest or fit")
@@ -102,6 +208,7 @@ def run(request):
     engine = Engine()
     output = {"schema_version": 1, "mode": mode, "profile": request["profile"],
               "objective": objective_name, "direction": "maximize", "input": _partition(history),
+              "execution_model": "sequential_ideal_brackets",
               "csv_sha256": sha256(request["csv"].encode("utf-8")).hexdigest(),
               "request": {k: v for k, v in request.items() if k != "csv"}}
     if mode == "backtest":

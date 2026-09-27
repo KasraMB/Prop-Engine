@@ -14,9 +14,11 @@ Open `http://localhost:8000`. Set `PORT` to change the loopback port.
 The local endpoint is `POST /api/replay`; it accepts the same JSON scenario used
 by the browser worker. It is a local research server, not a public API service.
 
-1. Upload a six-column bracket CSV: `entry_at,exit_at,session,stop_loss,take_profit,won`.
+1. Generate a synthetic history, enter manual trades, or upload a six-column CSV:
+   `entry_at,exit_at,session,stop_loss,take_profit,won`.
 2. Set the contract type, dated account fees, trading costs, wallet and processing delays.
-3. Confirm the [ideal-fill input contract](../docs/BRACKET_BACKTEST.md).
+3. Inputs follow the [ideal-fill input contract](../docs/BRACKET_BACKTEST.md);
+   there is no acknowledgment checkbox.
 4. Configure ordered regimes and search bounds before inspecting OOS results.
 5. Optimize on the first 70% of whole sessions; report the final 30%. Both selected
    and initial policies start fresh accounts/wallets on the same OOS period.
@@ -27,6 +29,31 @@ Headline economics are received payouts minus account fees, per elapsed calendar
 or in total. Trading balance, outstanding payouts and unvalued live handoff are distinct.
 The ledger display is capped at 500 events; JSON retains all events and the full model
 configuration. The original CSV is not included; preserve it alongside its export hash.
+Generated histories can be downloaded as CSV; their generator parameters and realized
+statistics are included in result provenance.
+
+## Synthetic inputs and account trace
+
+The synthetic input controls win probability, gross reward/risk ratio, base stop
+per contract, trades per session, session count, start date and seed. Choose IID,
+regime-switching (spread and persistence), or stochastic volatility (persistence
+and volatility noise). These call the existing Python trade generators. Volatility
+scales stop and target together, preserving the selected ratio. Realized sample
+statistics can differ from generator parameters. Sessions skip weekends, not exchange
+holidays. Changing parameters invalidates the prior history and result.
+
+Open `/trace.html` for the same account, cost and policy controls with fixed-policy
+execution. Manual wins/losses specify gross stop/target amounts per contract,
+an Eastern entry time and duration. The manual editor supports weekday daytime
+trades from 09:30 through 16:45; CSV inputs can cover other valid account hours.
+Each edit replays the supplied history through `Engine.backtest`, including session
+finalization. Use the event selector to inspect the state before or after each trade,
+session close, evaluation pass or payout event. The chart shows balance and loss
+floor for the selected attempt and phase. There is no separate manual rule engine.
+The trace can also consume synthetic histories and uploaded CSVs.
+
+Local helper endpoints `POST /api/generate` and `POST /api/manual` construct validated
+histories; `POST /api/replay` is the shared engine adapter.
 
 Dashboard limits: 5 MB, 20,000 trades, 32 regimes, 100 generations, 32 candidates per
 generation and two million candidate-trade evaluations. Use the Python API for larger
@@ -62,17 +89,18 @@ python -m playwright install chromium
 python -m pytest tests/test_dashboard_browser.py -q
 ```
 
-Browser tests start temporary loopback servers, upload a CSV, fit/report/export,
-compare real browser results against canonical Python, check validation recovery
-and narrow-screen overflow. They require network access for runtime dependencies.
+Browser tests start temporary loopback servers, generate/upload histories,
+fit/report/export and enter manual payout scenarios. They compare real browser
+results and trace events against canonical Python, check validation recovery,
+worker cancellation, bundle integrity and narrow-screen overflow.
+They require network access for runtime dependencies.
 Without the environment opt-in they skip. `BROWSER_SCREENSHOT_DIR` optionally
 collects screenshots; `BROWSER_BASE_URL` tests an already deployed static site.
 
-## Legacy research interfaces
+## Research scope
 
-- `/interactive.html`: manual trace explorer with explicit summary-approximation opt-in.
-- `/montecarlo.html`: resampled Monte Carlo research with its own legacy sizing fitter.
-
-Neither is the chronological replay workflow. Their approximation warnings remain
-active. Fees, holidays, discretionary enforcement, live value and execution realism
-are not made verified simply by displaying a result. Read the execution contract.
+As of 2026-09-26, the old manual and Monte Carlo dashboards and their independent
+adapters are removed. The resampled `Engine.run` Python API remains available.
+Removing the UI acknowledgment does not change execution assumptions or establish
+real-market fidelity. Fees, holidays, discretionary enforcement and live value
+still require the treatment described in the execution contract.

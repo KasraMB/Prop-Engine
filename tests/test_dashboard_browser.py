@@ -32,7 +32,7 @@ def site(request):
 
 def test_upload_fit_export_and_errors_in_real_browser(site, tmp_path):
     from playwright.sync_api import sync_playwright
-    from dashboard.replay import run
+    from dashboard.replay import generate, run
     url, runtime = site
     with sync_playwright() as p:
         browser = p.chromium.launch()
@@ -41,11 +41,15 @@ def test_upload_fit_export_and_errors_in_real_browser(site, tmp_path):
         page.goto(url)
         page.wait_for_function("!document.getElementById('run').disabled || !document.getElementById('error').hidden", timeout=180_000)
         assert page.locator("#error").is_hidden(), page.locator("#error").inner_text()
-        assert page.locator("#accept").is_checked() is False
-        csv = page.evaluate("demoCsv()")
+        assert page.locator('input[type="checkbox"]').count() == 0
+        params = page.evaluate("syntheticParameters()")
+        page.locator("#generate").click()
+        page.wait_for_function("!busy && csvText.length > 0", timeout=30_000)
+        csv = page.evaluate("csvText")
+        assert csv == generate(params)["csv"]
+        page.locator("#sourceType").select_option("upload")
         page.locator("#csvFile").set_input_files({"name": "history.csv", "mimeType": "text/csv", "buffer": csv.encode()})
         page.wait_for_function("document.getElementById('fileStatus').textContent.includes('history.csv')")
-        page.locator("#accept").check()
         page.locator("#generations").fill("2")
         page.locator("#population").fill("4")
         request = page.evaluate("collect()")
@@ -77,11 +81,29 @@ def test_upload_fit_export_and_errors_in_real_browser(site, tmp_path):
         assert "CSV requires exactly" in page.locator("#error").inner_text()
         assert page.locator("#run").is_enabled()
         # Fixed-history reporting must not be advertised as OOS.
-        page.locator("#demo").click()
+        page.locator("#sourceType").select_option("synthetic")
         page.locator("#mode").select_option("backtest")
         page.locator("#run").click()
         page.wait_for_function("!document.getElementById('results').hidden", timeout=30_000)
         assert "not OOS" in page.locator("#scope").inner_text()
+        # Statistics controls must affect the actual generated history, not just labels.
+        page.locator("#gen_win_rate").fill("100")
+        page.locator("#gen_rr").fill("3")
+        page.locator("#gen_sessions").fill("10")
+        page.locator("#gen_trades_per_day").fill("2")
+        for model in ("iid", "regime", "stochvol"):
+            page.locator("#gen_generator").select_option(model)
+            params = page.evaluate("syntheticParameters()")
+            page.locator("#generate").click()
+            page.wait_for_function("!busy && csvText.length > 0", timeout=30_000)
+            actual = page.evaluate("sourceMetadata")
+            assert actual["parameters"] == params
+            assert "20 trades" in page.locator("#fileStatus").inner_text()
+            assert "100.0%" in page.locator("#fileStatus").inner_text()
+            assert "3.00" in page.locator("#fileStatus").inner_text()
+        page.locator("#gen_generator").select_option("iid")
+        page.locator("#gen_sessions").fill("80")
+        page.locator("#gen_trades_per_day").fill("4")
         if runtime == "static":
             page.locator("#mode").select_option("fit")
             page.locator("#generations").fill("100")
@@ -96,4 +118,61 @@ def test_upload_fit_export_and_errors_in_real_browser(site, tmp_path):
             page.wait_for_function("!document.getElementById('error').hidden", timeout=180_000)
             assert "bundle changed" in page.locator("#error").inner_text()
         assert not errors
+        browser.close()
+
+
+def test_manual_trace_uses_current_engine_and_steps_payout_events(site):
+    from playwright.sync_api import sync_playwright
+    from dashboard.replay import run
+    url, runtime = site
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        page = browser.new_page(viewport={"width": 1440, "height": 1000})
+        page.goto(url + "trace.html")
+        page.wait_for_function("ready || !document.getElementById('error').hidden", timeout=180_000)
+        assert page.locator("#error").is_hidden(), page.locator("#error").inner_text()
+        assert page.locator("#pageTitle").inner_text() == "Account trace"
+        assert page.locator("#sourceType").input_value() == "manual"
+        assert page.locator("#modeField").is_hidden()
+        for key in ("cost_per_contract", "approval_delay_hours", "receipt_delay_hours"):
+            page.locator("#" + key).fill("0")
+        for field in page.locator('[data-field="risk_dollars"]').all():
+            field.fill("100")
+        for i in range(7):
+            if i:
+                page.locator("#nextSession").click()
+            page.locator("#manual_take_profit").fill("1500" if i < 2 else "200")
+            page.locator("#addWin").click()
+            page.wait_for_function("!busy && (!document.getElementById('results').hidden || !document.getElementById('error').hidden)", timeout=30_000)
+            assert page.locator("#error").is_hidden(), page.locator("#error").inner_text()
+        request = page.evaluate("collect()")
+        expected = run(request)
+        actual = page.evaluate("latest")
+        assert actual["headline"]["events"] == expected["headline"]["events"]
+        assert actual["headline"]["receipts"] == 450
+        assert actual["headline"]["net_cash"] == pytest.approx(344.8)
+        events = actual["headline"]["events"]
+        for kind in ("trade", "evaluation_pass", "session_close", "request", "approval", "receipt"):
+            index = next(i for i, e in enumerate(events) if e["kind"] == kind)
+            page.locator("#traceIndex").fill(str(index + 1))
+            page.locator("#traceIndex").press("Tab")
+            assert json.loads(page.locator("#traceDetails").inner_text()) == events[index]
+        page.locator("#traceFirst").click()
+        page.locator("#traceNextTrade").click()
+        assert json.loads(page.locator("#traceDetails").inner_text())["kind"] == "trade"
+        page.locator("#traceNextSession").click()
+        assert json.loads(page.locator("#traceDetails").inner_text())["kind"] == "session_close"
+        if os.environ.get("BROWSER_SCREENSHOT_DIR"):
+            target = Path(os.environ["BROWSER_SCREENSHOT_DIR"]); target.mkdir(parents=True, exist_ok=True)
+            page.screenshot(path=str(target / f"trace-{runtime}.png"), full_page=True)
+        page.locator("#undoTrade").click()
+        page.wait_for_function("!busy && latest !== null", timeout=30_000)
+        assert page.evaluate("manualTrades.length") == 6
+        assert page.evaluate("latest.headline.receipts") == 0
+        page.set_viewport_size({"width": 390, "height": 844})
+        assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+        page.locator("#clearTrades").click()
+        assert page.locator("#results").is_hidden()
+        assert page.evaluate("manualTrades.length") == 0
+        assert page.request.get(url + "montecarlo.html").status == 404
         browser.close()

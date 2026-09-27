@@ -28,8 +28,9 @@ ratios are preserved. Custom objectives receive complete lifecycle results.
 
 `Engine.run` is the separate resampled Monte Carlo research path. Its strict
 input-capability checks remain active; closed summaries do not establish ordered
-intratrade paths. The dashboard's primary page uses the chronological APIs through
-one shared JSON adapter; legacy trace and Monte Carlo pages remain separate.
+intratrade paths. Both dashboard pages use the chronological APIs through
+one shared JSON adapter. The account trace renders canonical backtest events;
+it has no separate accounting implementation. The Monte Carlo dashboard is removed.
 The Pages replay runs in a worker with a hash-verified canonical Python bundle.
 
 ## Accounting invariants

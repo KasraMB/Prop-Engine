@@ -155,8 +155,10 @@ python dashboard/server.py
 # Open http://localhost:8000
 ```
 
-Upload the bracket CSV described above, set your fees/costs/delays, confirm the
-input contract, and configure ordered dollar-risk regimes. The default workflow
+Upload the bracket CSV described above or generate a synthetic history with
+configurable win rate, reward/risk ratio, stop size, sessions, trades per session,
+seed and return model. Set fees/costs/delays and ordered dollar-risk regimes.
+The default workflow
 fits on 70% of complete sessions and shows only the final 30% as headline OOS
 performance, with the initial policy evaluated on the same holdout. A fixed-policy
 full-history replay is available separately and is explicitly not labeled OOS.
@@ -165,8 +167,11 @@ Download the full JSON for scenario inputs, policy, split, fingerprints and ledg
 The hosted replay runs in a browser worker; trade contents are not uploaded.
 Local mode sends them to your loopback Python server. Runtime dependencies load
 from external CDNs on Pages. The synthetic example is a UI demonstration, not
-market data or evidence of strategy profitability. Legacy trace/Monte Carlo
-tools remain clearly separated. See [dashboard setup and deployment](dashboard/README.md).
+market data or evidence of strategy profitability. The account trace uses the same
+engine and interface: enter manual wins/losses or replay a CSV, then step through
+trades, session closes and payout events. The Monte Carlo dashboard has been removed;
+the resampled Python research API remains available. No acknowledgment checkbox is
+required. See [dashboard setup and deployment](dashboard/README.md).
 
 ## Repository guide
 
@@ -175,7 +180,7 @@ tools remain clearly separated. See [dashboard setup and deployment](dashboard/R
 - `docs/`: maintained API contracts, model limitations and browser distribution.
 - `Test_Strategies/`: standalone input producers; strategies are not engine API features.
 - `benchmarks/`: reproducible performance/model-comparison programs, not scratch scripts.
-- `dashboard/`: chronological replay/holdout UI, shared adapter and legacy research tools.
+- `dashboard/`: chronological replay, holdout fitting and account trace with a shared adapter.
 
 See [contributing](CONTRIBUTING.md), the [design overview](docs/DESIGN.md) and
 the [execution contract](docs/BRACKET_BACKTEST.md) for supported behavior,

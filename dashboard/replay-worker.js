@@ -39,23 +39,25 @@ async function boot() {
   );
   py.runPython(`import sys, json
 sys.path.insert(0, "/pkg")
-from replay import run
-def run_json(payload):
-    return json.dumps(run(json.loads(payload)), allow_nan=False)
+from replay import run, generate, manual
+def run_json(action, payload):
+    handler = {"run": run, "generate": generate, "manual": manual}[action]
+    return json.dumps(handler(json.loads(payload)), allow_nan=False)
 `);
   execute = py.globals.get("run_json");
   postMessage({ type: "ready", version: manifest.bundle_sha256.slice(0, 12) });
 }
 self.onmessage = ({ data }) => {
-  if (data.type !== "run") return;
+  if (!["run", "generate", "manual"].includes(data.action)) return;
   try {
     if (!execute) throw new Error("Engine is not ready");
     postMessage({
       type: "result",
-      result: JSON.parse(execute(JSON.stringify(data.request))),
+      id: data.id,
+      result: JSON.parse(execute(data.action, JSON.stringify(data.request))),
     });
   } catch (error) {
-    postMessage({ type: "error", message: String(error) });
+    postMessage({ type: "error", id: data.id, message: String(error) });
   }
 };
 boot().catch((error) =>

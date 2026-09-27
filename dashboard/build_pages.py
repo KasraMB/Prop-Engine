@@ -1,10 +1,8 @@
 """Assemble deterministic browser assets from the canonical engine and dashboard.
 
 The Pages site runs the engine in the browser via Pyodide (pure Python, no numba).
-This copies the exact set of ``propfirm_engine`` modules the Monte Carlo pipeline
-imports into ``docs/py/``, drops in a tiny ``numba`` shim so the ``@njit`` kernels
-run as plain Python. Copies the shared replay adapter and UI, preserves the
-legacy entry points, and writes manifests including replay integrity hashes.
+Copies the canonical package with a no-JIT shim, the shared replay adapter and
+the unified replay/trace UI. The manifest verifies every Python module's bytes.
 
 Run from anywhere:  python dashboard/build_pages.py
 """
@@ -65,29 +63,19 @@ def main() -> None:
     DOCS_PY.mkdir(parents=True, exist_ok=True)
     manifest = _copy_engine()
     (DOCS_PY / "numba.py").write_text(NUMBA_SHIM, encoding="utf-8", newline="\n")
-    _write_browser_copy("montecarlo.py", "mc_engine.py")  # Monte Carlo entry
-    _write_browser_copy("bridge.py", "bridge.py")          # Interactive entry
-    _write_browser_copy("accounts.py", "accounts.py")      # Interactive registry
     _write_browser_copy("replay.py", "replay.py")
-    for source, target in (("replay.html", "index.html"), ("replay.css", "replay.css"),
-                           ("replay.js", "replay.js"), ("replay-worker.js", "replay-worker.js")):
+    for source, target in (("replay.html", "index.html"), ("replay.html", "trace.html"),
+                           ("replay.css", "replay.css"), ("replay.js", "replay.js"),
+                           ("history.js", "history.js"), ("trace.js", "trace.js"),
+                           ("replay-worker.js", "replay-worker.js")):
         (ROOT / "docs" / target).write_text((DASH / source).read_text(encoding="utf-8"),
                                            encoding="utf-8", newline="\n")
-    # propfirm_engine/__init__ eagerly imports the whole package (kernels, engine,
-    # optimizer, firms, statistics, ...), so BOTH pages need the full module closure
-    # plus the numba shim; they differ only in their entry module. The old hand-written
-    # minimal manifest.json is intentionally replaced here.
-    mc = ["numba.py"] + manifest + ["mc_engine.py"]        # Monte Carlo page
-    idx = ["numba.py"] + manifest + ["accounts.py", "bridge.py"]  # Interactive page
-    (DOCS_PY / "manifest_mc.json").write_text(json.dumps(mc, indent=0), encoding="utf-8", newline="\n")
-    (DOCS_PY / "manifest.json").write_text(json.dumps(idx, indent=0), encoding="utf-8", newline="\n")
     files = [{"path": p, "sha256": sha256((DOCS_PY / p).read_bytes()).hexdigest()}
              for p in ["numba.py"] + manifest + ["replay.py"]]
     version = sha256(json.dumps(files, sort_keys=True).encode()).hexdigest()
     (DOCS_PY / "manifest_replay.json").write_text(
         json.dumps({"bundle_sha256": version, "files": files}, indent=2) + "\n", encoding="utf-8", newline="\n")
-    print(f"wrote engine bundle to {DOCS_PY}: "
-          f"manifest.json ({len(idx)} files), manifest_mc.json ({len(mc)} files)")
+    print(f"wrote replay/trace bundle to {DOCS_PY}: {len(files)} verified Python files")
 
 
 if __name__ == "__main__":

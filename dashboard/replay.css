@@ -1,3 +1,33 @@
+.source-label {
+  display: block;
+  margin-bottom: 20px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.source-label select {
+  margin-top: 8px;
+}
+.extra-params {
+  margin-top: 16px;
+}
+.manual-history {
+  max-height: 230px;
+}
+.trace-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.trace-controls input[type="range"] {
+  flex: 1;
+  min-width: 100px;
+  accent-color: var(--accent);
+}
+#traceIndex {
+  width: 90px;
+  margin-left: 10px;
+}
 :root {
   color-scheme: dark;
   --bg: #0d1117;

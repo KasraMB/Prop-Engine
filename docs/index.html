@@ -3,13 +3,11 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta
-      name="description"
-      content="Replay sequential futures trades through a prop-firm account and evaluate dollar-risk policies out of sample."
-    />
-    <title>Propfirm Engine | Strategy Replay</title>
+    <title>Propfirm Engine | Replay &amp; Trace</title>
     <link rel="stylesheet" href="replay.css" />
     <script src="replay.js" defer></script>
+    <script src="history.js" defer></script>
+    <script src="trace.js" defer></script>
   </head>
   <body data-runtime="browser">
     <header>
@@ -17,36 +15,25 @@
         >P<span>/</span>E <small>PROPFIRM ENGINE</small></a
       >
       <nav aria-label="Main navigation">
-        <a class="active" href="index.html">Strategy replay</a
-        ><a href="interactive.html">Legacy trace</a
-        ><a href="montecarlo.html">Legacy Monte Carlo</a
+        <a id="replayLink" href="index.html">Strategy replay</a
+        ><a id="traceLink" href="trace.html">Account trace</a
         ><a href="https://github.com/KasraMB/Prop-Engine">Source ↗</a>
       </nav>
     </header>
     <main>
       <div class="intro">
         <div>
-          <p class="eyebrow">STRATEGY LAB / CHRONOLOGICAL REPLAY</p>
-          <h1>Trade history.<br /><span>Account-level outcomes.</span></h1>
-          <p class="lede">
-            Replay one account with repeated attempts. Fit dollar-risk budgets
-            on the first 70% of sessions, then evaluate the frozen policy on the
-            final 30%.
+          <p class="eyebrow">PROPFIRM ENGINE / RESEARCH WORKSPACE</p>
+          <h1 id="pageTitle">Strategy replay</h1>
+          <p class="lede" id="pageDescription">
+            Generate or upload trades. Fit dollar-risk budgets on 70% of
+            sessions and evaluate the frozen policy on the remaining 30%.
           </p>
         </div>
         <div class="runtime">
           <span class="dot"></span><span id="runtime">Initializing engine…</span
           ><small id="build">Canonical Python engine</small>
         </div>
-      </div>
-      <div class="notice">
-        Explicit model: sequential ideal stop-or-target fills, no overlap or
-        stop slippage. Historical reward/risk ratios stay fixed. This is not
-        complete contractual or live-execution certification.
-        <a
-          href="https://github.com/KasraMB/Prop-Engine/blob/main/docs/BRACKET_BACKTEST.md"
-          >Read the execution contract ↗</a
-        >
       </div>
       <form id="replayForm">
         <fieldset id="controls">
@@ -55,50 +42,261 @@
               <div class="section-title">
                 <span class="step">01</span>
                 <h2>Trade history</h2>
-                <span class="tag">CSV</span>
               </div>
-              <label class="upload" for="csvFile"
-                ><strong>Choose your trade history</strong
-                ><span
-                  >Six explicit columns · timezone-aware timestamps · up to 5 MB
-                  / 20,000 trades</span
-                ><input id="csvFile" type="file" accept=".csv,text/csv"
-              /></label>
-              <p id="fileStatus" class="muted">
-                No history loaded. Your original file is not modified.
-              </p>
-              <div class="button-row">
-                <button type="button" id="demo" class="secondary">
-                  Load synthetic example</button
-                ><button type="button" id="template" class="text-button">
-                  Download example CSV ↓
+              <label class="source-label"
+                >Input source<select id="sourceType">
+                  <option value="synthetic">Synthetic generator</option>
+                  <option value="upload">CSV history</option>
+                  <option value="manual">Hand-entered trades</option>
+                </select></label
+              >
+              <fieldset id="syntheticPanel" data-source="synthetic">
+                <div class="fields">
+                  <label
+                    >Generator<select id="gen_generator">
+                      <option value="iid">Independent (IID)</option>
+                      <option value="regime">Regime switching</option>
+                      <option value="stochvol">Stochastic volatility</option>
+                    </select></label
+                  >
+                  <label
+                    >Win rate (%)<input
+                      id="gen_win_rate"
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="any"
+                      value="55"
+                      required
+                  /></label>
+                  <label
+                    >Reward / risk<input
+                      id="gen_rr"
+                      type="number"
+                      min="0.000001"
+                      step="any"
+                      value="2"
+                      required
+                  /></label>
+                  <label
+                    >Base stop / contract ($)<input
+                      id="gen_stop_loss"
+                      type="number"
+                      min="0.000001"
+                      step="any"
+                      value="100"
+                      required
+                  /></label>
+                  <label
+                    >Trades / session<input
+                      id="gen_trades_per_day"
+                      type="number"
+                      min="1"
+                      max="100"
+                      value="4"
+                      required
+                  /></label>
+                  <label
+                    >Sessions<input
+                      id="gen_sessions"
+                      type="number"
+                      min="1"
+                      max="20000"
+                      value="80"
+                      required
+                  /></label>
+                  <label
+                    >History seed<input
+                      id="gen_seed"
+                      type="number"
+                      min="0"
+                      max="4294967295"
+                      value="73"
+                      required
+                  /></label>
+                  <label
+                    >First session date<input
+                      id="gen_start_date"
+                      type="date"
+                      value="2026-01-05"
+                      required
+                  /></label>
+                </div>
+                <fieldset
+                  id="regimeParams"
+                  class="fields extra-params"
+                  hidden
+                  disabled
+                >
+                  <label
+                    >Regime persistence<input
+                      id="gen_persistence"
+                      type="number"
+                      min="0"
+                      max="1"
+                      step="any"
+                      value="0.95"
+                      required
+                  /></label>
+                  <label
+                    >Win-rate spread (percentage points)<input
+                      id="gen_spread"
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="any"
+                      value="25"
+                      required
+                  /></label>
+                </fieldset>
+                <fieldset
+                  id="volParams"
+                  class="fields extra-params"
+                  hidden
+                  disabled
+                >
+                  <label
+                    >Log-volatility persistence<input
+                      id="gen_vol_phi"
+                      type="number"
+                      min="0"
+                      max="0.999999"
+                      step="any"
+                      value="0.9"
+                      required
+                  /></label>
+                  <label
+                    >Log-volatility shock scale<input
+                      id="gen_vol_sigma"
+                      type="number"
+                      min="0"
+                      max="5"
+                      step="any"
+                      value="0.5"
+                      required
+                  /></label>
+                </fieldset>
+                <p id="generatorHint" class="muted"></p>
+                <button type="button" id="generate" class="secondary" disabled>
+                  Generate history
                 </button>
-              </div>
-              <details>
-                <summary>Required data format</summary>
-                <pre>
+              </fieldset>
+              <fieldset id="uploadPanel" data-source="upload" hidden disabled>
+                <label class="upload" for="csvFile"
+                  ><strong>Choose your trade history</strong
+                  ><span>Bracket CSV · up to 5 MB / 20,000 trades</span
+                  ><input id="csvFile" type="file" accept=".csv,text/csv"
+                /></label>
+                <details>
+                  <summary>CSV columns &amp; units</summary>
+                  <pre>
 entry_at,exit_at,session,stop_loss,take_profit,won
 2026-09-01T10:00:00-04:00,2026-09-01T10:05:00-04:00,2026-09-01,100,200,true</pre>
-                <p>
-                  Stop and target are gross USD per <em>one contract</em>, not
-                  net P&amp;L or R-multiples. Outcomes must be
-                  <code>true</code> or <code>false</code>. Rows must already be
-                  ordered and non-overlapping. Session dates use the firm's
-                  Eastern-time trading day. Filter holidays and early closes
-                  upstream.
+                  <p>
+                    Stop and target are gross USD per one contract. Timestamps
+                    need UTC offsets; rows must be chronological and
+                    non-overlapping. Outcomes are true/false. Sessions use
+                    Eastern trading dates.
+                  </p>
+                </details>
+              </fieldset>
+              <fieldset id="manualPanel" data-source="manual" hidden disabled>
+                <div class="fields">
+                  <label
+                    >Session date<input
+                      id="manual_session"
+                      type="date"
+                      value="2026-09-01"
+                      required
+                  /></label>
+                  <label
+                    >Entry time (Eastern)<input
+                      id="manual_entry_time"
+                      type="time"
+                      min="09:30"
+                      max="16:44"
+                      value="10:00"
+                      required
+                  /></label>
+                  <label
+                    >Duration (minutes)<input
+                      id="manual_duration_minutes"
+                      type="number"
+                      min="1"
+                      max="435"
+                      value="5"
+                      required
+                  /></label>
+                  <label
+                    >Stop / contract ($)<input
+                      id="manual_stop_loss"
+                      type="number"
+                      min="0.000001"
+                      step="any"
+                      value="100"
+                      required
+                  /></label>
+                  <label
+                    >Target / contract ($)<input
+                      id="manual_take_profit"
+                      type="number"
+                      min="0.000001"
+                      step="any"
+                      value="200"
+                      required
+                  /></label>
+                </div>
+                <div class="button-row">
+                  <button type="button" id="addWin" disabled>+ Win</button
+                  ><button
+                    type="button"
+                    id="addLoss"
+                    class="secondary"
+                    disabled
+                  >
+                    + Loss</button
+                  ><button type="button" id="nextSession" class="text-button">
+                    Next session →
+                  </button>
+                </div>
+                <div class="button-row">
+                  <button type="button" id="undoTrade" class="text-button">
+                    Undo last trade</button
+                  ><button type="button" id="clearTrades" class="text-button">
+                    Clear trades
+                  </button>
+                </div>
+                <p class="muted">
+                  Adding a trade reruns the fixed policy on this sequence. Each
+                  run finalizes the supplied sessions; step through the trace to
+                  inspect trade-close versus session-close state.
                 </p>
-              </details>
-              <label class="confirmation"
-                ><input id="accept" type="checkbox" required /><span
-                  >I confirm that this history meets the sequential ideal
-                  stop-or-target contract. This is an explicit modeling
-                  assumption, not reconstructed market-path evidence.</span
-                ></label
-              >
-              <p id="privacy" class="muted">
-                On GitHub Pages, trade contents stay in this browser. Runtime
-                dependencies load from external CDNs.
+                <div class="table-scroll manual-history">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Session</th>
+                        <th>Eastern time</th>
+                        <th>Stop / target</th>
+                        <th>Outcome</th>
+                      </tr>
+                    </thead>
+                    <tbody id="manualRows"></tbody>
+                  </table>
+                </div>
+              </fieldset>
+              <p id="fileStatus" class="muted">
+                Choose parameters and generate a history, or run directly.
               </p>
+              <button
+                type="button"
+                id="downloadHistory"
+                class="text-button"
+                disabled
+              >
+                Download current history CSV ↓
+              </button>
+              <p id="privacy" class="muted">Engine runs in this browser.</p>
             </section>
             <section class="panel">
               <div class="section-title">
@@ -108,12 +306,11 @@ entry_at,exit_at,session,stop_loss,take_profit,won
               </div>
               <div class="profile">
                 <strong>LucidFlex · $50K · DLL off</strong
-                ><span>First reference profile / dated rule model</span>
+                ><span>Sequential stop/target model · integer contracts</span>
               </div>
               <p class="muted">
-                Fee defaults are dated examples, not current checkout quotes.
-                Costs and delays are editable scenarios. Delay units are elapsed
-                hours, not business days.
+                Fee defaults are dated examples. Costs and elapsed-hour delays
+                are editable.
               </p>
               <div class="fields">
                 <label
@@ -218,6 +415,19 @@ entry_at,exit_at,session,stop_loss,take_profit,won
                   /></label>
                 </div>
               </details>
+              <details>
+                <summary>Model notes</summary>
+                <p>
+                  Stops and targets are ideal fills. Historical ratios stay
+                  fixed. Costs, payout processing and retries follow the
+                  configured scenario. Exchange holidays, discretionary reviews
+                  and live-account value are not modeled.
+                  <a
+                    href="https://github.com/KasraMB/Prop-Engine/blob/main/docs/BRACKET_BACKTEST.md"
+                    >Engine contract ↗</a
+                  >
+                </p>
+              </details>
             </section>
           </div>
           <section class="panel policy-panel">
@@ -227,11 +437,10 @@ entry_at,exit_at,session,stop_loss,take_profit,won
               <span class="tag">FIRST MATCH WINS</span>
             </div>
             <p class="muted">
-              Specific regimes precede fallbacks. Risk includes trading costs;
-              whole contracts are capped by the loss buffer and scaling limit. A
-              budget below one contract's stop plus costs skips the trade. Days
-              remaining counts finalized qualifying days, not today's open
-              profit. Unvisited IS regimes retain their initial risk.
+              Specific regimes precede fallbacks. Risk includes costs; whole
+              contracts are capped by the loss buffer and scaling tier. Budgets
+              below one contract's stop plus costs skip the trade. Days left
+              counts finalized qualifying days.
             </p>
             <div class="table-scroll">
               <table>
@@ -243,8 +452,8 @@ entry_at,exit_at,session,stop_loss,take_profit,won
                     <th>Days left</th>
                     <th>Prior approval</th>
                     <th>Initial risk ($)</th>
-                    <th>Search min ($)</th>
-                    <th>Search max ($)</th>
+                    <th class="fit-only">Search min ($)</th>
+                    <th class="fit-only">Search max ($)</th>
                     <th></th>
                   </tr>
                 </thead>
@@ -252,16 +461,16 @@ entry_at,exit_at,session,stop_loss,take_profit,won
               </table>
             </div>
             <button type="button" id="addRegime" class="text-button">
-              + Add regime (drag-free: use ↑ / ↓ to reorder)
+              + Add regime
             </button>
           </section>
           <section class="panel run-panel">
             <div class="section-title">
               <span class="step">04</span>
-              <h2>Run &amp; evaluate</h2>
+              <h2 id="runHeading">Run &amp; evaluate</h2>
             </div>
             <div class="fields run-fields">
-              <label
+              <label id="modeField"
                 >Workflow<select id="mode">
                   <option value="fit">Optimize IS → report OOS</option>
                   <option value="backtest">
@@ -272,12 +481,12 @@ entry_at,exit_at,session,stop_loss,take_profit,won
               <label
                 >Objective (maximize)<select id="objective">
                   <option value="net_cash_per_day">
-                    Net external cash / calendar day
+                    Net cash / calendar day
                   </option>
                   <option value="net_cash">Total net external cash</option>
                 </select></label
               >
-              <label
+              <label class="fit-only"
                 >Generations<input
                   id="generations"
                   type="number"
@@ -286,7 +495,7 @@ entry_at,exit_at,session,stop_loss,take_profit,won
                   value="8"
                   required
               /></label>
-              <label
+              <label class="fit-only"
                 >Population<input
                   id="population"
                   type="number"
@@ -295,8 +504,8 @@ entry_at,exit_at,session,stop_loss,take_profit,won
                   value="8"
                   required
               /></label>
-              <label
-                >Seed<input
+              <label class="fit-only"
+                >Optimizer seed<input
                   id="seed"
                   type="number"
                   min="0"
@@ -305,11 +514,10 @@ entry_at,exit_at,session,stop_loss,take_profit,won
                   required
               /></label>
             </div>
-            <p class="muted">
-              Choose regimes and search bounds before viewing OOS. Repeated
-              tuning after seeing OOS compromises the holdout. Custom Python
-              objectives remain available through the library API, not
-              executable text in this page.
+            <p class="muted fit-only">
+              IS-unvisited regimes retain their initial risk. OOS is a holdout
+              only if it is not reused to tune the strategy or search. Custom
+              objectives are available through the Python API.
             </p>
             <button id="run" type="submit" disabled>
               Optimize &amp; evaluate
@@ -330,20 +538,71 @@ entry_at,exit_at,session,stop_loss,take_profit,won
         <div class="result-heading">
           <div>
             <p class="eyebrow" id="scope"></p>
-            <h2>Policy performance</h2>
+            <h2 id="resultTitle">Policy performance</h2>
           </div>
           <button id="download" class="secondary" type="button">
-            Download full result JSON ↓
+            Download result JSON ↓
           </button>
         </div>
         <p id="split" class="muted"></p>
+        <section id="tracePanel" class="panel" hidden>
+          <div class="section-title">
+            <h2>Engine event trace</h2>
+            <span class="tag" id="tracePosition"></span>
+          </div>
+          <div class="trace-controls">
+            <button id="traceFirst" type="button" class="secondary">
+              First</button
+            ><button id="tracePrevious" type="button" class="secondary">
+              ← Previous</button
+            ><input
+              id="traceSlider"
+              type="range"
+              min="0"
+              value="0"
+              aria-label="Trace event"
+            /><button id="traceNext" type="button" class="secondary">
+              Next →</button
+            ><button id="traceLast" type="button" class="secondary">
+              Last
+            </button>
+          </div>
+          <div class="button-row">
+            <label
+              >Event
+              <input
+                id="traceIndex"
+                type="number"
+                min="1"
+                value="1"
+                aria-label="Event number" /></label
+            ><button id="traceNextTrade" type="button" class="text-button">
+              Next trade →</button
+            ><button id="traceNextSession" type="button" class="text-button">
+              Next session close →
+            </button>
+          </div>
+          <p id="traceLabel" class="eyebrow"></p>
+          <div id="traceState" class="metrics"></div>
+          <h3>Account balance &amp; loss floor</h3>
+          <svg
+            id="accountChart"
+            viewBox="0 0 700 230"
+            role="img"
+            aria-label="Current phase balance and loss floor through the selected event"
+          ></svg>
+          <p class="muted">
+            Teal: closed balance · Red: loss floor. Current attempt and phase
+            only; each new phase starts its own chart.
+          </p>
+          <pre id="traceDetails"></pre>
+        </section>
         <div id="metrics" class="metrics"></div>
         <div class="setup-grid result-grid">
           <section class="panel">
             <h3>Cumulative external net cash</h3>
             <p class="muted">
-              Receipts minus fees. Trading-account balance is not spendable
-              cash.
+              Receipts minus fees; not trading-account balance.
             </p>
             <svg
               id="cashChart"
@@ -357,7 +616,7 @@ entry_at,exit_at,session,stop_loss,take_profit,won
             </p>
           </section>
           <section class="panel">
-            <h3>Selected dollar budgets</h3>
+            <h3>Dollar budgets</h3>
             <div class="table-scroll">
               <table>
                 <thead>
@@ -374,7 +633,7 @@ entry_at,exit_at,session,stop_loss,take_profit,won
           </section>
         </div>
         <section class="panel">
-          <h3>Reported-period event ledger</h3>
+          <h3>Event ledger</h3>
           <p class="muted" id="ledgerCaption"></p>
           <div class="table-scroll ledger">
             <table>
@@ -395,20 +654,11 @@ entry_at,exit_at,session,stop_loss,take_profit,won
           </div>
         </section>
         <details class="panel">
-          <summary>Provenance, assumptions &amp; training diagnostics</summary>
-          <p class="muted">
-            Training diagnostics are not the headline performance. Full input
-            scenario, fingerprints, policies and event ledgers are preserved in
-            the JSON export. Live value and payments after the observation
-            horizon are excluded.
-          </p>
+          <summary>Parameters, provenance &amp; training diagnostics</summary>
           <pre id="provenance"></pre>
         </details>
       </section>
     </main>
-    <footer>
-      PROPFIRM ENGINE
-      <span>One account. Explicit cashflows. Held-out evaluation.</span>
-    </footer>
+    <footer>PROPFIRM ENGINE <span>Replay · Optimization · Trace</span></footer>
   </body>
 </html>

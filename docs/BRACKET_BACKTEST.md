@@ -14,7 +14,9 @@ The fast, resampled `Engine.run` API is unchanged except for reserving its
 per-trade cost during feasibility projection. Its closed-summary strict guard
 remains active. The dashboard homepage exposes chronological replay and holdout
 fitting through a shared Python adapter in local HTTP and browser-worker modes.
-Legacy trace/Monte Carlo pages remain separate and require their approximation opt-in.
+The account trace uses the same adapter and displays canonical backtest events.
+The Monte Carlo dashboard is removed. No acknowledgment checkbox is required;
+the declared execution model and input validation remain unchanged.
 
 ## Trading inputs
 
