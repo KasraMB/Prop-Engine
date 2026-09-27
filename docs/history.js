@@ -53,7 +53,7 @@ function clearHistory() {
 function applyHistory(payload, name) {
   csvText = payload.csv;
   sourceName = name;
-  sourceMetadata = payload.provenance;
+  sourceMetadata = { ...payload.provenance, statistics: payload.stats };
   const s = payload.stats;
   $("fileStatus").textContent =
     `${s.trades} trades · ${s.sessions} sessions · realized win rate ${(s.win_rate * 100).toFixed(1)}% · mean reward/risk ${s.mean_rr.toFixed(2)} · mean stop ${money(s.mean_stop)} per contract`;

@@ -98,6 +98,9 @@ def test_upload_fit_export_and_errors_in_real_browser(site, tmp_path):
             page.wait_for_function("!busy && csvText.length > 0", timeout=30_000)
             actual = page.evaluate("sourceMetadata")
             assert actual["parameters"] == params
+            assert actual["statistics"]["trades"] == 20
+            assert actual["statistics"]["win_rate"] == 1
+            assert actual["statistics"]["mean_rr"] == pytest.approx(3)
             assert "20 trades" in page.locator("#fileStatus").inner_text()
             assert "100.0%" in page.locator("#fileStatus").inner_text()
             assert "3.00" in page.locator("#fileStatus").inner_text()
