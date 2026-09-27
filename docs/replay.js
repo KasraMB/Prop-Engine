@@ -422,25 +422,46 @@ function render(result) {
     null,
     2,
   );
-  drawCash(r, baseline);
+  drawCash(result);
   $("results").hidden = false;
 }
-function drawCash(result, baseline) {
+function cashPoints(result, offset = 0) {
+  let cash = offset;
+  const points = [[Date.parse(result.start), cash]];
+  for (const e of result.events)
+    if (e.cash) {
+      points.push([Date.parse(e.at), cash]);
+      cash += e.cash;
+      points.push([Date.parse(e.at), cash]);
+    }
+  points.push([Date.parse(result.end), cash]);
+  return points;
+}
+function cashSeries(result) {
+  const training = result.training,
+    offset = training ? training.net_cash : 0;
+  return {
+    start: training ? training.start : result.headline.start,
+    end: result.headline.end,
+    boundary: training ? result.headline.start : null,
+    series: [
+      [
+        ...(training ? cashPoints(training) : []),
+        ...cashPoints(result.headline, offset),
+      ],
+      ...(result.baseline ? [cashPoints(result.baseline, offset)] : []),
+    ],
+  };
+}
+function drawCash(result) {
   const svg = $("cashChart"),
     ns = "http://www.w3.org/2000/svg";
   svg.replaceChildren();
-  const series = [result, ...(baseline ? [baseline] : [])].map((r) => {
-    let cash = 0;
-    const points = [[Date.parse(r.start), 0]];
-    for (const e of r.events)
-      if (e.cash) {
-        points.push([Date.parse(e.at), cash]);
-        cash += e.cash;
-        points.push([Date.parse(e.at), cash]);
-      }
-    points.push([Date.parse(r.end), cash]);
-    return points;
-  });
+  const chart = cashSeries(result),
+    series = chart.series;
+  $("cashCaption").textContent = chart.boundary
+    ? "Teal: selected policy, IS + OOS. Dashed line: OOS begins with a fresh account and wallet; the displayed cash total carries forward. Gray: initial policy on OOS, starting at the same IS cash total. Headline metrics remain OOS-only."
+    : "Teal: fixed policy over the full history. Receipts minus fees; not trading-account balance.";
   let low = 0,
     high = 0;
   series.forEach((points) =>
@@ -453,8 +474,8 @@ function drawCash(result, baseline) {
     low -= 1;
     high += 1;
   }
-  const start = Date.parse(result.start),
-    end = Date.parse(result.end);
+  const start = Date.parse(chart.start),
+    end = Date.parse(chart.end);
   const x = (t) => 70 + ((t - start) / Math.max(1, end - start)) * 610;
   const y = (v) => 190 - ((v - low) / (high - low)) * 165;
   const element = (name, attrs, text) => {
@@ -485,15 +506,40 @@ function drawCash(result, baseline) {
       "stroke-width": 2,
     }),
   );
+  if (chart.boundary) {
+    const boundaryX = x(Date.parse(chart.boundary));
+    element("line", {
+      id: "oosBoundary",
+      "data-at": chart.boundary,
+      x1: boundaryX,
+      x2: boundaryX,
+      y1: 25,
+      y2: 190,
+      stroke: "#c4cfdb",
+      "stroke-width": 1.5,
+      "stroke-dasharray": "5 4",
+    });
+    element(
+      "text",
+      {
+        x: boundaryX - 5,
+        y: 16,
+        fill: "#c4cfdb",
+        "font-size": 10,
+        "text-anchor": "end",
+      },
+      "OOS starts",
+    );
+  }
   element(
     "text",
     { x: 70, y: 218, fill: "#9aa9b9", "font-size": 10 },
-    result.start.slice(0, 10),
+    chart.start.slice(0, 10),
   );
   element(
     "text",
     { x: 680, y: 218, fill: "#9aa9b9", "font-size": 10, "text-anchor": "end" },
-    result.end.slice(0, 10),
+    chart.end.slice(0, 10),
   );
 }
 function download(name, text, type) {

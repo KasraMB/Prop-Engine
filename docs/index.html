@@ -608,11 +608,10 @@ entry_at,exit_at,session,stop_loss,take_profit,won
               id="cashChart"
               viewBox="0 0 700 230"
               role="img"
-              aria-label="Cumulative external net cash over the reported observation period"
+              aria-label="Cumulative external net cash over the full history, with the OOS boundary marked when fitted"
             ></svg>
-            <p class="muted">
-              Teal: selected policy · Gray: initial policy on the same OOS
-              period (when fitted)
+            <p id="cashCaption" class="muted">
+              Teal: selected policy over the full history.
             </p>
           </section>
           <section class="panel">

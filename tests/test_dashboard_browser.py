@@ -67,6 +67,25 @@ def test_upload_fit_export_and_errors_in_real_browser(site, tmp_path):
         assert result["headline"]["events"] == expected["headline"]["events"]
         assert result["policy"] == expected["policy"]
         assert len(page.locator("#cashChart polyline").all()) == 2
+        chart = page.evaluate("cashSeries(latest)")
+        assert chart["start"] == result["training"]["start"]
+        assert chart["end"] == result["headline"]["end"]
+        assert chart["boundary"] == result["headline"]["start"]
+        assert chart["series"][0][0][1] == 0
+        is_cash = result["training"]["net_cash"]
+        assert chart["series"][0][-1][1] == pytest.approx(is_cash + result["headline"]["net_cash"])
+        assert chart["series"][1][0][1] == pytest.approx(is_cash)
+        assert chart["series"][1][-1][1] == pytest.approx(is_cash + result["baseline"]["net_cash"])
+        for points in chart["series"]:
+            assert [p[0] for p in points] == sorted(p[0] for p in points)
+        marker = page.locator("#oosBoundary")
+        assert marker.get_attribute("data-at") == result["headline"]["start"]
+        assert marker.get_attribute("stroke-dasharray") == "5 4"
+        assert marker.get_attribute("x1") == marker.get_attribute("x2")
+        from datetime import datetime
+        start, end, boundary = (datetime.fromisoformat(chart[k]) for k in ("start", "end", "boundary"))
+        assert float(marker.get_attribute("x1")) == pytest.approx(70 + (boundary - start) / (end - start) * 610)
+        assert "Headline metrics remain OOS-only" in page.locator("#cashCaption").inner_text()
         if os.environ.get("BROWSER_SCREENSHOT_DIR"):
             target = Path(os.environ["BROWSER_SCREENSHOT_DIR"]); target.mkdir(parents=True, exist_ok=True)
             page.screenshot(path=str(target / f"replay-{runtime}.png"), full_page=True)
@@ -86,6 +105,8 @@ def test_upload_fit_export_and_errors_in_real_browser(site, tmp_path):
         page.locator("#run").click()
         page.wait_for_function("!document.getElementById('results').hidden", timeout=30_000)
         assert "not OOS" in page.locator("#scope").inner_text()
+        assert page.locator("#oosBoundary").count() == 0
+        assert page.locator("#cashChart polyline").count() == 1
         # Statistics controls must affect the actual generated history, not just labels.
         page.locator("#gen_win_rate").fill("100")
         page.locator("#gen_rr").fill("3")

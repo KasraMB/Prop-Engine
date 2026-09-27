@@ -25,6 +25,10 @@ by the browser worker. It is a local research server, not a public API service.
 6. Export the full JSON before changing inputs; edits invalidate the displayed result.
 
 The fixed-policy alternative replays the entire history, clearly labeled **not OOS**.
+The cumulative cash chart shows the selected policy over IS and OOS together, with
+a vertical dashed line at OOS start. Cashflows are concatenated for display only:
+OOS still starts with a fresh account and wallet. The gray initial-policy OOS curve
+uses the same IS cash offset for comparison. Headline metrics remain OOS-only.
 Headline economics are received payouts minus account fees, per elapsed calendar day
 or in total. Trading balance, outstanding payouts and unvalued live handoff are distinct.
 The ledger display is capped at 500 events; JSON retains all events and the full model
