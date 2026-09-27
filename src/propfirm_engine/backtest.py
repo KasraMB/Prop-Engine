@@ -123,7 +123,7 @@ class _Replay:
         self.status = "HORIZON"
         self.handoff = False
         self.next_fee = spec.account.eval_fee
-        self.last_failed_session = None
+        self.last_ended_session = None
         self.failed_at = None
         self.activity_epoch = 0
         # The horizon consists of complete declared sessions, not N sessions / 5.
@@ -198,9 +198,10 @@ class _Replay:
                     if ledger.breached:
                         self.fail(at, "FAIL_TRAILING_DD")
                     elif ledger.censored:
-                        self.handoff = True
-                        self.status = "LIVE_HANDOFF"
                         self.emit(at, "live_handoff", code="LIVE_HANDOFF")
+                        self.status = "RESTART_PENDING"
+                        self.failed_at = None
+                        self.restart(at, self.spec.account.eval_fee)
                 self.schedule(at + self.config.receipt_delay, "receipt", ledger, attempt, request)
             else:
                 ledger.receive(at, request, payment_fee=self.config.payment_fee)
@@ -269,12 +270,17 @@ class _Replay:
     def fail(self, at, code, regime=None):
         self.emit(at, "failure", code=code, regime=regime)
         self.failures += 1
-        local = at.astimezone(self.tz)
-        self.last_failed_session = (local.date() + timedelta(days=1)
-                                    if local.time() >= self.spec.session_open else local.date())
         self.failed_at = at
-        self.next_fee = (self.spec.reset_fee if self.role == "eval" and code != "FAIL_INACTIVITY"
-                         else self.spec.account.eval_fee)
+        fee = (self.spec.reset_fee if self.role == "eval" and code != "FAIL_INACTIVITY"
+               else self.spec.account.eval_fee)
+        self.restart(at, fee)
+
+    def restart(self, at, fee):
+        """Release the old account, retaining its scheduled receipts and the wallet."""
+        local = at.astimezone(self.tz)
+        self.last_ended_session = (local.date() + timedelta(days=1)
+                                  if local.time() >= self.spec.session_open else local.date())
+        self.next_fee = fee
         self.next_role = "eval" if "eval" in self.phases else "funded"
         self.available_at = at + self.config.retry_delay
         self.sim = self.ledger = None
@@ -282,7 +288,7 @@ class _Replay:
     def trade(self, trade, day_index):
         self.current_session = trade.session
         self.advance(trade.entry_at)
-        if self.handoff or trade.session == self.last_failed_session or trade.entry_at < self.available_at:
+        if self.handoff or trade.session == self.last_ended_session or trade.entry_at < self.available_at:
             return
         if self.next_role is not None and not self.start_phase(trade.entry_at):
             return
@@ -393,6 +399,7 @@ class _Replay:
                 "approval deducts gross immediately; no trading while pending",
                 "payout-driven scaling decreases apply at approval (conservative scenario)",
                 "retries start no earlier than the next observed session",
+                "live handoff starts a fresh paid attempt under the same retry delay and wallet constraints; not a failure",
                 "live-account value and receipts after the observation horizon are excluded",
             ),
             self.spec, self.policy, self.config,

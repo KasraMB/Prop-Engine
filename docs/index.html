@@ -420,8 +420,10 @@ entry_at,exit_at,session,stop_loss,take_profit,won
                 <p>
                   Stops and targets are ideal fills. Historical ratios stay
                   fixed. Costs, payout processing and retries follow the
-                  configured scenario. Exchange holidays, discretionary reviews
-                  and live-account value are not modeled.
+                  configured scenario. Live handoff starts another paid
+                  evaluation under the same retry delay and wallet limits; it is
+                  not a failure. Exchange holidays, discretionary reviews and
+                  live-account value are not modeled.
                   <a
                     href="https://github.com/KasraMB/Prop-Engine/blob/main/docs/BRACKET_BACKTEST.md"
                     >Engine contract ↗</a

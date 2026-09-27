@@ -1,5 +1,5 @@
 {
-  "bundle_sha256": "4b2dca2c26463aea710f1aede22057e3f3751541b63a866ebd20a79129068a14",
+  "bundle_sha256": "f81a93a6d770d4ebff0f09c461ce9b19d2664c72ffca8f0e01a33bd2d2e823ae",
   "files": [
     {
       "path": "numba.py",
@@ -15,7 +15,7 @@
     },
     {
       "path": "propfirm_engine/backtest.py",
-      "sha256": "c0b73b32511decfe59e612536f2fe3a5f38ad5507d8fe78b1f526e8eda91ce1f"
+      "sha256": "7b6ec49b302440aa99ad08b0cb6333ae84ff3997b457afe2e7872c110fd64d2c"
     },
     {
       "path": "propfirm_engine/cache.py",
@@ -63,7 +63,7 @@
     },
     {
       "path": "propfirm_engine/firms/lucidflex.py",
-      "sha256": "1879065310a2d7fbaab1c7e77fd66d1d0679a34110724badd50d083485eca295"
+      "sha256": "491717fac2914804fa7bfc4d8ae11b242fbf50131ff5376db64cfb3ac4fb7c97"
     },
     {
       "path": "propfirm_engine/fitting.py",

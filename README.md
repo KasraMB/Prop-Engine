@@ -117,6 +117,11 @@ period. It includes waiting time and weekends. This is an empirical performance
 measurement, **not an unbiased estimate of population EV** or a valuation of
 unreceived payouts/live accounts.
 
+Live handoff ends that simulated-funded account, then the replay buys a fresh
+evaluation using the existing retry delay and wallet checks. Handoffs do not count
+as failures; old approved payouts still arrive on schedule. Continuing this way
+is a research lifecycle assumption, not a valuation or simulation of the live account.
+
 Custom objectives receive the complete replay result:
 
 ```python

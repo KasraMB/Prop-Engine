@@ -198,5 +198,33 @@ def test_manual_trace_uses_current_engine_and_steps_payout_events(site):
         page.locator("#clearTrades").click()
         assert page.locator("#results").is_hidden()
         assert page.evaluate("manualTrades.length") == 0
+        # Two complete handoff cycles must renew in both runtimes, not plateau forever.
+        from datetime import date, timedelta
+        from dashboard.replay import manual
+        day, rows = date(2026, 9, 1), []
+        for i in range(54):
+            while day.weekday() >= 5:
+                day += timedelta(days=1)
+            rows.append(dict(session=day.isoformat(), entry_time="10:00", duration_minutes=5,
+                             stop_loss=100, take_profit=1500 if i % 27 < 2 else 200, won=True))
+            day += timedelta(days=1)
+        payload = manual({"trades": rows})
+        page.locator("#sourceType").select_option("upload")
+        page.locator("#csvFile").set_input_files({"name": "renewal.csv", "mimeType": "text/csv",
+                                                 "buffer": payload["csv"].encode()})
+        page.wait_for_function("document.getElementById('fileStatus').textContent.includes('renewal.csv')")
+        expected = run(page.evaluate("collect()"))
+        page.locator("#run").click()
+        page.wait_for_function("!busy && latest !== null", timeout=30_000)
+        actual = page.evaluate("latest.headline")
+        assert actual["events"] == expected["headline"]["events"]
+        assert actual["attempts"] == 2 and actual["failed_attempts"] == 0
+        assert actual["status"] == "RESTART_PENDING"
+        assert actual["net_cash"] == pytest.approx(7045.85)
+        index = next(i for i, e in enumerate(actual["events"])
+                     if e["kind"] == "phase_start" and e["attempt"] == 2)
+        page.locator("#traceIndex").fill(str(index + 1))
+        page.locator("#traceIndex").press("Tab")
+        assert json.loads(page.locator("#traceDetails").inner_text())["balance"] == 50_000
         assert page.request.get(url + "montecarlo.html").status == 404
         browser.close()

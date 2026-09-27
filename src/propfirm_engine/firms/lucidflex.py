@@ -140,7 +140,8 @@ def replay_50k(*, eval_fee, reset_fee, contract_type):
             "negative funded profit retains the starting scaling tier (scenario interpretation)",
             "scaling bands use exact lower thresholds, not rounded displayed dollars",
             "inactivity clock restarts on a trade with absolute net P&L >= $1; exact elapsed 30-day boundary",
-            "five approved payouts end simulated-funded research; earlier live transfer unmodeled",
+            "five approved payouts end each simulated-funded account; earlier live transfer unmodeled",
+            "fresh evaluation after live handoff: user-selected research lifecycle, not a firm entitlement",
             "session schedule excludes holidays/early closes unless input is filtered by its producer",
         ),
     )

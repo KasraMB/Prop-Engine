@@ -95,9 +95,18 @@ search-selected value. Choose regimes and bounds before opening OOS results.
   immediately at approval as an explicit conservative interpretation.
 - An optional finite external wallet pays fees only from existing cash/received
   payouts. Unreceived payouts cannot finance a retry.
-- Five approved payouts in the Lucid profile produce `LIVE_HANDOFF`, stop new
-  attempts, and leave future live value unvalued. Previously approved receipts
-  are still processed if they fall inside the observed horizon.
+- Five approved payouts in the Lucid profile emit a `live_handoff` event and end
+  that simulated-funded account. User-selected lifecycle change (2026-09-26):
+  queue a fresh evaluation, subject to the same next-session restriction,
+  `retry_delay` and wallet checks as a breach. Charge a new evaluation fee, not a
+  reset fee, only when the next attempt can start. Handoffs are not failed attempts.
+  `RESTART_PENDING` means handoff occurred but no new attempt has started yet;
+  an unaffordable retry reports `INSUFFICIENT_WALLET`.
+  The live account's future value stays unvalued; previously approved receipts
+  remain attached to the old attempt and are processed within the horizon, even
+  while a new attempt is active. Unreceived money cannot finance the new fee.
+  Repeated purchases after handoff are a research assumption, not verified firm
+  permission to maintain live and simulated accounts concurrently.
 - Observation runs from the first declared session's opening to the last
   declared session's close. Gaps/weekends count as elapsed time. Cash after that
   horizon is not included; `outstanding_payouts` is separately reported.

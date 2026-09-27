@@ -31,6 +31,10 @@ OOS still starts with a fresh account and wallet. The gray initial-policy OOS cu
 uses the same IS cash offset for comparison. Headline metrics remain OOS-only.
 Headline economics are received payouts minus account fees, per elapsed calendar day
 or in total. Trading balance, outstanding payouts and unvalued live handoff are distinct.
+After live handoff, the replay starts another paid evaluation under the existing
+retry delay and wallet constraints, without counting a failure. Approved receipts
+from the old attempt still arrive on schedule. This is a research lifecycle choice;
+the transferred live account is not traded or valued.
 The ledger display is capped at 500 events; JSON retains all events and the full model
 configuration. The original CSV is not included; preserve it alongside its export hash.
 Generated histories can be downloaded as CSV; their generator parameters and realized

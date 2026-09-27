@@ -247,15 +247,130 @@ def test_exhaustive_eval_paths_against_independent_full_consistency_calculation(
         assert terminal == expected, wins
 
 
-def test_live_handoff_does_not_purchase_another_evaluation():
+def test_live_handoff_purchases_a_fresh_evaluation_without_counting_a_failure():
     result = Engine().backtest(spec(), funded_history(extra=30),
                               DollarPolicy.constant(100), config())
-    assert result.status == "LIVE_HANDOFF"
-    assert result.attempts == 1 and result.failed_attempts == 0
+    assert result.status == "HORIZON"
+    assert result.attempts == 2 and result.failed_attempts == 0
     assert len([e for e in result.events if e.kind == "receipt"]) == 5
     handoff = next(e for e in result.events if e.kind == "live_handoff")
-    assert not any(e.kind == "trade" and e.at > handoff.at for e in result.events)
+    renewed = [e for e in result.events if e.kind == "trade" and e.at > handoff.at]
+    assert renewed and renewed[0].phase == "eval" and renewed[0].attempt == 2
+    assert renewed[0].balance == 50_200 and renewed[0].floor == 48_000
+    assert renewed[0].qualifying_days == 0 and renewed[0].cycle_profit == 0
+    assert result.fees == pytest.approx(2 * 105.20)  # purchase, not the $105 reset
     assert result.outstanding_payouts == 0
+
+
+def test_two_full_handoff_cycles_match_independent_cash_calculation():
+    # Each account: two evaluation days, then five five-day payout cycles.
+    h = history(*(trade(session_day(i), target=1500 if i % 27 < 2 else 200)
+                  for i in range(54)))
+    result = Engine().backtest(spec(), h, DollarPolicy.constant(100), config())
+    assert result.attempts == 2 and result.failed_attempts == 0
+    assert result.status == "RESTART_PENDING" and result.final_balance is None
+    handoffs = [e for e in result.events if e.kind == "live_handoff"]
+    assert [e.attempt for e in handoffs] == [1, 2]
+    # Each cycle retains half of prior retained profit plus five $200 wins.
+    gross = [500, 750, 875, 937.5, 968.75]
+    receipts = [e for e in result.events if e.kind == "receipt"]
+    assert [e.cash for e in receipts] == pytest.approx([g * 0.9 for g in gross] * 2)
+    assert result.net_cash == pytest.approx(2 * (sum(gross) * 0.9 - 105.20))
+    assert len([e for e in result.events if e.kind == "trade"]) == 54
+    assert not any(e.kind == "failure" for e in result.events)
+
+
+def test_handoff_at_horizon_does_not_charge_an_unstarted_attempt():
+    result = Engine().backtest(spec(), funded_history(extra=20),
+                              DollarPolicy.constant(100), config(receipt_delay=timedelta(days=3)))
+    assert result.status == "RESTART_PENDING"
+    assert result.attempts == 1 and result.fees == 105.20
+    assert result.failed_attempts == 0 and result.final_balance is None
+    assert result.outstanding_payouts == 871.875
+    assert len([e for e in result.events if e.kind == "receipt"]) == 4
+    assert all(e.at <= result.end for e in result.events)
+
+
+def test_handoff_retry_delay_and_no_reentry_in_the_handoff_session():
+    h = funded_history(extra=35)
+    cfg = config(approval_delay=timedelta(hours=12), retry_delay=timedelta(days=3))
+    result = Engine().backtest(spec(), h, DollarPolicy.constant(100), cfg)
+    handoff = next(e for e in result.events if e.kind == "live_handoff")
+    # Approval happens the morning after the qualifying close: exclude that session too.
+    expected = next(t for t in h.trades if t.session > handoff.at.astimezone(NY).date()
+                    and t.entry_at >= handoff.at + cfg.retry_delay)
+    renewal = next(e for e in result.events if e.kind == "phase_start" and e.attempt == 2)
+    assert renewal.at == expected.entry_at and renewal.phase == "eval"
+    assert result.failed_attempts == 0
+
+
+def test_handoff_with_zero_delay_still_skips_approval_session():
+    h = funded_history(extra=35)
+    result = Engine().backtest(spec(), h, DollarPolicy.constant(100),
+                              config(approval_delay=timedelta(hours=12)))
+    handoff = next(e for e in result.events if e.kind == "live_handoff")
+    same_day = [t for t in h.trades if t.session == handoff.at.astimezone(NY).date()]
+    assert same_day and same_day[0].entry_at > handoff.at
+    expected = next(t for t in h.trades if t.session > handoff.at.astimezone(NY).date())
+    renewal = next(e for e in result.events if e.kind == "phase_start" and e.attempt == 2)
+    assert renewal.at == expected.entry_at
+
+
+def test_old_handoff_receipt_survives_new_attempt_without_changing_its_balance():
+    result = Engine().backtest(spec(), funded_history(extra=30), DollarPolicy.constant(100),
+                              config(receipt_delay=timedelta(days=3)))
+    renewal = next(e for e in result.events if e.kind == "phase_start" and e.attempt == 2)
+    old_receipts = [e for e in result.events if e.kind == "receipt" and e.at > renewal.at]
+    assert len(old_receipts) == 1 and old_receipts[0].attempt == 1
+    fills = [e for e in result.events if e.kind == "trade" and e.attempt == 2]
+    assert [e.balance for e in fills] == [50_000 + 200 * i for i in range(1, len(fills) + 1)]
+    assert result.receipts == 3628.125 and result.outstanding_payouts == 0
+    assert result.failed_attempts == 0  # stale inactivity events cannot breach the new account
+
+
+def test_handoff_wallet_waits_for_real_receipts_before_buying_again():
+    h = funded_history(extra=50)
+    result = Engine().backtest(spec(), h, DollarPolicy.constant(100),
+                              config(initial_wallet=105.20, receipt_delay=timedelta(days=45)))
+    handoff = next(e for e in result.events if e.kind == "live_handoff")
+    receipt = next(e for e in result.events if e.kind == "receipt")
+    renewal = next(e for e in result.events if e.kind == "phase_start" and e.attempt == 2)
+    assert handoff.at < receipt.at <= renewal.at
+    assert any(e.kind == "wallet_wait" and handoff.at < e.at < receipt.at for e in result.events)
+    assert renewal.at == next(t.entry_at for t in h.trades if t.entry_at >= receipt.at)
+    wallet = 105.20
+    for e in result.events:
+        wallet += e.cash
+        assert wallet >= -1e-9
+    assert result.failed_attempts == 0
+
+
+def test_funded_only_profile_renews_its_starting_phase_after_handoff():
+    s = spec()
+    s = replace(s, account=replace(s.account, phases=(s.account.phases[1],)))
+    h = history(*(trade(session_day(i)) for i in range(26)))
+    result = Engine().backtest(s, h, DollarPolicy.constant(100), config())
+    assert result.attempts == 2 and result.failed_attempts == 0
+    starts = [e for e in result.events if e.kind == "phase_start"]
+    assert [e.phase for e in starts] == ["funded", "funded"]
+    assert starts[-1].balance == 50_000 and starts[-1].qualifying_days == 0
+
+
+def test_optimizer_uses_renewing_lifecycle_in_both_is_and_oos():
+    h = history(*(trade(session_day(i), target=1500) for i in range(100)))
+    engine, scenario, cfg = Engine(), spec(), config()
+    fitted = engine.fit(scenario, h, cfg, policy=DollarPolicy.constant(100),
+                        risk_bounds={"evaluation": (50, 200), "funded": (50, 200)},
+                        generations=0)
+    train, test = h.split(0.7)
+    for reported, partition, expected_attempts in (
+        (fitted.in_sample, train, 3), (fitted.out_of_sample, test, 2),
+    ):
+        direct = engine.backtest(scenario, partition, fitted.policy, cfg)
+        assert reported.events == direct.events
+        assert reported.attempts == expected_attempts and reported.failed_attempts == 0
+        assert any(e.kind == "live_handoff" for e in reported.events)
+    assert fitted.score == fitted.out_of_sample.net_cash_per_day
 
 
 def test_csv_record_contract_and_weekend_rejection():
