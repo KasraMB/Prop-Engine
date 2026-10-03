@@ -73,6 +73,13 @@ summary distributions and a representative decision/event trace as JSON. The
 named example is **not** included in its training candidates. The search is
 heuristic; it does not prove a global optimum or guarantee that exact example.
 
+Risk reports now accompany held-out and baseline results. Configure the benchmark
+with `--bankroll 2000 --ruin-target .01 --confidence .95`; the bankroll here is a
+funding-shortfall analysis threshold, not a change to its unlimited-wallet
+performance scenario. Reports include variance, percentiles, tail losses,
+cash drawdowns, bankroll curves and, where the independent sample supports it,
+confidence-qualified capital. See the [risk-report contract](BRACKET_BACKTEST.md#cash-risk-and-bankroll-reporting).
+
 The initial reproducible run (100 paths, 30 sessions, 20 generations, seed 42,
 zero gross drift/cost, immediate settlement) evaluated 143 distinct policies.
 Starting from $500/$500, it selected evaluation risk/target $2,000/$1,500,

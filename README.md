@@ -35,7 +35,7 @@ risk/target search, use the separate `propfirm_engine.target_research` API:
 
 ```python
 from datetime import timedelta
-from propfirm_engine import BacktestConfig
+from propfirm_engine import BacktestConfig, RiskConfig
 from propfirm_engine.firms.lucidflex import replay_50k
 from propfirm_engine.target_research import BracketModel, fit_targets, lucidflex_example
 
@@ -49,9 +49,12 @@ fit = fit_targets(
     risk_bounds={n: (50, 2000) for n in names},
     target_bounds={n: (150, 3000) for n in names},
     paths=100, seed=42, holdout_seed=43,
+    risk=RiskConfig(bankroll=2000, target_ruin_probability=0.01),
     objective=lambda result: result.net_cash_per_day,
 )
 print(fit.policy, fit.holdout.score, fit.holdout.score_standard_error)
+print(fit.holdout.risk["required_bankroll"])
+print(fit.holdout.risk["confidence_status"])
 ```
 
 Each changed bracket gets a drift-aware hit probability; the existing account
@@ -181,7 +184,7 @@ session start. Each window uses the same repeated-attempt engine, including retr
 after breaches and live handoffs. No trades are shuffled or dates rebased.
 
 ```python
-from propfirm_engine import RollingConfig
+from propfirm_engine import RollingConfig, RiskConfig
 
 # Five sessions fits both partitions of the small example above.
 rolling = RollingConfig(window_sessions=5, stride_sessions=1)
@@ -193,9 +196,11 @@ fit = engine.fit(
     policy=policy,
     risk_bounds={r.name: (50, 500) for r in policy.regimes},
     rolling=rolling, seed=42,
+    risk=RiskConfig(bankroll=2000, target_ruin_probability=0.01),
 )
 print(fit.score)  # mean OOS-window net cash / calendar day
 print(fit.out_of_sample_rolling.summary)
+print(fit.out_of_sample_rolling.risk)
 ```
 
 Fitting splits sessions 70/30 **before** building windows. Each partition must
@@ -210,6 +215,29 @@ simulations. Their cashflows must not be summed as portfolio profit; reported
 percentiles describe window outcomes, not confidence intervals. See the
 [rolling evaluation contract](docs/BRACKET_BACKTEST.md#rolling-historical-starts).
 
+## Cash risk and bankroll
+
+The dashboard's **Cash risk & bankroll** panel reports variance, standard
+deviation, P1/P5/P10/P25/P50/P75/P90/P95/P99, loss frequency, loss VaR and expected
+shortfall, cash drawdowns and underwater duration, payout timing, and required
+starting capital. Set the ruin target and worst-tail percentage in Run & evaluate;
+the initial wallet supplies the bankroll for the ruin-frequency calculation.
+Use rolling starts for distributions; a single replay shows observed path facts
+only. **Print results** creates a print-friendly view; the JSON export retains
+all risk inputs, definitions, curve points and per-path records.
+
+Ruin means being unable to fund the next required evaluation, reset or activation
+within the chosen horizon, not merely breaching a prop account. Capital needs
+come from each path's maximum cash deficit with wallet constraints removed, so
+stopping early cannot make an underfunded policy appear cheap to finance.
+
+Historical-window frequencies are descriptive, not independent future estimates.
+Independent model holdouts additionally expose probability intervals and a
+confidence-supported bankroll, or an explicit insufficient-sample result.
+Risk reporting never changes candidate selection. See the
+[risk contract](docs/BRACKET_BACKTEST.md#cash-risk-and-bankroll-reporting) for
+formulas, sample requirements, finite-horizon limits and the separate research API.
+
 ## API map
 
 | Task | Entry point |
@@ -217,6 +245,7 @@ percentiles describe window outcomes, not confidence intervals. See the
 | Import sequential stop/target records | `BracketHistory.from_records(...)` |
 | Replay dated account attempts | `Engine.backtest(...)` |
 | Evaluate ordered historical starting windows | `Engine.rolling_backtest(...)` |
+| Cash distributions, ruin and bankroll | `RiskConfig`, `cash_risk_path(...)`, `risk_report(...)` |
 | Fit dollar regimes and evaluate held-out history | `Engine.fit(...)` |
 | Resampled Monte Carlo research on trade summaries | `Engine.run(...)` |
 | Drift-aware barrier approximations | [Analytical API](docs/ANALYTICAL_MODEL.md) |

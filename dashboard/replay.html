@@ -9,6 +9,7 @@
     <script src="history.js" defer></script>
     <script src="trace.js" defer></script>
     <script src="rolling.js" defer></script>
+    <script src="risk.js" defer></script>
   </head>
   <body data-runtime="browser">
     <header>
@@ -556,6 +557,33 @@ entry_at,exit_at,session,stop_loss,take_profit,won
               only if it is not reused to tune the strategy or search. Custom
               objectives are available through the Python API.
             </p>
+            <div class="fields">
+              <label
+                >Risk-report target: ruin (%)<input
+                  id="target_ruin"
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.1"
+                  value="1"
+                  required
+              /></label>
+              <label
+                >Worst-tail fraction (%)<input
+                  id="risk_tail"
+                  type="number"
+                  min="0.1"
+                  max="100"
+                  step="0.1"
+                  value="5"
+                  required
+              /></label>
+            </div>
+            <p class="muted">
+              Ruin means unable to pay the next required account fee. The risk
+              report uses the initial wallet above and the reported horizon;
+              these settings do not change the optimization objective.
+            </p>
             <button id="run" type="submit" disabled>
               Optimize &amp; evaluate
             </button>
@@ -698,6 +726,44 @@ entry_at,exit_at,session,stop_loss,take_profit,won
             </div>
           </details>
         </section>
+        <section id="riskPanel" class="panel" hidden>
+          <div class="result-heading">
+            <h3>Cash risk &amp; bankroll</h3>
+            <button id="printReport" type="button" class="secondary">
+              Print results
+            </button>
+          </div>
+          <p id="riskScope" class="muted"></p>
+          <div id="riskMetrics" class="metrics"></div>
+          <div id="riskDistributionViews">
+            <h4>Bankroll versus funding-shortfall frequency</h4>
+            <svg
+              id="bankrollChart"
+              viewBox="0 0 700 250"
+              role="img"
+              aria-label="Observed funding-shortfall frequency versus starting bankroll"
+            ></svg>
+            <p id="riskCapitalNote" class="muted"></p>
+            <h4>Outcome distribution</h4>
+            <p class="muted">
+              Variance uses the reported population (N denominator), not
+              sampling uncertainty. Percentiles describe outcomes, not
+              confidence intervals. Cash drawdown is peak-to-trough external
+              cash, including fees.
+            </p>
+            <div class="table-scroll">
+              <table>
+                <thead id="riskDistributionHead"></thead>
+                <tbody id="riskDistributions"></tbody>
+              </table>
+            </div>
+            <p id="riskTailNote" class="muted"></p>
+          </div>
+          <details>
+            <summary>Risk definitions and limits</summary>
+            <dl id="riskDefinitions"></dl>
+          </details>
+        </section>
         <div class="setup-grid result-grid">
           <section class="panel">
             <h3>Cumulative external net cash</h3>
@@ -731,7 +797,7 @@ entry_at,exit_at,session,stop_loss,take_profit,won
             </div>
           </section>
         </div>
-        <section class="panel">
+        <section class="panel" id="ledgerPanel">
           <h3>Event ledger</h3>
           <p class="muted" id="ledgerCaption"></p>
           <div class="table-scroll ledger">
@@ -752,7 +818,7 @@ entry_at,exit_at,session,stop_loss,take_profit,won
             </table>
           </div>
         </section>
-        <details class="panel">
+        <details class="panel" id="provenancePanel">
           <summary>Parameters, provenance &amp; training diagnostics</summary>
           <pre id="provenance"></pre>
         </details>

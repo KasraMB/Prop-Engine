@@ -17,6 +17,7 @@ from .analytical import _log_frozen_probability, _number
 from .backtest import BacktestResult, _Replay
 from .execution import BacktestConfig, BracketHistory, BracketTrade, DollarPolicy, RiskRegime
 from .optimizer import CMAES
+from .risk import RiskConfig, cash_risk_path, distribution, risk_report
 
 
 def bracket_probability(stop, target, *, mu=0.0, sigma=1000.0):
@@ -164,15 +165,19 @@ class ResearchSummary:
     objective_values: tuple[float, ...]
     visited_regimes: tuple[str, ...]
     scope: str = "independent model paths; uncertainty is sampling error only, not model risk"
+    distributions: dict | None = None
+    risk: dict | None = None
 
 
-def evaluate_targets(spec, model, policy, config, tapes, *, objective=None):
+def evaluate_targets(spec, model, policy, config, tapes, *, objective=None, risk=RiskConfig()):
     """Equal-weight path objective; default received external net cash/calendar day."""
     objective = objective if objective is not None else lambda r: r.net_cash_per_day
     if not callable(objective):
         raise ValueError("objective must be callable")
     scores, cash, receipts, fees, paid, visited = [], [], [], [], [], set()
+    risk_paths = []
     for tape in tapes:
+        tape = tuple(tape)
         path = research_path(spec, model, policy, config, tape)
         result = path.replay
         value = objective(result)
@@ -184,13 +189,20 @@ def evaluate_targets(spec, model, policy, config, tapes, *, objective=None):
         fees.append(result.fees)
         paid.append(result.receipts > 0)
         visited.update(d.regime for d in path.decisions)
+        if risk is not None:
+            unlimited = (research_path(spec, model, policy, replace(config, initial_wallet=None), tape).replay
+                         if any(e.kind == "wallet_wait" for e in result.events) else None)
+            risk_paths.append(cash_risk_path(result, unrestricted=unlimited))
     n = len(scores)
     if n < 2:
         raise ValueError("at least two independent tapes are required for a summary")
     return ResearchSummary(n, fsum(scores) / n, float(np.std(scores, ddof=1) / sqrt(n)),
                            fsum(cash) / n, fsum(receipts) / n, fsum(fees) / n, sum(paid) / n,
                            *map(float, np.quantile(cash, [0.05, 0.5, 0.95])),
-                           tuple(scores), tuple(sorted(visited)))
+                           tuple(scores), tuple(sorted(visited)),
+                           distributions={"objective": distribution(scores), "net_cash": distribution(cash)},
+                           risk=risk_report(risk_paths, options=risk, sample_kind="independent_model")
+                           if risk is not None else None)
 
 
 @dataclass(frozen=True)
@@ -212,7 +224,7 @@ class TargetFit:
 def fit_targets(spec, model, config, *, policy, risk_bounds, target_bounds,
                 paths=40, seed=0, holdout_seed=1, generations=10, population=8,
                 objective=None, direction="maximize", candidates=(), progress=None,
-                risk_choices=None, target_choices=None):
+                risk_choices=None, target_choices=None, risk=RiskConfig()):
     """Joint bounded CMA-ES search. Holdout tapes are evaluated after selection.
 
     Bounds map regime names to dollar intervals. Candidate seeds are explicit;
@@ -268,7 +280,7 @@ def fit_targets(spec, model, config, *, policy, risk_bounds, target_bounds,
 
     def score(candidate):
         if candidate not in cache:
-            summary = evaluate_targets(spec, model, candidate, config, train, objective=objective)
+            summary = evaluate_targets(spec, model, candidate, config, train, objective=objective, risk=None)
             cache[candidate] = summary.score, summary.visited_regimes
             if progress:
                 progress({"stage": "search", "evaluations": len(cache)})
@@ -292,10 +304,10 @@ def fit_targets(spec, model, config, *, policy, risk_bounds, target_bounds,
     selected = TargetPolicy(DollarPolicy(tuple(fitted if fitted.name in visited else original
         for fitted, original in zip(selected.sizing.regimes, policy.sizing.regimes))),
         tuple(t if n in visited else old for n, t, old in zip(names, selected.targets, policy.targets)))
-    training = evaluate_targets(spec, model, selected, config, train, objective=objective)
+    training = evaluate_targets(spec, model, selected, config, train, objective=objective, risk=None)
     test = np.random.default_rng(np.random.SeedSequence([holdout_seed, 1])).random((paths - train_count, model.sessions))
-    held = evaluate_targets(spec, model, selected, config, test, objective=objective)
-    baseline = evaluate_targets(spec, model, policy, config, test, objective=objective)
+    held = evaluate_targets(spec, model, selected, config, test, objective=objective, risk=risk)
+    baseline = evaluate_targets(spec, model, policy, config, test, objective=objective, risk=risk)
     gains = sign * (np.asarray(held.objective_values) - baseline.objective_values)
     return TargetFit(selected, training, held, baseline, len(cache), seed, holdout_seed,
                      len(candidates), direction, float(gains.mean()), float(gains.std(ddof=1) / sqrt(len(gains))))

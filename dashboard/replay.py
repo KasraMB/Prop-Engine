@@ -3,7 +3,7 @@
 No accounting or selection logic lives here. Closed-summary inputs are not
 converted into bracket histories, and arbitrary Python is never evaluated.
 """
-from dataclasses import asdict, is_dataclass
+from dataclasses import asdict, is_dataclass, replace
 from datetime import date, datetime, time, timedelta
 from hashlib import sha256
 from io import StringIO
@@ -16,6 +16,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from propfirm_engine import BacktestConfig, BracketHistory, DollarPolicy, Engine, RiskRegime, RollingConfig
 from propfirm_engine.rolling import window_slices
+from propfirm_engine.risk import RiskConfig, cash_risk_path, risk_report
 from propfirm_engine.firms.lucidflex import replay_50k
 from propfirm_engine.synthetic import IIDGenerator, RegimeSwitchingGenerator, StochasticVolGenerator
 from zoneinfo import ZoneInfo
@@ -191,6 +192,13 @@ def _rolling_work(history, rolling):
     return sum(end - start for start, end in slices)
 
 
+def _single_risk(result, history, policy, options):
+    unlimited = (Engine().backtest(result.spec, history, policy, replace(result.config, initial_wallet=None))
+                 if any(e.kind == "wallet_wait" for e in result.events) else None)
+    return _jsonable(risk_report([cash_risk_path(result, unrestricted=unlimited)], options=options,
+                                sample_kind="single_history"))
+
+
 def run(request, progress=None):
     """Replay or fit with explicit assumptions and an OOS-only headline on fit."""
     if not isinstance(request, dict):
@@ -209,6 +217,7 @@ def run(request, progress=None):
             raise ValueError(name + "_hours must be finite and nonnegative")
         settings[name] = timedelta(hours=value)
     config = BacktestConfig(**settings)
+    risk = RiskConfig(**{"bankroll": config.initial_wallet, **request.get("risk", {})})
     if not isinstance(request["regimes"], list) or len(request["regimes"]) > 32:
         raise ValueError("Supply at most 32 ordered regimes")
     policy = DollarPolicy(tuple(RiskRegime(**row) for row in request["regimes"]))
@@ -231,11 +240,12 @@ def run(request, progress=None):
         output.update(headline_scope="Full history / fixed policy (not OOS)",
                       headline=_summary(result), policy=_jsonable(policy),
                       score=OBJECTIVES[objective_name](result))
+        output["risk"] = _single_risk(result, history, policy, risk)
         if rolling is not None:
             windows = engine.rolling_backtest(spec, history, policy, config, rolling=rolling,
-                                              objective=OBJECTIVES[objective_name])
+                                              objective=OBJECTIVES[objective_name], risk=risk)
             output.update(rolling={"headline": _rolling_summary(windows)},
-                          score=windows.score, selection_basis="mean_window_objective")
+                          score=windows.score, selection_basis="mean_window_objective", risk=_jsonable(windows.risk))
         return output
     search = dict(request["search"])
     for name, lower, upper in (("generations", 0, 100), ("population", 2, 32), ("seed", 0, 2**32 - 1)):
@@ -255,7 +265,7 @@ def run(request, progress=None):
                   "evaluations": 0, "maximum_evaluations": candidates})
     fitted = engine.fit(spec, history, config, policy=policy, risk_bounds=request["risk_bounds"],
                         objective=OBJECTIVES[objective_name], train_fraction=0.70, rolling=rolling,
-                        progress=progress, **search)
+                        progress=progress, risk=risk, **search)
     baseline = engine.backtest(spec, test, policy, config)
     output.update(headline_scope="Out of sample / final 30% of sessions",
                   headline=_summary(fitted.out_of_sample), score=fitted.score,
@@ -264,9 +274,11 @@ def run(request, progress=None):
                   split={"train": _partition(train), "test": _partition(test),
                          "fraction": 0.70, "boundary_policy": fitted.boundary_policy},
                   evaluations=fitted.evaluations, seed=fitted.seed)
+    output["risk"] = (_jsonable(fitted.out_of_sample_rolling.risk) if rolling else
+                      _single_risk(fitted.out_of_sample, test, fitted.policy, risk))
     if rolling is not None:
         baseline_rolling = engine.rolling_backtest(spec, test, policy, config, rolling=rolling,
-                                                   objective=OBJECTIVES[objective_name])
+                                                   objective=OBJECTIVES[objective_name], risk=risk)
         output.update(selection_basis="mean_window_objective", rolling={
             "headline": _rolling_summary(fitted.out_of_sample_rolling),
             "training": _rolling_summary(fitted.in_sample_rolling),

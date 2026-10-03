@@ -36,7 +36,7 @@ class HoldoutFit:
 def fit_holdout(spec, history: BracketHistory, config, *, policy: DollarPolicy,
                 risk_bounds, objective=None, direction="maximize",
                 train_fraction=0.7, seed=0, generations=20, population=12,
-                rolling: RollingConfig | None = None, progress=None):
+                rolling: RollingConfig | None = None, progress=None, risk=None):
     """Select dollar sizing on IS only, then replay the frozen policy once on OOS.
 
     risk_bounds maps every regime name to a (minimum, maximum) dollar budget.
@@ -120,7 +120,7 @@ def fit_holdout(spec, history: BracketHistory, config, *, policy: DollarPolicy,
     train_rolling = test_rolling = None
     if rolling is not None:
         train_rolling = rolling_backtest(spec, train, best_policy, config, rolling=rolling, objective=objective)
-        test_rolling = rolling_backtest(spec, test, best_policy, config, rolling=rolling, objective=objective)
+        test_rolling = rolling_backtest(spec, test, best_policy, config, rolling=rolling, objective=objective, risk=risk)
         best_score = train_rolling.score
     return HoldoutFit(best_policy, training, held_out, best_score,
                       test_rolling.score if test_rolling is not None else score(held_out),

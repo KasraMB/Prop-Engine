@@ -173,6 +173,116 @@ losses or fair values. The objective is finite-horizon realized cash extraction;
 inspect `status`, `outstanding_payouts` and the full event trace alongside it.
 Search is heuristic, not a guarantee of a global optimum.
 
+## Cash risk and bankroll reporting
+
+Added 2026-10-03. The report concerns **external cash**, not the nominal $50,000
+account balance. One observation is a complete fixed-horizon lifecycle path,
+including retries, cash fees, actual receipts and live-handoff restarts.
+
+`RiskConfig` accepts a cent-valued `bankroll` (or None),
+`target_ruin_probability` in [0,1], a `confidence` in (0,1), a `tail_probability`
+in (0,1], and a tuple of requested percentile fractions. The defaults are a
+1% ruin target, 95% confidence, 5% worst tail, and P1 through P99 at nine levels.
+No finite bankroll is silently inferred when the Python configuration omits it.
+The dashboard uses the configured initial wallet.
+
+Pass `risk=RiskConfig(...)` to `Engine.rolling_backtest` or `Engine.fit` to attach
+a report to the final OOS `out_of_sample_rolling.risk`. Search candidates and
+training windows do not receive confidence claims. The reporting configuration
+does not change the optimization objective or select candidates.
+
+The theoretical `evaluate_targets` and `fit_targets` API also accepts `risk`.
+`fit.holdout.risk` and `fit.baseline_holdout.risk` refer only to independent held-out
+model tapes. `fit.training.risk` stays None. Independent here means conditional
+on a fixed model and already-selected policy; it is not evidence of real-market
+independence or a correct market model. Pass `risk=None` to omit the report.
+
+### Metrics and denominators
+
+- Descriptive mean, variance (N denominator), standard deviation, min/max,
+  median and configurable linearly interpolated percentiles. Sample variance
+  (N-1 denominator) is a separate API field and is undefined at N=1.
+- Profit, loss and break-even frequencies, all with the full path count as
+  denominator. A stopped zero-wallet path is not discarded from the sample.
+- Net cash/day uses each path's actual calendar duration, not an annualization.
+- Loss is max(0, -net cash). VaR uses the empirical inverse CDF; expected
+  shortfall averages the worst selected fraction, including fractional weight
+  on the boundary observation. Worst-tail mean **net cash** is also reported.
+- Maximum cash drawdown is the peak-to-trough decline in receipts minus fees.
+  Longest underwater duration starts when cash falls below its running peak and
+  includes unrecovered drawdowns through the observation horizon.
+- Payout count, receipts, fees, outstanding payouts, attempts, failures and
+  conditional time to first receipt. The time distribution reports its own N;
+  paths without receipts are not given artificial zero waiting times.
+- Net cash divided by the configured initial wallet is available only when
+  that wallet is positive. It is not annualized and does not value the funded
+  account, pending payments or live trading rights.
+
+Performance distributions retain the original configured-wallet behavior.
+Capital requirements are a separately labeled unrestricted-wallet counterfactual.
+Changing the analysis bankroll does not turn unrestricted profits into finite-wallet
+profits. Rerun the engine with the desired `initial_wallet` for that performance.
+
+### Ruin and required capital
+
+Ruin is the **first inability to pay a required evaluation/reset/activation fee
+within the observed horizon**, even if a later delayed receipt would let trading
+resume. Equality with the fee is enough to continue. A prop-account breach is
+not investor ruin, and ending the horizon with no wallet wait is not perpetual
+survival. A fee for an attempt outside the horizon is not invented.
+
+For each unrestricted-wallet cash path C(t), starting at zero:
+
+```text
+required bankroll B* = ceil_to_cents(max(0, -min_t C(t)))
+empirical ruin at B = count(B* > B) / N
+```
+
+The same ordered policy/trades or uniform tape are used for the counterpart.
+Fees and receipts retain engine ordering, even at identical timestamps.
+Approvals are not spendable receipts. Account commissions reduce trade P&L in
+the engine; they are not charged a second time to the external wallet.
+
+`cash_risk_path(result)` refuses a result containing `wallet_wait` unless given
+`unrestricted=...` from the matching horizon, policy and cost/delay configuration
+with `initial_wallet=None`. The rolling and model adapters do that replay
+automatically only when needed. Paths that never waited already match their
+unrestricted trajectories and do not need a second run.
+
+For a requested empirical ruin fraction a, the minimum observed-sample bankroll
+is an order statistic, not an interpolated percentile: with sorted requirements
+b1,...,bN, select b[N-floor(a*N)], or zero when a=1. Ties and exact payment
+boundaries are retained. The full step curve is exported.
+
+### Confidence and insufficient samples
+
+Historical starts are dependent; neither overlapping nor merely non-overlapping
+windows are automatically treated as IID. Historical reports therefore provide
+no probability confidence intervals or confidence-supported capital. Single
+histories show actual path facts only, not a future distribution.
+
+For independently generated **held-out** model paths, marginal two-sided Wilson
+intervals describe profit, loss, payout and predeclared-bankroll ruin probabilities.
+A distinct one-sided order-statistic tolerance bound supplies the confidence-supported
+capital: choose the largest k with BinomialCDF(k; N, a) <= 1-confidence, and use
+b[N-k]. If no such k exists, return None with `insufficient_independent_paths`.
+This avoids applying a fixed-threshold confidence interval to a data-selected
+bankroll. The bound is distribution-free for IID requirements, conservative for
+ties, and conditional on the model. General distinctions between percentile
+coverage and confidence are described by [NIST's tolerance-limit reference](https://www.itl.nist.gov/div898/software/dataplot/refman1/auxillar/tolelimi.htm).
+
+The best possible zero-failure upper bound is
+`1 - (1-confidence) ** (1/N)`. It is reported as sample-resolution information,
+not as the current bankroll's risk when failures have occurred. At a 1% target
+and 95% one-sided confidence, at least 299 independent holdout paths are needed
+even when none fail. A 30-path holdout cannot certify that target by this method.
+Zero observed failures and zero future risk are never equated.
+
+No interval covers model misspecification, future firm changes, missing costs,
+nonstationarity, repeatedly tuning against the holdout, or choosing a favorable
+reporting horizon after inspecting outcomes. No Sharpe ratio, infinite-horizon
+ruin estimate or annualized return is inferred from fee/payout cashflows.
+
 ## LucidFlex evidence and deliberate boundaries
 
 Official sources rechecked 2026-09-26:

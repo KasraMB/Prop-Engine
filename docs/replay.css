@@ -553,3 +553,90 @@ summary:focus-visible {
     grid-template-columns: 1fr 1fr;
   }
 }
+@media print {
+  @page {
+    size: landscape;
+    margin: 12mm;
+  }
+  body {
+    background: white;
+    color: #111;
+  }
+  header,
+  footer,
+  form,
+  .run-status,
+  button,
+  .runtime {
+    display: none !important;
+  }
+  main {
+    max-width: none;
+    padding: 0;
+  }
+  .panel,
+  .metric {
+    background: white;
+    border-color: #bbb;
+    box-shadow: none;
+  }
+  .muted,
+  small,
+  .metric span,
+  .metric small,
+  th,
+  td {
+    color: #333 !important;
+  }
+  .positive,
+  .negative,
+  .metric strong {
+    color: #111 !important;
+  }
+  .result-grid {
+    display: block;
+  }
+  .panel {
+    break-inside: avoid;
+    padding: 12px;
+  }
+  .table-scroll,
+  .ledger {
+    overflow: visible;
+    max-height: none;
+  }
+  table {
+    font-size: 8px;
+  }
+  th,
+  td {
+    padding: 4px;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  #riskDistributions td:first-child {
+    min-width: 100px;
+  }
+  #ledgerPanel,
+  #provenancePanel,
+  .trace-controls {
+    display: none !important;
+  }
+  pre {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+  svg text {
+    fill: #333 !important;
+  }
+  .lede,
+  summary,
+  dt,
+  dd,
+  .eyebrow {
+    color: #333 !important;
+  }
+  [hidden] {
+    display: none !important;
+  }
+}

@@ -113,6 +113,7 @@ def test_committed_replay_assets_and_bridge_are_synchronized():
     for name, target in (("replay.html", "index.html"), ("replay.html", "trace.html"),
                          ("history.js", "history.js"), ("trace.js", "trace.js"), ("replay.js", "replay.js"),
                          ("rolling.js", "rolling.js"),
+                         ("risk.js", "risk.js"),
                          ("replay.css", "replay.css"), ("replay-worker.js", "replay-worker.js")):
         assert (root / "dashboard" / name).read_text(encoding="utf-8") == (root / "docs" / target).read_text(encoding="utf-8")
     source = (root / "dashboard/replay.py").read_text(encoding="utf-8")
@@ -155,3 +156,20 @@ def test_rolling_adapter_rejects_incomplete_partitions_but_allows_large_search(m
     assert result["evaluations"] > 1
     req["mode"] = "backtest"
     assert replay.run(req)["estimated_trade_visits"] > 2_000_000
+
+
+def test_risk_report_is_oos_only_and_settings_do_not_select_policy():
+    req = request_fixture()
+    req.update(mode="fit", rolling={"window_sessions": 4}, risk={"target_ruin_probability": .01})
+    first = replay.run(req)
+    changed = deepcopy(req)
+    changed["risk"] = {"target_ruin_probability": .5, "percentiles": [.1, .5, .9]}
+    second = replay.run(changed)
+    assert first["policy"] == second["policy"]
+    assert first["training_score"] == second["training_score"]
+    assert first["risk"]["paths"] == len(first["rolling"]["headline"]["windows"])
+    assert first["risk"]["distributions"]["net_cash"]["mean"] == first["rolling"]["headline"]["summary"]["distributions"]["net_cash"]["mean"]
+    assert first["risk"]["sample_kind"] == "historical_windows"
+    assert first["risk"]["confidence_supported_bankroll"] is None
+    assert set(second["risk"]["distributions"]["net_cash"]["percentiles"]) == {"0.1", "0.5", "0.9"}
+    json.dumps(first, allow_nan=False)

@@ -68,6 +68,7 @@ def main() -> None:
                            ("replay.css", "replay.css"), ("replay.js", "replay.js"),
                            ("history.js", "history.js"), ("trace.js", "trace.js"),
                            ("rolling.js", "rolling.js"),
+                           ("risk.js", "risk.js"),
                            ("replay-worker.js", "replay-worker.js")):
         (ROOT / "docs" / target).write_text((DASH / source).read_text(encoding="utf-8"),
                                            encoding="utf-8", newline="\n")

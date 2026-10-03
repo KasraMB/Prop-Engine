@@ -1,5 +1,5 @@
 {
-  "bundle_sha256": "eedfd011ee711da22f4ae1f3b02bfd5ca911eca43d592fb2603b9af97c87a912",
+  "bundle_sha256": "9f21fffec09ad14b774eadb45d8fc107a299832149b4fd6f4a3a4f83db4fb915",
   "files": [
     {
       "path": "numba.py",
@@ -7,7 +7,7 @@
     },
     {
       "path": "propfirm_engine/__init__.py",
-      "sha256": "9eadb4236912ade70139496de4763a1dc7600c8199308545006efdb99c753ea2"
+      "sha256": "33a0690ba5c0577fcef7253229f691a873283e68cd43550832fa3cfa28a2d973"
     },
     {
       "path": "propfirm_engine/analytical.py",
@@ -39,7 +39,7 @@
     },
     {
       "path": "propfirm_engine/engine.py",
-      "sha256": "6d04977813740228fc5cc0fa181ae50b3a6fc37d837499a3ab811c2f42868477"
+      "sha256": "608ece6d893f7d14ce2e903b1f153d311beddd4779ada4c17599569710f4f981"
     },
     {
       "path": "propfirm_engine/enums.py",
@@ -67,7 +67,7 @@
     },
     {
       "path": "propfirm_engine/fitting.py",
-      "sha256": "4268de193a7572c8e8801184e64af4cbf78159aca4e7b2ecb89fbeffaaf596b3"
+      "sha256": "f57a243953e366e2374d7bd2e518701585932154ffa646d0a47e21a20a201164"
     },
     {
       "path": "propfirm_engine/kernels.py",
@@ -110,8 +110,12 @@
       "sha256": "873ef3bd64b5b3a55e7284d878516025419b7ab7b98327139355c0ff3092f3ee"
     },
     {
+      "path": "propfirm_engine/risk.py",
+      "sha256": "1da2fa9719490b93145fdf01e9dd5d1a01fb49d4018bd4aca71c6aed074b1a25"
+    },
+    {
       "path": "propfirm_engine/rolling.py",
-      "sha256": "c6e656217932bd65d32ae2435e8bd503b45e1d51163f4747f328b6170f6f5745"
+      "sha256": "91a58c99e57bb8c2cf8c2091af8154b32911411d28b08233aef62b6c6b698a3a"
     },
     {
       "path": "propfirm_engine/rules.py",
@@ -135,7 +139,7 @@
     },
     {
       "path": "propfirm_engine/target_research.py",
-      "sha256": "12f5cd7637d17b0e7e8bc2d38360793e38a30d7a138a5ff029c3509b3f706cf2"
+      "sha256": "c96a36ed0bb900252e1686911a24e4dc56297fdeae198dd19538653ebc2b30ca"
     },
     {
       "path": "propfirm_engine/validate.py",
@@ -143,7 +147,7 @@
     },
     {
       "path": "replay.py",
-      "sha256": "a414ad09ff10165406dee2bf924f19b61020e0a281432b91c7fd12c1619a0e3f"
+      "sha256": "4a55c7c4419480f583b6fcd59a613256ccee2f283c765b338b6b7e1c72d8507b"
     }
   ]
 }

@@ -16,7 +16,7 @@ import numpy as np
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from propfirm_engine import BacktestConfig, DollarPolicy
+from propfirm_engine import BacktestConfig, DollarPolicy, RiskConfig
 from propfirm_engine.firms.lucidflex import replay_50k
 from propfirm_engine.target_research import (
     BracketModel, TargetPolicy, evaluate_targets, fit_targets,
@@ -24,10 +24,12 @@ from propfirm_engine.target_research import (
 )
 
 
-def run_experiment(*, paths=100, sessions=30, generations=20, seed=42, mu=0.0, sigma=1000.0):
+def run_experiment(*, paths=100, sessions=30, generations=20, seed=42, mu=0.0, sigma=1000.0,
+                   bankroll=2000.0, ruin_target=.01, confidence=.95):
     spec = replay_50k(eval_fee=105.20, reset_fee=105.00, contract_type="micro")
     config = BacktestConfig(0, timedelta(0), timedelta(0), timedelta(0))
     model = BracketModel(sessions=sessions, mu=mu, sigma=sigma)
+    risk = RiskConfig(bankroll=bankroll, target_ruin_probability=ruin_target, confidence=confidence)
     example = lucidflex_example()
     baseline = TargetPolicy(DollarPolicy(tuple(replace(r, risk_dollars=500)
                             for r in example.sizing.regimes)), (500, 500, 500))
@@ -37,9 +39,9 @@ def run_experiment(*, paths=100, sessions=30, generations=20, seed=42, mu=0.0, s
     fitted = fit_targets(spec, model, config, policy=baseline,
         risk_bounds={n: (500, 2000) for n in names}, target_bounds={n: (150, 3000) for n in names},
         risk_choices=risk_choices, target_choices=target_choices,
-        paths=paths, seed=seed, holdout_seed=seed+1, generations=generations, population=8)
+        paths=paths, seed=seed, holdout_seed=seed+1, generations=generations, population=8, risk=risk)
     test = np.random.default_rng(np.random.SeedSequence([seed+1, 1])).random((paths-int(paths*.7), sessions))
-    example_holdout = evaluate_targets(spec, model, example, config, test)
+    example_holdout = evaluate_targets(spec, model, example, config, test, risk=risk)
     trace = research_path(spec, model, fitted.policy, config, test[0])
     return {"model": asdict(model), "spec": asdict(spec), "config": asdict(config),
             "baseline_policy": asdict(baseline), "risk_choices": risk_choices,
@@ -61,6 +63,10 @@ def main():
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--mu", type=float, default=0)
     parser.add_argument("--sigma", type=float, default=1000)
+    parser.add_argument("--bankroll", type=float, default=2000,
+                        help="Ruin-analysis bankroll; performance still uses an unlimited wallet")
+    parser.add_argument("--ruin-target", type=float, default=.01, help="Target fraction, e.g. .01 for 1%%")
+    parser.add_argument("--confidence", type=float, default=.95)
     args = parser.parse_args()
     result = run_experiment(**vars(args))
     print(json.dumps(exportable(result), allow_nan=False, indent=2))

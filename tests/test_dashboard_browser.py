@@ -173,6 +173,8 @@ def test_rolling_results_export_chart_and_scope_in_real_browser(site):
         page.locator("#stride_sessions").fill("3")
         page.locator("#generations").fill("1")
         page.locator("#population").fill("4")
+        page.locator("#target_ruin").fill("5")
+        page.locator("#risk_tail").fill("10")
         expected = run(page.evaluate("collect()"))
         page.locator("#run").click()
         page.wait_for_function("!busy && latest !== null", timeout=120_000)
@@ -180,6 +182,22 @@ def test_rolling_results_export_chart_and_scope_in_real_browser(site):
         assert actual["rolling"] == expected["rolling"]
         assert actual["score"] == pytest.approx(expected["score"])
         assert page.locator("#rollingPanel").is_visible()
+        assert actual["risk"] == expected["risk"]
+        assert actual["risk"]["options"]["target_ruin_probability"] == .05
+        assert page.locator("#riskPanel").is_visible()
+        assert "OOS only" in page.locator("#riskScope").inner_text()
+        assert "Synthetic trade history" in page.locator("#riskScope").inner_text()
+        assert page.locator("#bankrollChart polyline").count() == 1
+        assert page.locator("#bankrollChart circle").count() > 0
+        assert "P99" in page.locator("#riskDistributionHead").inner_text()
+        assert "Variance" in page.locator("#riskDistributionHead").inner_text()
+        assert page.locator("#riskDistributions tr").count() == 12
+        assert "Worst 10.00%" in page.locator("#riskTailNote").inner_text()
+        assert actual["risk"]["confidence_supported_bankroll"] is None
+        for dot in page.locator("#bankrollChart circle").all():
+            assert 70 <= float(dot.get_attribute("cx")) <= 680
+            assert 25 <= float(dot.get_attribute("cy")) <= 205
+            assert dot.locator("title").text_content()
         assert "OOS" in page.locator("#rollingTitle").inner_text()
         assert page.locator("#rollingChart circle").count() == 5
         assert page.locator("#rollingWindows tr").count() == 5
@@ -195,10 +213,22 @@ def test_rolling_results_export_chart_and_scope_in_real_browser(site):
             page.locator("#download").click()
         exported = json.loads(Path(download.value.path()).read_text())
         assert exported["rolling"] == actual["rolling"]
+        assert exported["risk"] == actual["risk"]
         page.locator("#rollingPanel details").evaluate("e => e.open = true")
         if os.environ.get("BROWSER_SCREENSHOT_DIR"):
             target = Path(os.environ["BROWSER_SCREENSHOT_DIR"]); target.mkdir(parents=True, exist_ok=True)
             page.locator("#rollingPanel").screenshot(path=str(target / f"rolling-{runtime}.png"))
+            page.locator("#riskPanel").screenshot(path=str(target / f"risk-{runtime}.png"))
+        page.emulate_media(media="print")
+        page.evaluate("window.dispatchEvent(new Event('beforeprint'))")
+        assert page.locator("#riskPanel").is_visible()
+        assert page.locator("#ledgerPanel").is_hidden()
+        assert page.locator("#provenancePanel").is_hidden()
+        assert page.evaluate("getComputedStyle(document.body).backgroundColor") == "rgb(255, 255, 255)"
+        if os.environ.get("BROWSER_SCREENSHOT_DIR"):
+            page.screenshot(path=str(target / f"report-print-{runtime}.png"), full_page=True)
+        page.evaluate("window.dispatchEvent(new Event('afterprint'))")
+        page.emulate_media(media="screen")
         page.set_viewport_size({"width": 390, "height": 844})
         assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
         page.locator("#window_sessions").fill("999")

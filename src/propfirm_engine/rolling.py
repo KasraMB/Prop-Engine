@@ -1,5 +1,5 @@
 """Whole-session historical starts, without resampling or account-state carryover."""
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date, datetime
 from hashlib import sha256
 from itertools import groupby
@@ -10,6 +10,7 @@ import numpy as np
 
 from .backtest import backtest
 from .execution import BracketHistory
+from .risk import cash_risk_path, risk_report
 
 
 @dataclass(frozen=True)
@@ -81,6 +82,7 @@ class RollingResult:
     excluded_incomplete_starts: int
     history_fingerprint: str
     visited_regimes: tuple[str, ...]
+    risk: dict | None = None
 
     @property
     def score(self):
@@ -109,7 +111,7 @@ class RollingResult:
         }
 
 
-def rolling_backtest(spec, history, policy, config, *, rolling, objective=None):
+def rolling_backtest(spec, history, policy, config, *, rolling, objective=None, risk=None):
     """Evaluate each complete window through the canonical repeated-attempt engine.
 
     The objective receives one BacktestResult; its equally weighted mean is score.
@@ -121,11 +123,15 @@ def rolling_backtest(spec, history, policy, config, *, rolling, objective=None):
     objective = objective if objective is not None else lambda r: r.net_cash_per_day
     if not callable(objective):
         raise ValueError("objective must be callable")
-    windows, visited = [], set()
+    windows, visited, risk_paths = [], set(), []
     has_eval = any(p.role == "eval" for p in spec.account.phases)
     for begin, end in slices:
         part = BracketHistory(history.trades[begin:end])
         result = backtest(spec, part, policy, config)
+        if risk is not None:
+            unlimited = (backtest(spec, part, policy, replace(config, initial_wallet=None))
+                         if any(e.kind == "wallet_wait" for e in result.events) else None)
+            risk_paths.append(cash_risk_path(result, unrestricted=unlimited))
         score = objective(result)
         if isinstance(score, bool) or not isinstance(score, Real) or not isfinite(score):
             raise ValueError("objective must return a finite real scalar")
@@ -154,4 +160,5 @@ def rolling_backtest(spec, history, policy, config, *, rolling, objective=None):
         ))
     candidate_starts = len(range(0, len(history.sessions), rolling.stride_sessions))
     return RollingResult(tuple(windows), rolling, candidate_starts - len(slices),
-                         sha256(repr(history.trades).encode("utf-8")).hexdigest(), tuple(sorted(visited)))
+                         sha256(repr(history.trades).encode("utf-8")).hexdigest(), tuple(sorted(visited)),
+                         risk_report(risk_paths, options=risk) if risk is not None else None)

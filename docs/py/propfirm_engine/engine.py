@@ -175,10 +175,10 @@ class Engine:
         from .fitting import fit_holdout
         return fit_holdout(spec, history, config, **kwargs)
 
-    def rolling_backtest(self, spec, history, policy, config, *, rolling, objective=None):
+    def rolling_backtest(self, spec, history, policy, config, *, rolling, objective=None, risk=None):
         """Fresh-account replays from complete historical session windows; no resampling."""
         from .rolling import rolling_backtest
-        return rolling_backtest(spec, history, policy, config, rolling=rolling, objective=objective)
+        return rolling_backtest(spec, history, policy, config, rolling=rolling, objective=objective, risk=risk)
 
     def prepare(self, account, config: RunConfig) -> PreparedRun:
         """Validate, fingerprint and compile the account once (§9/§10), returning a

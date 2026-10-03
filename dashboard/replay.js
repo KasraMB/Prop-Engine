@@ -260,6 +260,10 @@ function collect(modeOverride = null) {
           }
         : null,
     objective: $("objective").value,
+    risk: {
+      target_ruin_probability: Number($("target_ruin").value) / 100,
+      tail_probability: Number($("risk_tail").value) / 100,
+    },
     account: {
       eval_fee: Number($("eval_fee").value),
       reset_fee: Number($("reset_fee").value),
@@ -446,6 +450,7 @@ function render(result) {
   );
   drawCash(result);
   renderRolling(result);
+  renderRisk(result);
   $("results").hidden = false;
 }
 function cashPoints(result, offset = 0) {

@@ -7,6 +7,7 @@ from .execution import (
 from .backtest import BacktestEvent, BacktestResult
 from .fitting import HoldoutFit
 from .rolling import RollingConfig, RollingWindow, RollingResult
+from .risk import RiskConfig, CashRiskPath, cash_risk_path, risk_report
 from .payouts import PayoutEvent, PayoutRequest, PayoutLedger
 from .analytical import (
     BarrierEstimate, SessionMoments, barrier_pass_probability,
@@ -116,6 +117,7 @@ from .rules import (
 )
 
 __all__ = [
+    "RiskConfig", "CashRiskPath", "cash_risk_path", "risk_report",
     "BracketTrade", "BracketHistory", "RiskRegime", "DollarPolicy",
     "LifecycleSpec", "BacktestConfig", "BacktestEvent", "BacktestResult", "HoldoutFit",
     "RollingConfig", "RollingWindow", "RollingResult",
