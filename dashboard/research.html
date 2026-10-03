@@ -443,9 +443,12 @@
                 <tr>
                   <th>Policy</th>
                   <th>Mean objective</th>
-                  <th>Standard error</th>
+                  <th>Objective standard error</th>
                   <th>Mean net cash</th>
                   <th>Cash P5 / median / P95</th>
+                  <th>Mean cash / day ($/day)</th>
+                  <th>Cash/day standard error ($/day)</th>
+                  <th>Cash/day P5 / median / P95 ($/day)</th>
                   <th>Received payout</th>
                 </tr>
               </thead>
@@ -471,7 +474,7 @@
               aria-label="Holdout bankroll versus funding failure"
             ></svg>
             <p id="riskCapitalNote" class="muted"></p>
-            <details>
+            <details open>
               <summary>Outcome distributions</summary>
               <div class="table-scroll">
                 <table>

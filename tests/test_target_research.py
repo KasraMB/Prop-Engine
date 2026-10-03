@@ -215,3 +215,23 @@ def test_benchmark_exports_strict_json_and_does_not_seed_example():
     assert restored["example_used_for_selection"] is False
     assert restored["fit"]["training"]["paths"] == 4
     assert restored["fit"]["holdout"]["paths"] == 3
+
+
+def test_performance_distributions_do_not_depend_on_objective_or_risk_reporting():
+    model, policy = BracketModel(sessions=7), lucidflex_example()
+    tapes = np.array([[0]*7, [.999]*7, [0, 0, 0, .999, 0, 0, 0]])
+    replays = [research_path(SPEC, model, policy, CONFIG, tape).replay for tape in tapes]
+    rates = [r.net_cash_per_day for r in replays]
+    summaries = [evaluate_targets(SPEC, model, policy, CONFIG, tapes, objective=objective, risk=None)
+                 for objective in (lambda r: r.net_cash, lambda r: r.net_cash_per_day, lambda r: -r.fees)]
+    for summary in summaries:
+        assert summary.risk is None
+        stats = summary.distributions["net_cash_per_day"]
+        assert stats["mean"] == pytest.approx(np.mean(rates))
+        assert stats["variance"] == pytest.approx(np.var(rates))
+        assert stats["sample_variance"] == pytest.approx(np.var(rates, ddof=1))
+        for q, value in stats["percentiles"].items():
+            assert value == pytest.approx(np.quantile(rates, float(q)))
+        for key in ("net_cash", "net_cash_per_day"):
+            assert summary.distributions[key] == summaries[0].distributions[key]
+    assert summaries[0].score != summaries[1].score

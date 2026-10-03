@@ -312,7 +312,11 @@ include exact eligibility thresholds; continuous-dollar search is also available
 
 Results show the discovered policy, independent 30% model holdout performance,
 cash percentiles, variance, finite-horizon funding risk and a separately labelled
-ultimate-cycle approximation. The named example is compared **after selection**,
+ultimate-cycle approximation. Selecting an objective changes policy selection,
+not report coverage: total cash and cash/day statistics and both selected risk
+and target amounts remain available. Cash/day means, uncertainty and percentiles
+also remain in the baseline/reference comparison and JSON export.
+The named example is compared **after selection**,
 never supplied as a candidate. Search can miss it or underperform it; no global
 optimum is claimed. These are bracket-model experiments, **not historical strategy
 validation**. Each available session resolves one eventual bracket; market holding

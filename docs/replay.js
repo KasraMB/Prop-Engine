@@ -366,6 +366,14 @@ function render(result) {
     result.score,
   );
   metric(
+    "Net cash / calendar day",
+    money(r.net_cash_per_day),
+    baseline
+      ? "Initial policy OOS: " + money(baseline.net_cash_per_day)
+      : "Observed cash rate, not population EV",
+    r.net_cash_per_day,
+  );
+  metric(
     "Net external cash",
     money(r.net_cash),
     baseline

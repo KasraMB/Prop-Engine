@@ -73,6 +73,10 @@ def test_continuous_detailed_search_and_alternate_objective():
     assert len(output["fit"]["policy"]["targets"]) == 10
     assert output["fit"]["holdout"]["score"] == pytest.approx(output["fit"]["holdout"]["mean_net_cash"])
     assert all(v >= 150 for v in output["fit"]["policy"]["targets"])
+    rate = output["fit"]["holdout"]["distributions"]["net_cash_per_day"]
+    assert rate == output["risk"]["distributions"]["net_cash_per_day"]
+    for summary in (output["fit"]["training"], output["fit"]["baseline_holdout"], output["reference_holdout"]):
+        assert "net_cash_per_day" in summary["distributions"]
 
 
 def test_dashboard_rejects_candidate_injection_and_invalid_choices():

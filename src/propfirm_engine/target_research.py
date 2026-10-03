@@ -174,7 +174,7 @@ def evaluate_targets(spec, model, policy, config, tapes, *, objective=None, risk
     objective = objective if objective is not None else lambda r: r.net_cash_per_day
     if not callable(objective):
         raise ValueError("objective must be callable")
-    scores, cash, receipts, fees, paid, visited = [], [], [], [], [], set()
+    scores, cash, cash_per_day, receipts, fees, paid, visited = [], [], [], [], [], [], set()
     risk_paths = []
     for tape in tapes:
         tape = tuple(tape)
@@ -185,6 +185,7 @@ def evaluate_targets(spec, model, policy, config, tapes, *, objective=None, risk
             raise ValueError("objective must return a finite real scalar")
         scores.append(float(value))
         cash.append(result.net_cash)
+        cash_per_day.append(result.net_cash_per_day)
         receipts.append(result.receipts)
         fees.append(result.fees)
         paid.append(result.receipts > 0)
@@ -200,7 +201,8 @@ def evaluate_targets(spec, model, policy, config, tapes, *, objective=None, risk
                            fsum(cash) / n, fsum(receipts) / n, fsum(fees) / n, sum(paid) / n,
                            *map(float, np.quantile(cash, [0.05, 0.5, 0.95])),
                            tuple(scores), tuple(sorted(visited)),
-                           distributions={"objective": distribution(scores), "net_cash": distribution(cash)},
+                           distributions={"objective": distribution(scores), "net_cash": distribution(cash),
+                                          "net_cash_per_day": distribution(cash_per_day)},
                            risk=risk_report(risk_paths, options=risk, sample_kind="independent_model")
                            if risk is not None else None)
 

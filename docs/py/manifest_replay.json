@@ -1,5 +1,5 @@
 {
-  "bundle_sha256": "22644e434326da300f653defd4412c28933d96aab78fe7126d29f387b1c1e72a",
+  "bundle_sha256": "b616da9b553e106fbc7eef44c34b6e9ab7fcc1def5d0e3c52180780e7808f685",
   "files": [
     {
       "path": "numba.py",
@@ -143,7 +143,7 @@
     },
     {
       "path": "propfirm_engine/target_research.py",
-      "sha256": "c96a36ed0bb900252e1686911a24e4dc56297fdeae198dd19538653ebc2b30ca"
+      "sha256": "e7e05cb4a05b35d991ba051106f53fe821695544b00d55e4c27930e189646184"
     },
     {
       "path": "propfirm_engine/validate.py",

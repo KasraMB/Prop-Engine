@@ -194,6 +194,18 @@ function complete(result) {
   $("researchScope").textContent =
     `${f.training.paths} training / ${held.paths} holdout model paths; ${result.model.sessions} sessions per path. ${f.evaluations} distinct policies evaluated. Reference example was not seeded. All headline statistics describe the selected policy on model holdout—not historical strategy performance.`;
   $("metrics").replaceChildren();
+  for (const [key, label] of [
+    ["net_cash", "Holdout mean net external cash"],
+    ["net_cash_per_day", "Holdout EV / calendar day"],
+  ]) {
+    const stats = held.distributions[key];
+    metric(
+      label,
+      money(stats.mean),
+      `Model estimate; standard error ${money(Math.sqrt(stats.sample_variance / stats.count))}${key === "net_cash_per_day" ? "/day" : ""}`,
+      stats.mean,
+    );
+  }
   metric(
     "Holdout mean objective",
     money(held.score),
@@ -256,6 +268,13 @@ function complete(result) {
       money(s.score_standard_error),
       money(s.mean_net_cash),
       `${money(s.net_cash_p05)} / ${money(s.net_cash_median)} / ${money(s.net_cash_p95)}`,
+      money(s.distributions.net_cash_per_day.mean),
+      money(
+        Math.sqrt(s.distributions.net_cash_per_day.sample_variance / s.paths),
+      ),
+      ["0.05", "0.5", "0.95"]
+        .map((q) => money(s.distributions.net_cash_per_day.percentiles[q]))
+        .join(" / "),
       percentage(s.payout_probability),
     ].forEach((v) => cell(row, v));
     $("researchComparison").append(row);

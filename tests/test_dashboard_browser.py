@@ -52,6 +52,7 @@ def test_upload_fit_export_and_errors_in_real_browser(site, tmp_path):
         page.wait_for_function("document.getElementById('fileStatus').textContent.includes('history.csv')")
         page.locator("#generations").fill("2")
         page.locator("#population").fill("4")
+        page.locator("#objective").select_option("net_cash")
         assert page.locator('[data-field="maximum"]').count() > 0
         for field in page.locator('[data-field="maximum"]').all():
             field.fill("2000")
@@ -67,6 +68,11 @@ def test_upload_fit_export_and_errors_in_real_browser(site, tmp_path):
             page.locator("#download").click()
         result = json.loads(Path(download.value.path()).read_text())
         assert result["score"] == pytest.approx(expected["score"], abs=1e-8)
+        rate_card = page.locator("#metrics .metric").filter(
+            has=page.locator("span", has_text="Net cash / calendar day"))
+        assert rate_card.locator("strong").inner_text() == page.evaluate(
+            "value => money(value)", result["headline"]["net_cash_per_day"])
+        assert page.locator("#selectedPolicy tr").count() == len(result["policy"]["regimes"])
         assert result["headline"]["events"] == expected["headline"]["events"]
         for actual_regime, expected_regime in zip(result["policy"]["regimes"], expected["policy"]["regimes"], strict=True):
             # Browser and native linear algebra may differ in the last bits.
@@ -169,6 +175,7 @@ def test_rolling_results_export_chart_and_scope_in_real_browser(site):
         page.locator("#generate").click()
         page.wait_for_function("!busy && csvText.length > 0", timeout=30_000)
         page.locator("#rollingMode").select_option("rolling")
+        page.locator("#objective").select_option("net_cash")
         page.locator("#window_sessions").fill("10")
         page.locator("#stride_sessions").fill("3")
         page.locator("#generations").fill("1")
@@ -279,7 +286,8 @@ def test_rolling_results_export_chart_and_scope_in_real_browser(site):
         browser.close()
 
 
-def test_target_discovery_without_manual_history_in_real_browser(site):
+@pytest.mark.parametrize("objective", ["net_cash_per_day", "net_cash"])
+def test_target_discovery_without_manual_history_in_real_browser(site, objective):
     from playwright.sync_api import sync_playwright
     from dashboard.replay import run
     url, runtime = site
@@ -292,6 +300,7 @@ def test_target_discovery_without_manual_history_in_real_browser(site):
         page.wait_for_function("ready || !document.getElementById('error').hidden", timeout=180_000)
         assert page.locator("#error").is_hidden(), page.locator("#error").inner_text()
         assert page.locator('input[type="file"]').count() == 0
+        page.locator("#objective").select_option(objective)
         for key, value in {"paths": "10", "sessions": "7", "generations": "2", "population": "4"}.items():
             page.locator("#" + key).fill(value)
         assert page.locator("#risk_max").input_value() == "2000"
@@ -305,6 +314,18 @@ def test_target_discovery_without_manual_history_in_real_browser(site):
         assert actual["fit"]["candidate_seeds"] == 0
         assert actual["reference_used_for_selection"] is False
         assert actual["risk"] == expected["risk"]
+        for key, label in (("net_cash", "Holdout mean net external cash"),
+                           ("net_cash_per_day", "Holdout EV / calendar day")):
+            metric = page.locator("#metrics .metric").filter(has=page.locator("span", has_text=label))
+            formatted = page.evaluate("value => money(value)", actual["fit"]["holdout"]["distributions"][key]["mean"])
+            assert metric.locator("strong").inner_text() == formatted
+        for index, regime in enumerate(actual["fit"]["policy"]["sizing"]["regimes"]):
+            cells = page.locator("#researchPolicy tr").nth(index).locator("td")
+            assert cells.nth(3).inner_text() == page.evaluate("value => money(value)", regime["risk_dollars"])
+            assert cells.nth(4).inner_text() == page.evaluate("value => money(value)", actual["fit"]["policy"]["targets"][index])
+        for index, summary in enumerate((actual["fit"]["holdout"], actual["fit"]["baseline_holdout"], actual["reference_holdout"])):
+            assert page.locator("#researchComparison tr").nth(index).locator("td").nth(5).inner_text() == page.evaluate(
+                "value => money(value)", summary["distributions"]["net_cash_per_day"]["mean"])
         assert "7 training / 3 holdout" in page.locator("#researchScope").inner_text()
         assert page.locator("#researchPolicy tr").count() == 3
         assert page.locator("#researchComparison tr").count() == 3
@@ -313,6 +334,7 @@ def test_target_discovery_without_manual_history_in_real_browser(site):
         assert page.locator("#bankrollChart polyline").count() == 1
         page.locator("#riskDistributionHead").evaluate("e => e.closest('details').open = true")
         assert "Variance" in page.locator("#riskDistributionHead").inner_text()
+        assert "Cash / calendar day" in page.locator("#riskDistributions").inner_text()
         with page.expect_download() as download:
             page.locator("#download").click()
         exported = json.loads(Path(download.value.path()).read_text())
@@ -320,7 +342,7 @@ def test_target_discovery_without_manual_history_in_real_browser(site):
         if os.environ.get("BROWSER_SCREENSHOT_DIR"):
             target = Path(os.environ["BROWSER_SCREENSHOT_DIR"])
             target.mkdir(parents=True, exist_ok=True)
-            page.screenshot(path=str(target / f"research-{runtime}.png"), full_page=True)
+            page.screenshot(path=str(target / f"research-{runtime}-{objective}.png"), full_page=True)
         page.emulate_media(media="print")
         page.evaluate("window.dispatchEvent(new Event('beforeprint'))")
         assert page.locator("#riskPanel").is_visible()
