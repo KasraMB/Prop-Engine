@@ -57,7 +57,7 @@ function renderRisk(result) {
       "riskMetrics",
     );
     metric(
-      "Ruin frequency",
+      "Finite-horizon funding failure",
       percentage(r.ruin_probability),
       o.bankroll == null
         ? "No finite analysis bankroll specified"
@@ -153,8 +153,8 @@ function renderRisk(result) {
   }
 }
 
-function drawBankroll(report) {
-  const svg = $("bankrollChart"),
+function drawBankroll(report, targetId = "bankrollChart") {
+  const svg = $(targetId),
     ns = "http://www.w3.org/2000/svg";
   svg.replaceChildren();
   const rows = report.bankroll_curve,
@@ -250,6 +250,119 @@ function drawBankroll(report) {
     { x: 680, y: 16, fill: "#e7b868", "font-size": 11, "text-anchor": "end" },
     `Dashed: target ${percentage(target)}`,
   );
+}
+
+function renderRuin(result) {
+  const r = result.ruin;
+  $("ruinPanel").hidden = !r;
+  if (!r) return;
+  const risk = r.risk,
+    cycle = r.cycle_approximation;
+  const scope =
+    result.mode === "fit"
+      ? "OOS sessions only; frozen IS-selected policy"
+      : "Full history; fixed policy, not OOS";
+  $("ruinScope").textContent =
+    `${scope}. ${r.settings.paths} independent bootstrap paths, ${r.settings.sessions} sessions each, mean block ${r.settings.mean_block}. All payouts retained. Future outcomes are conditional on this resampled history; path count does not create more historical evidence.`;
+  $("ruinMetrics").replaceChildren();
+  metric(
+    "Finite-horizon funding failure",
+    percentage(risk.ruin_probability),
+    `At ${money(risk.options.bankroll)} starting cash`,
+    undefined,
+    "ruinMetrics",
+  );
+  metric(
+    "Finite-horizon bankroll",
+    money(risk.required_bankroll),
+    `Empirical target ${percentage(risk.options.target_ruin_probability)}`,
+    undefined,
+    "ruinMetrics",
+  );
+  metric(
+    "Confidence-supported bankroll",
+    risk.confidence_supported_bankroll == null
+      ? "Insufficient paths"
+      : money(risk.confidence_supported_bankroll),
+    `${percentage(risk.options.confidence)} confidence; bootstrap model only`,
+    undefined,
+    "ruinMetrics",
+  );
+  $("ruinHorizons").replaceChildren();
+  $("ruinDistributions").replaceChildren();
+  for (const [key, label] of [
+    ["net_cash", "Net cash"],
+    ["max_cash_drawdown", "Maximum cash drawdown"],
+    ["required_bankroll", "Cash needed"],
+  ]) {
+    const d = risk.distributions[key],
+      row = document.createElement("tr");
+    const q = d.percentiles;
+    [
+      label,
+      money(d.mean),
+      money(d.standard_deviation),
+      `${d.variance.toLocaleString(undefined, { maximumFractionDigits: 2 })} USD²`,
+      q["0.05"] == null ? "Not requested" : money(q["0.05"]),
+      money(d.median),
+      q["0.95"] == null ? "Not requested" : money(q["0.95"]),
+    ].forEach((value) => cell(row, value));
+    $("ruinDistributions").append(row);
+  }
+  for (const item of r.horizon_curve) {
+    const row = document.createElement("tr");
+    [
+      item.sessions,
+      `${item.ruined_paths} / ${r.settings.paths}`,
+      percentage(item.probability),
+    ].forEach((value) => cell(row, value));
+    $("ruinHorizons").append(row);
+  }
+  drawBankroll(risk, "ruinBankrollChart");
+  $("ultimateMetrics").replaceChildren();
+  $("ultimateScope").textContent =
+    `${r.cycle_records.length} complete, settled account cycles; ${r.excluded_unsettled_or_open_accounts} open or unsettled accounts excluded. This exclusion can bias the model. Cycles are treated as independent, with receipts settled before the next sampled cycle; cross-account receipt overlap and fee-state dependence are not preserved.`;
+  if (!cycle) {
+    $("ultimateLimits").textContent =
+      "Ultimate cycle estimate unavailable: complete settled cycles and a finite analysis bankroll are required. Full-engine survivors are unresolved, not permanently safe.";
+    return;
+  }
+  const range = (bounds) =>
+    bounds[0] === bounds[1]
+      ? percentage(bounds[0])
+      : `${percentage(bounds[0])} – ${percentage(bounds[1])}`;
+  metric(
+    "Ultimate ruin: model range",
+    range(cycle.probability_bounds),
+    "Includes unresolved continuation risk",
+    undefined,
+    "ultimateMetrics",
+  );
+  metric(
+    "Model confidence range",
+    range(cycle.confidence_bounds),
+    `${percentage(cycle.confidence)}; excludes cycle-law estimation error`,
+    undefined,
+    "ultimateMetrics",
+  );
+  metric(
+    "Sufficient ultimate bankroll",
+    cycle.sufficient_bankroll == null
+      ? "No finite bound"
+      : money(cycle.sufficient_bankroll),
+    `Model upper bound for target ${percentage(cycle.target)}; not the minimum`,
+    undefined,
+    "ultimateMetrics",
+  );
+  metric(
+    "Mean cash / sampled cycle",
+    money(cycle.mean_cycle_cash),
+    "All receipts minus account fees",
+    undefined,
+    "ultimateMetrics",
+  );
+  $("ultimateLimits").textContent =
+    `${cycle.unresolved_paths.toLocaleString()} unresolved paths at the computational limit. Nonpositive mean cash with possible negative cycles implies eventual ruin in this IID model, not proof of real-world ruin. Full-engine ultimate ruin remains unidentified: finite simulation alone cannot establish permanent survival. Full cash distributions and cycle records are included in the JSON export.`;
 }
 
 $("printReport").onclick = () => window.print();

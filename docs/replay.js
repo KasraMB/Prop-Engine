@@ -188,9 +188,11 @@ function startEngine() {
       const visits = data.estimated_trade_visits;
       $("status").textContent = visits
         ? `Estimated work: ${visits.toLocaleString()} trade visits. Running the full request; larger searches take longer. Cancel is available.`
-        : data.stage === "holdout"
-          ? "Search complete. Evaluating the frozen policy on holdout data…"
-          : `Searching: ${data.evaluations} / up to ${data.maximum_evaluations} candidate evaluations. Cancel is available.`;
+        : data.stage === "ruin"
+          ? `Ruin analysis: ${data.completed_paths} / ${data.paths} full-engine paths. Cancel is available.`
+          : data.stage === "holdout"
+            ? "Search complete. Evaluating the frozen policy on holdout data…"
+            : `Searching: ${data.evaluations} / up to ${data.maximum_evaluations} candidate evaluations. Cancel is available.`;
     }
     if (data.type === "status") $("runtime").textContent = data.message;
     if (data.type === "ready") {
@@ -260,6 +262,15 @@ function collect(modeOverride = null) {
           }
         : null,
     objective: $("objective").value,
+    ruin:
+      $("ruinMode").value === "bootstrap"
+        ? {
+            paths: Number($("ruin_paths").value),
+            sessions: Number($("ruin_sessions").value),
+            mean_block: Number($("ruin_block").value),
+            seed: Number($("ruin_seed").value),
+          }
+        : null,
     risk: {
       target_ruin_probability: Number($("target_ruin").value) / 100,
       tail_probability: Number($("risk_tail").value) / 100,
@@ -451,6 +462,7 @@ function render(result) {
   drawCash(result);
   renderRolling(result);
   renderRisk(result);
+  renderRuin(result);
   $("results").hidden = false;
 }
 function cashPoints(result, offset = 0) {

@@ -226,7 +226,7 @@ Use rolling starts for distributions; a single replay shows observed path facts
 only. **Print results** creates a print-friendly view; the JSON export retains
 all risk inputs, definitions, curve points and per-path records.
 
-Ruin means being unable to fund the next required evaluation, reset or activation
+Finite-horizon funding failure means being unable to fund the next required evaluation, reset or activation
 within the chosen horizon, not merely breaching a prop account. Capital needs
 come from each path's maximum cash deficit with wallet constraints removed, so
 stopping early cannot make an underfunded policy appear cheap to finance.
@@ -238,6 +238,41 @@ Risk reporting never changes candidate selection. See the
 [risk contract](docs/BRACKET_BACKTEST.md#cash-risk-and-bankroll-reporting) for
 formulas, sample requirements, finite-horizon limits and the separate research API.
 
+### Multi-path and ultimate ruin
+
+In **Multi-path and ultimate ruin analysis**, enable the full-engine bootstrap,
+choose the path count, sessions per path, mean block length and seed. All payouts
+remain in the bankroll. After fitting, the frozen policy is simulated using only
+the OOS source sessions. Whole-session blocks retain trade order and stop/target
+outcomes; account state and delayed receipts persist across attempts within each path.
+
+```python
+from propfirm_engine import RuinConfig
+
+_, holdout = history.split(0.70)
+ruin = engine.ruin(
+    spec, holdout, fit.policy, config,
+    simulation=RuinConfig(paths=20, sessions=60, mean_block=5, seed=1729),
+    risk=RiskConfig(bankroll=2000, target_ruin_probability=0.01),
+)
+print(ruin["risk"]["ruin_probability"])  # finite-horizon bootstrap frequency
+print(ruin["cycle_approximation"])       # ultimate, conditional on a separate model
+```
+
+The **ultimate** calculation is a separately labelled approximation: it resamples
+complete, settled account cash cycles independently, with full payout retention.
+It reports a Monte Carlo range, a confidence range including unresolved paths,
+and a **sufficient** bankroll bound for the requested ultimate risk—not a claimed
+minimum. Positive-drift simulations stop only with a bounded remaining tail;
+reaching the computational limit does not make survivors safe.
+
+This cycle model does **not** preserve receipt overlap between accounts, dependence
+between successive fees or market cycles. Open/unsettled accounts are excluded
+and counted, which can bias the sampled cycle law. Its confidence bounds cover
+simulation error, not these model errors. The full engine's ultimate probability
+remains unidentified by finite simulations. See the
+[ruin model contract](docs/BRACKET_BACKTEST.md#multi-path-and-ultimate-ruin).
+
 ## API map
 
 | Task | Entry point |
@@ -246,6 +281,7 @@ formulas, sample requirements, finite-horizon limits and the separate research A
 | Replay dated account attempts | `Engine.backtest(...)` |
 | Evaluate ordered historical starting windows | `Engine.rolling_backtest(...)` |
 | Cash distributions, ruin and bankroll | `RiskConfig`, `cash_risk_path(...)`, `risk_report(...)` |
+| Dated lifecycle Monte Carlo and ultimate cycle approximation | `Engine.ruin(...)`, `RuinConfig`, `ultimate_cycle_ruin(...)` |
 | Fit dollar regimes and evaluate held-out history | `Engine.fit(...)` |
 | Resampled Monte Carlo research on trade summaries | `Engine.run(...)` |
 | Drift-aware barrier approximations | [Analytical API](docs/ANALYTICAL_MODEL.md) |

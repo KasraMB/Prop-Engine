@@ -8,6 +8,7 @@ from .backtest import BacktestEvent, BacktestResult
 from .fitting import HoldoutFit
 from .rolling import RollingConfig, RollingWindow, RollingResult
 from .risk import RiskConfig, CashRiskPath, cash_risk_path, risk_report
+from .ruin import RuinConfig, CashCycle, bootstrap_ruin, ultimate_cycle_ruin
 from .payouts import PayoutEvent, PayoutRequest, PayoutLedger
 from .analytical import (
     BarrierEstimate, SessionMoments, barrier_pass_probability,
@@ -201,6 +202,7 @@ __all__ = [
     "gather_days",
     # engine
     "Engine",
+    "RuinConfig", "CashCycle", "bootstrap_ruin", "ultimate_cycle_ruin",
     "RunConfig",
     "UnsupportedInputCapabilityError",
     "Outcomes",

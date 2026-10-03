@@ -17,6 +17,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 from propfirm_engine import BacktestConfig, BracketHistory, DollarPolicy, Engine, RiskRegime, RollingConfig
 from propfirm_engine.rolling import window_slices
 from propfirm_engine.risk import RiskConfig, cash_risk_path, risk_report
+from propfirm_engine.ruin import RuinConfig
 from propfirm_engine.firms.lucidflex import replay_50k
 from propfirm_engine.synthetic import IIDGenerator, RegimeSwitchingGenerator, StochasticVolGenerator
 from zoneinfo import ZoneInfo
@@ -225,6 +226,12 @@ def run(request, progress=None):
     if objective_name not in OBJECTIVES:
         raise ValueError("Unsupported dashboard objective; custom callables belong in the Python API")
     engine = Engine()
+    ruin = RuinConfig(**request["ruin"]) if request.get("ruin") is not None else None
+    if ruin is not None:
+        for name, upper in (("paths", 2000), ("sessions", 10000),
+                            ("cycle_paths", 100000), ("cycle_steps", 10000)):
+            if getattr(ruin, name) > upper:
+                raise ValueError(f"Dashboard {name} limit is {upper}; larger studies belong in the Python API")
     rolling = RollingConfig(**request["rolling"]) if request.get("rolling") is not None else None
     output = {"schema_version": 1, "mode": mode, "profile": request["profile"],
               "objective": objective_name, "direction": "maximize", "input": _partition(history),
@@ -246,6 +253,9 @@ def run(request, progress=None):
                                               objective=OBJECTIVES[objective_name], risk=risk)
             output.update(rolling={"headline": _rolling_summary(windows)},
                           score=windows.score, selection_basis="mean_window_objective", risk=_jsonable(windows.risk))
+        if ruin is not None:
+            output["ruin"] = _jsonable(engine.ruin(spec, history, policy, config,
+                simulation=ruin, risk=risk, progress=progress))
         return output
     search = dict(request["search"])
     for name, lower, upper in (("generations", 0, 100), ("population", 2, 32), ("seed", 0, 2**32 - 1)):
@@ -284,4 +294,7 @@ def run(request, progress=None):
             "training": _rolling_summary(fitted.in_sample_rolling),
             "baseline": _rolling_summary(baseline_rolling),
         })
+    if ruin is not None:
+        output["ruin"] = _jsonable(engine.ruin(spec, test, fitted.policy, config,
+            simulation=ruin, risk=risk, progress=progress))
     return output

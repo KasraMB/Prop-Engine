@@ -580,10 +580,68 @@ entry_at,exit_at,session,stop_loss,take_profit,won
               /></label>
             </div>
             <p class="muted">
-              Ruin means unable to pay the next required account fee. The risk
-              report uses the initial wallet above and the reported horizon;
+              Funding failure means unable to pay the next required account fee.
+              The cash report uses the initial wallet and reported horizon;
               these settings do not change the optimization objective.
             </p>
+            <details>
+              <summary>Multi-path and ultimate ruin analysis</summary>
+              <label
+                >Ruin analysis<select id="ruinMode">
+                  <option value="off">Off</option>
+                  <option value="bootstrap">
+                    Full-engine paths + cycle approximation
+                  </option>
+                </select></label
+              >
+              <div class="fields">
+                <label
+                  >Engine paths<input
+                    id="ruin_paths"
+                    type="number"
+                    min="2"
+                    max="2000"
+                    step="1"
+                    value="100"
+                    required
+                /></label>
+                <label
+                  >Sessions per path<input
+                    id="ruin_sessions"
+                    type="number"
+                    min="1"
+                    max="10000"
+                    step="1"
+                    value="250"
+                    required
+                /></label>
+                <label
+                  >Mean block length (sessions)<input
+                    id="ruin_block"
+                    type="number"
+                    min="1"
+                    step="any"
+                    value="5"
+                    required
+                /></label>
+                <label
+                  >Ruin simulation seed<input
+                    id="ruin_seed"
+                    type="number"
+                    min="0"
+                    max="4294967295"
+                    step="1"
+                    value="1729"
+                    required
+                /></label>
+              </div>
+              <p class="muted">
+                All payouts remain available for future fees. After
+                optimization, only OOS sessions seed the bootstrap. Ultimate
+                ruin uses a separate approximation based on independent settled
+                account cycles.
+              </p>
+            </details>
             <button id="run" type="submit" disabled>
               Optimize &amp; evaluate
             </button>
@@ -725,6 +783,59 @@ entry_at,exit_at,session,stop_loss,take_profit,won
               </table>
             </div>
           </details>
+        </section>
+        <section id="ruinPanel" class="panel" hidden>
+          <h3>Multi-path and ultimate ruin</h3>
+          <p id="ruinScope" class="muted"></p>
+          <div id="ruinMetrics" class="metrics"></div>
+          <details>
+            <summary>Simulated cash distributions (configured wallet)</summary>
+            <p class="muted">
+              Performance uses the configured wallet. Capital needs use matching
+              unrestricted-wallet paths, so stopping early cannot hide funding
+              requirements.
+            </p>
+            <div class="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Measure</th>
+                    <th>Mean</th>
+                    <th>Std dev</th>
+                    <th>Variance</th>
+                    <th>P5</th>
+                    <th>Median</th>
+                    <th>P95</th>
+                  </tr>
+                </thead>
+                <tbody id="ruinDistributions"></tbody>
+              </table>
+            </div>
+          </details>
+          <h4>Full-engine finite-horizon bankroll curve</h4>
+          <svg
+            id="ruinBankrollChart"
+            viewBox="0 0 720 260"
+            role="img"
+            aria-label="Bootstrap bankroll versus finite-horizon funding failure"
+          ></svg>
+          <h4>Full-engine funding failure by horizon</h4>
+          <div class="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>Sessions</th>
+                  <th>Failed paths</th>
+                  <th>Frequency</th>
+                </tr>
+              </thead>
+              <tbody id="ruinHorizons"></tbody>
+            </table>
+          </div>
+          <h4>Ultimate ruin: independent-cycle approximation</h4>
+          <p id="ultimateScope" class="muted"></p>
+          <div id="ultimateMetrics" class="metrics"></div>
+          <p id="ultimateLimits" class="muted"></p>
         </section>
         <section id="riskPanel" class="panel" hidden>
           <div class="result-heading">

@@ -175,6 +175,10 @@ def test_rolling_results_export_chart_and_scope_in_real_browser(site):
         page.locator("#population").fill("4")
         page.locator("#target_ruin").fill("5")
         page.locator("#risk_tail").fill("10")
+        page.locator("#ruinMode").evaluate("e => e.closest('details').open = true")
+        page.locator("#ruinMode").select_option("bootstrap")
+        page.locator("#ruin_paths").fill("4")
+        page.locator("#ruin_sessions").fill("20")
         expected = run(page.evaluate("collect()"))
         page.locator("#run").click()
         page.wait_for_function("!busy && latest !== null", timeout=120_000)
@@ -183,6 +187,12 @@ def test_rolling_results_export_chart_and_scope_in_real_browser(site):
         assert actual["score"] == pytest.approx(expected["score"])
         assert page.locator("#rollingPanel").is_visible()
         assert actual["risk"] == expected["risk"]
+        assert actual["ruin"] == expected["ruin"]
+        assert page.locator("#ruinPanel").is_visible()
+        assert "OOS sessions only" in page.locator("#ruinScope").inner_text()
+        assert page.locator("#ruinBankrollChart polyline").count() == 1
+        assert page.locator("#ruinHorizons tr").count() >= 2
+        assert "independent-cycle approximation" in page.locator("#ruinPanel").inner_text()
         assert actual["risk"]["options"]["target_ruin_probability"] == .05
         assert page.locator("#riskPanel").is_visible()
         assert "OOS only" in page.locator("#riskScope").inner_text()
@@ -214,11 +224,13 @@ def test_rolling_results_export_chart_and_scope_in_real_browser(site):
         exported = json.loads(Path(download.value.path()).read_text())
         assert exported["rolling"] == actual["rolling"]
         assert exported["risk"] == actual["risk"]
+        assert exported["ruin"] == actual["ruin"]
         page.locator("#rollingPanel details").evaluate("e => e.open = true")
         if os.environ.get("BROWSER_SCREENSHOT_DIR"):
             target = Path(os.environ["BROWSER_SCREENSHOT_DIR"]); target.mkdir(parents=True, exist_ok=True)
             page.locator("#rollingPanel").screenshot(path=str(target / f"rolling-{runtime}.png"))
             page.locator("#riskPanel").screenshot(path=str(target / f"risk-{runtime}.png"))
+            page.locator("#ruinPanel").screenshot(path=str(target / f"ruin-{runtime}.png"))
         page.emulate_media(media="print")
         page.evaluate("window.dispatchEvent(new Event('beforeprint'))")
         assert page.locator("#riskPanel").is_visible()
@@ -247,6 +259,22 @@ def test_rolling_results_export_chart_and_scope_in_real_browser(site):
         page.wait_for_function("!busy && latest !== null", timeout=30_000)
         assert page.locator("#rollingPanel").is_hidden()
         assert page.locator("#chronologicalNote").is_hidden()
+        page.locator("#gen_win_rate").fill("0")
+        for field in page.locator('[data-field="risk_dollars"]').all():
+            field.fill("2000")
+        page.locator("#generate").click()
+        page.wait_for_function("!busy && csvText.length > 0", timeout=30_000)
+        page.locator("#run").click()
+        page.wait_for_function("!busy && latest !== null", timeout=90_000)
+        cycle = page.evaluate("latest.ruin.cycle_approximation")
+        assert cycle["status"] == "certain_ruin"
+        assert cycle["confidence_bounds"] == [1, 1]
+        assert "100.00%" in page.locator("#ultimateMetrics").inner_text()
+        assert "No finite bound" in page.locator("#ultimateMetrics").inner_text()
+        if os.environ.get("BROWSER_SCREENSHOT_DIR"):
+            page.set_viewport_size({"width": 1440, "height": 1000})
+            page.locator("#ruinPanel details").evaluate("e => e.open = true")
+            page.locator("#ruinPanel").screenshot(path=str(target / f"ruin-cycles-{runtime}.png"))
         assert not errors
         browser.close()
 

@@ -223,9 +223,9 @@ Capital requirements are a separately labeled unrestricted-wallet counterfactual
 Changing the analysis bankroll does not turn unrestricted profits into finite-wallet
 profits. Rerun the engine with the desired `initial_wallet` for that performance.
 
-### Ruin and required capital
+### Finite-horizon funding failure and required capital
 
-Ruin is the **first inability to pay a required evaluation/reset/activation fee
+Finite-horizon funding failure is the **first inability to pay a required evaluation/reset/activation fee
 within the observed horizon**, even if a later delayed receipt would let trading
 resume. Equality with the fee is enough to continue. A prop-account breach is
 not investor ruin, and ending the horizon with no wallet wait is not perpetual
@@ -319,6 +319,92 @@ and [microscalping review](https://support.lucidtrading.com/en/articles/11404742
 Do not use this profile to certify review-triggering strategies.
 Other accounts needing unsupported rules fail capability validation rather than
 silently executing with those rules omitted.
+
+## Multi-path and ultimate ruin
+
+`Engine.ruin(spec, history, policy, config, simulation=RuinConfig(...), risk=RiskConfig(...))`
+returns two distinct models. The dashboard runs this only after policy selection;
+on a fit request it supplies the final 30% of sessions, never IS or mixed IS/OOS.
+The seed, source fingerprint, source size, path configuration, per-path records
+and extracted cash-cycle records are retained in the JSON export.
+
+### Full dated-engine bootstrap
+
+`RuinConfig` defaults to 100 independent paths of 250 sessions, stationary
+whole-session blocks of mean length 5, and seed 1729. Mean block 1 is IID session
+resampling. Blocks wrap around the source's end; trades inside each session keep
+their original ordering, brackets and outcomes. Local trade clocks are moved to
+the firm's open-weekday calendar. Original gaps and exchange holidays are not
+retained. A nonexistent daylight-saving clock is rejected rather than repaired.
+Synthetic histories are bootstrapped as realized data, not regenerated from their
+original stochastic parameters. Vary block length and source period for sensitivity.
+
+Every path uses the canonical dated lifecycle, not the legacy summary executor.
+Within a path, resets, live handoffs, fee selection, payout approval/receipt queues
+and risk regimes behave exactly as in bracket replay. All payouts are retained.
+Unrestricted funding reveals the entire cash-deficit path; first inability to pay
+at a chosen bankroll is then identified without early-stopping selection bias.
+The exported cash distributions use the configured wallet, including the engine's
+waiting/resumption behavior when late receipts arrive. Ruin still records the first
+funding failure. Capital needs and cycle calibration use the unrestricted counterpart;
+they are never inferred from prematurely stopped performance paths.
+
+The horizon curve and bankroll curve concern finite time. Independent paths permit
+conditional Monte Carlo intervals; they do not turn the source history into a
+larger independent historical sample. `ultimate_full_engine.status` remains
+`not_identified`: a finite-horizon frequency estimates a lower bound on ultimate
+ruin, while the unmodelled continuation may still ruin any survivor.
+
+### IID settled-cycle approximation
+
+Each terminated account (failure or live handoff) whose requested receipts all
+arrived contributes `(X,D)`: net external cash and the largest interim cash
+deficit **allocated to that account**. Incomplete/unsettled accounts are excluded
+and counted. Fractional-cent custom cash flows are rounded adversely. The empirical
+law gives every retained cycle equal weight, independent of duration.
+
+`ultimate_cycle_ruin(cycles, bankroll=..., target=.01, confidence=.95, paths=10000,
+max_cycles=2000, tail_tolerance=.0001, seed=1729)` also accepts explicitly supplied
+`CashCycle(net_cash, required_cash)` values in whole cents. Repeated identical
+records express probability weights. At each independent draw:
+
+```text
+if bankroll < D: ruin
+else: bankroll += X
+```
+
+This settled-cycle model deliberately ignores cross-account receipt overlap,
+fee-state dependence and serial market dependence. Its initial cycle is drawn
+from the same pooled law as later cycles. Calendar time is not simulated here.
+Excluding censored accounts can bias the law toward shorter cycles; increasing
+Monte Carlo paths does not repair that or reveal unobserved tail outcomes.
+All ultimate claims and confidence intervals are conditional on this law.
+
+For finite-support IID increments with possible negative values and mean <= 0,
+ultimate ruin is 1 for every finite bankroll. All-nonnegative increments are
+handled separately, including zero-net cycles with positive interim funding needs.
+For positive mean and negative increments, find a positive adjustment rate r with
+`mean(exp(-r*X)) <= 1`. Let `Dmax = max(D)`. The exponential-supermartingale bound is:
+
+```text
+ultimate ruin at B <= exp(-r * (B-Dmax)), for B >= Dmax
+sufficient bankroll for target alpha = ceil_to_cents(Dmax + log(1/alpha)/r)
+```
+
+This is a **sufficient bound, not a minimum-capital estimate**. A strictly positive
+rate is conservatively bracketed below the moment-generating-function root.
+The exponential ruin-bound framework is described in
+[Karl Sigman's random-walk ruin notes](https://www.columbia.edu/~ks20/4703-Sigman/4703-07-Notes-IS.pdf);
+the additional Dmax shift covers the account cycle's interim cash excursion.
+
+Monte Carlo stops a surviving path only when its remaining ruin bound is at most
+`tail_tolerance`, or at `max_cycles`. Computational-limit survivors are unresolved,
+not safe. The reported probability range spans the ruined fraction through the
+ruined-plus-unresolved fraction plus escaped-path tail bounds. Confidence bounds
+use conservative Bernoulli KL/Chernoff inversion and a union bound for the two
+events, adding the continuation tail. They cover sampling and truncation uncertainty
+conditional on the cycle law, **not** law-estimation uncertainty or model error.
+Zero simulated failures is not silently reported as zero ultimate risk.
 
 ## Verification
 

@@ -170,6 +170,11 @@ class Engine:
         from .backtest import backtest
         return backtest(spec, history, policy, config)
 
+    def ruin(self, spec, history, policy, config, **kwargs):
+        """Fixed-policy bootstrap funding risk and labelled ultimate cycle approximation."""
+        from .ruin import bootstrap_ruin
+        return bootstrap_ruin(spec, history, policy, config, **kwargs)
+
     def fit(self, spec, history, config, **kwargs):
         """Fit named dollar regimes on IS; headline results come only from OOS."""
         from .fitting import fit_holdout

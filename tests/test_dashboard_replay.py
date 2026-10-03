@@ -47,6 +47,20 @@ def test_adapter_matches_api_and_exports_finite_json():
     assert "csv" not in result["request"]
 
 
+def test_ruin_analysis_uses_only_holdout_and_does_not_select_policy():
+    req = request_fixture()
+    req["mode"] = "fit"
+    initial = replay.run(req)
+    req["ruin"] = {"paths": 3, "sessions": 12, "cycle_paths": 100, "cycle_steps": 10}
+    result = replay.run(req)
+    assert initial["policy"] == result["policy"]
+    assert initial["score"] == result["score"]
+    assert result["ruin"]["source_sessions"] == 6
+    assert result["ruin"]["risk"]["paths"] == 3
+    assert result["ruin"]["payout_retention"] == 1
+    json.dumps(result, allow_nan=False)
+
+
 def test_fit_headline_is_oos_and_future_outcomes_do_not_select_policy():
     req = request_fixture(); req["mode"] = "fit"
     first = replay.run(req)

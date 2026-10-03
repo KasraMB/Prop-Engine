@@ -1,5 +1,5 @@
 {
-  "bundle_sha256": "9f21fffec09ad14b774eadb45d8fc107a299832149b4fd6f4a3a4f83db4fb915",
+  "bundle_sha256": "78e3c424e49567b2aa0008d1979219223bbcebf228fb5d7a024207472ec1030a",
   "files": [
     {
       "path": "numba.py",
@@ -7,7 +7,7 @@
     },
     {
       "path": "propfirm_engine/__init__.py",
-      "sha256": "33a0690ba5c0577fcef7253229f691a873283e68cd43550832fa3cfa28a2d973"
+      "sha256": "1ea5e42fafae19146a3c3dd9c1069a470f60283b55e782af978d427649f68939"
     },
     {
       "path": "propfirm_engine/analytical.py",
@@ -39,7 +39,7 @@
     },
     {
       "path": "propfirm_engine/engine.py",
-      "sha256": "608ece6d893f7d14ce2e903b1f153d311beddd4779ada4c17599569710f4f981"
+      "sha256": "01878846affca0db8f59d0d26c5b7b6a0a16e1fcab69759380cd53607fcd6d80"
     },
     {
       "path": "propfirm_engine/enums.py",
@@ -118,6 +118,10 @@
       "sha256": "91a58c99e57bb8c2cf8c2091af8154b32911411d28b08233aef62b6c6b698a3a"
     },
     {
+      "path": "propfirm_engine/ruin.py",
+      "sha256": "1786f446e0261343767f669b67d38dafbc4f3594f9571441158a486293ce9b1a"
+    },
+    {
       "path": "propfirm_engine/rules.py",
       "sha256": "b223803be0614d5d1c6919df167914933dbeda46a07a0705f5db94298c48677f"
     },
@@ -147,7 +151,7 @@
     },
     {
       "path": "replay.py",
-      "sha256": "4a55c7c4419480f583b6fcd59a613256ccee2f283c765b338b6b7e1c72d8507b"
+      "sha256": "03ac718f7ffa0096122c49cffe59bc5cc68f0d5df91c5035cf8db340c65b5124"
     }
   ]
 }
