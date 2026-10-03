@@ -6,6 +6,7 @@ a simulation of Brownian passage times. Every target changes its hit probability
 from dataclasses import dataclass, replace
 from datetime import date, datetime, time, timedelta
 from fractions import Fraction
+from functools import lru_cache
 from hashlib import sha256
 from math import exp, fsum, isfinite, sqrt
 from numbers import Integral, Real
@@ -91,10 +92,16 @@ class ResearchPath:
 
 
 def _calendar(spec, model):
-    day, trades = model.start_date, []
-    zone = ZoneInfo(spec.session_timezone)
-    while len(trades) < model.sessions:
-        if day.weekday() in spec.session_weekdays:
+    return _calendar_template(spec.session_timezone, tuple(spec.session_weekdays), model.start_date, model.sessions)
+
+
+@lru_cache(maxsize=4)
+def _calendar_template(timezone, weekdays, start_date, sessions):
+    """Bounded cache of immutable templates only; never account state or outcomes."""
+    day, trades = start_date, []
+    zone = ZoneInfo(timezone)
+    while len(trades) < sessions:
+        if day.weekday() in weekdays:
             start = datetime.combine(day, time(10), zone)
             trades.append(BracketTrade(start, start + timedelta(minutes=5), day, 1, 1, True))
         day += timedelta(days=1)
@@ -118,18 +125,18 @@ def research_path(spec, model, policy, config, uniforms):
         for u in tape
     ):
         raise ValueError("uniforms needs one finite value in [0,1) per session")
-    targets = dict(zip((r.name for r in policy.sizing.regimes), policy.targets))
+    targets = {r.name: Fraction(str(t)) for r, t in zip(policy.sizing.regimes, policy.targets)}
     decisions = []
     costs = Fraction(str(config.cost_per_contract)) + Fraction(str(config.cost_per_trade))
 
     def factory(template, regime, runner, index):
         buffer = runner.sim.equity - runner.sim.dd_floor
-        risk = min(Fraction(str(regime.risk_dollars)), buffer)
+        risk = min(runner.risk_budgets[regime.name], buffer)
         # A minimum one-cent gross bracket allows canonical projection to decide
         # CAPPED_OUT versus a voluntary sub-contract policy skip.
         if risk < costs + Fraction(1, 100):
             return replace(template, stop_loss=0.01, take_profit=0.01, won=False)
-        target = Fraction(str(targets[regime.name]))
+        target = targets[regime.name]
         stop, take = risk - costs, target + costs
         probability = bracket_probability(float(stop), float(take), mu=model.mu, sigma=model.sigma)
         won = bool(tape[index] < probability)

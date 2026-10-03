@@ -54,6 +54,13 @@ def test_cash_deficit_is_not_final_loss_or_peak_to_trough_drawdown():
     assert cash_risk_path(cash_result([(0,-.301,"fee")])).required_bankroll == .31
 
 
+@pytest.mark.parametrize("values", [[3], [1, 1, 1], [-105.2, 0, 1.1, 450, 9999]])
+def test_batched_percentiles_match_individual_calculations(values):
+    qs = (.95, 0, .5, .01, 1, .25)
+    stats = distribution(values, iter(qs))
+    assert stats["percentiles"] == {str(float(q)): float(np.quantile(values, q)) for q in qs}
+
+
 def test_wallet_truncation_requires_matching_unrestricted_path():
     stopped = cash_result([(0,-100,"fee")], wallet=100, wait=True)
     full = cash_result([(0,-100,"fee"), (2,-100,"fee"), (3,300,"receipt")])

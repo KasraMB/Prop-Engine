@@ -8,6 +8,7 @@ from datetime import datetime, timedelta, timezone
 from heapq import heappop, heappush
 from itertools import groupby
 from fractions import Fraction
+from functools import cached_property
 from hashlib import sha256
 from math import isfinite
 from zoneinfo import ZoneInfo
@@ -59,9 +60,10 @@ class BacktestResult:
     config: BacktestConfig
     history_fingerprint: str
 
-    @property
+    @cached_property
     def net_cash(self):
-        return float(sum((Fraction(str(e.cash)) for e in self.events), Fraction(0)))
+        # The frozen ledger never changes; most rule events carry no cash.
+        return float(sum((Fraction(str(e.cash)) for e in self.events if e.cash), Fraction(0)))
 
     @property
     def receipts(self):
@@ -108,6 +110,10 @@ class _Replay:
 
     def __init__(self, spec, history, policy, config, *, bracket_factory=None):
         self.spec, self.history, self.policy, self.config = spec, history, policy, config
+        self.fixed_cost = Fraction(str(config.cost_per_trade))
+        self.contract_cost = Fraction(str(config.cost_per_contract))
+        self.risk_budgets = {r.name: Fraction(str(r.risk_dollars)) for r in policy.regimes}
+        self.activity_threshold = Fraction(str(spec.activity_threshold))
         # Internal research hook; the public historical API never retargets trades.
         self.bracket_factory = bracket_factory
         compiled = _check_support(spec)
@@ -155,7 +161,7 @@ class _Replay:
             float(self.ledger.cycle_profit) if self.ledger else 0.0,
             gross_payout,
         ))
-        if self.wallet is not None:
+        if self.wallet is not None and cash:
             self.wallet += Fraction(str(cash))
 
     def charge(self, at, fee):
@@ -309,10 +315,10 @@ class _Replay:
             return
         if self.bracket_factory is not None:
             trade = self.bracket_factory(trade, regime, self, day_index)
-        fixed = Fraction(str(self.config.cost_per_trade))
-        cost = Fraction(str(self.config.cost_per_contract))
-        per_unit = Fraction(str(trade.stop_loss)) + cost
-        desired = (Fraction(str(regime.risk_dollars)) - fixed) / per_unit
+        fixed, cost = self.fixed_cost, self.contract_cost
+        stop = trade.stop_loss if isinstance(trade.stop_loss, Fraction) else Fraction(str(trade.stop_loss))
+        per_unit = stop + cost
+        desired = (self.risk_budgets[regime.name] - fixed) / per_unit
         # Reuse the projection arithmetic with rational dollars on this slow path.
         # Fast Monte Carlo keeps its compiled float64 implementation.
         project = getattr(project_position, "py_func", project_position)
@@ -339,7 +345,7 @@ class _Replay:
                          np.array([min(0.0, pnl_per_unit)]), finalize=False)
         if self.ledger:
             self.ledger.record_trade(trade.exit_at, sim.equity - before)
-        if abs(sim.equity - before) >= Fraction(str(self.spec.activity_threshold)):
+        if abs(sim.equity - before) >= self.activity_threshold:
             self.activity(trade.exit_at)
         self.emit(trade.exit_at, "trade", quantity=quantity, regime=regime.name)
         if result.code == ExitCode.PASSED:

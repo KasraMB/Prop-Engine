@@ -69,3 +69,30 @@ Use independent hand calculations and exhaustive small paths as well as
 reference/kernel parity. Exercise costs, equality boundaries, resets, calendars,
 cash affordability and IS/OOS isolation. Keep the browser source mirror aligned.
 Passing tests establishes tested behavior, not complete contractual fidelity.
+
+## Serial replay performance
+
+`python benchmarks/chronological.py` measures fixed-seed normal, rolling and
+joint-target dashboard workloads. It reports median wall time across three runs,
+peak traced Python allocations in a separate warmed run, and a complete-output
+hash. It does not use multiprocessing, omit metrics or shorten histories.
+
+The shared replay converts fixed costs and regime budgets to exact rational
+dollars once per runner. Net cash is cached on the immutable result; replacing
+its ledger creates a fresh cache. Model calendars use a four-entry bounded cache
+keyed by timezone, weekdays, start date and session count; account state and
+random outcomes are never cached there. Percentiles share one quantile call,
+and JSON conversion visits dataclass fields without deep-copying the ledger.
+Rolling fixed-policy reports skip an otherwise discarded single-path risk report.
+
+On the October 3, 2026 local run, against `9eadf23`, normal/rolling/target median
+times changed from 0.896/2.292/2.145 seconds to 0.535/1.671/1.561 seconds.
+Peak traced allocations changed from 722,279/619,247/364,875 bytes to
+549,222/610,986/298,929 bytes. All three complete-output hashes matched before
+and after. These are workload-specific measurements, not performance guarantees;
+traced Python allocations do not include all native or browser memory.
+
+Objective selection does not limit the normal replay's returned performance
+metrics or policy. Rolling reports always retain cash and cash/day distributions;
+single paths retain observed values, without pretending to estimate variance
+from independent paths. Historical reward/risk ratios remain fixed by input.

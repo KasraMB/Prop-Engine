@@ -235,3 +235,20 @@ def test_performance_distributions_do_not_depend_on_objective_or_risk_reporting(
         for key in ("net_cash", "net_cash_per_day"):
             assert summary.distributions[key] == summaries[0].distributions[key]
     assert summaries[0].score != summaries[1].score
+
+
+def test_calendar_cache_is_bounded_keyed_by_calendar_and_not_account_state():
+    from propfirm_engine.target_research import _calendar, _calendar_template
+    _calendar_template.cache_clear()
+    model = BracketModel(sessions=7)
+    template = _calendar(SPEC, model)
+    assert _calendar(SPEC, replace(model, mu=100)) is template
+    assert _calendar(replace(SPEC, session_timezone="UTC"), model) is not template
+    assert _calendar(replace(SPEC, session_weekdays=(0,2,4)), model) is not template
+    wins = research_path(SPEC, model, lucidflex_example(), CONFIG, [0]*7)
+    losses = research_path(SPEC, model, lucidflex_example(), CONFIG, [.999]*7)
+    assert wins.replay.receipts > 0 and losses.replay.receipts == 0
+    assert research_path(SPEC, model, lucidflex_example(), CONFIG, [0]*7) == wins
+    for n in range(1, 8):
+        _calendar(SPEC, replace(model, sessions=n))
+    assert _calendar_template.cache_info().currsize == 4

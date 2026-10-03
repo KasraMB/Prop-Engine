@@ -47,6 +47,34 @@ def test_adapter_matches_api_and_exports_finite_json():
     assert "csv" not in result["request"]
 
 
+@pytest.mark.parametrize("mode", ["backtest", "fit"])
+@pytest.mark.parametrize("rolling", [None, {"window_sessions": 4, "stride_sessions": 2}])
+def test_normal_reports_keep_all_metrics_under_either_objective(mode, rolling):
+    req = request_fixture()
+    req.update(mode=mode, rolling=rolling)
+    # Fix the candidate set: changing the score must not change reporting.
+    req["search"]["generations"] = 0
+    daily = replay.run(req)
+    req["objective"] = "net_cash"
+    cash = replay.run(req)
+    for key in ("headline", "policy", "risk", "baseline", "training"):
+        assert daily.get(key) == cash.get(key)
+    assert daily["score"] != cash["score"]
+    if rolling:
+        for key in daily["rolling"]:
+            assert daily["rolling"][key]["summary"]["distributions"] == cash["rolling"][key]["summary"]["distributions"]
+    assert cash["risk"]["distributions"]["net_cash_per_day"]["count"] >= 1
+
+
+def test_rolling_fixed_policy_does_not_build_discarded_single_risk(monkeypatch):
+    req = request_fixture()
+    req["rolling"] = {"window_sessions": 4}
+    def unused(*args):
+        pytest.fail("single-path risk report would be discarded")
+    monkeypatch.setattr(replay, "_single_risk", unused)
+    assert replay.run(req)["risk"]["paths"] > 1
+
+
 def test_ruin_analysis_uses_only_holdout_and_does_not_select_policy():
     req = request_fixture()
     req["mode"] = "fit"

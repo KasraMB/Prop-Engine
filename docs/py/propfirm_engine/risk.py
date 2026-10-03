@@ -49,11 +49,13 @@ def distribution(values, percentiles=RiskConfig().percentiles):
         return None
     try:
         with np.errstate(over="raise", invalid="raise"):
+            percentiles = tuple(percentiles)
+            quantiles = np.quantile(a, percentiles)
             return {"count": len(a), "mean": float(a.mean()), "median": float(np.median(a)),
                     "minimum": float(a.min()), "maximum": float(a.max()),
                     "variance": float(a.var()), "standard_deviation": float(a.std()),
                     "sample_variance": float(a.var(ddof=1)) if len(a) > 1 else None,
-                    "percentiles": {str(float(q)): float(np.quantile(a, q)) for q in percentiles},
+                    "percentiles": {str(float(q)): float(v) for q, v in zip(percentiles, quantiles)},
                     "percentile_method": "linear interpolation; not confidence limits"}
     except FloatingPointError as exc:
         raise ValueError("distribution exceeds the finite numeric reporting range") from exc

@@ -3,7 +3,7 @@
 No accounting or selection logic lives here. Closed-summary inputs are not
 converted into bracket histories, and arbitrary Python is never evaluated.
 """
-from dataclasses import asdict, is_dataclass, replace
+from dataclasses import fields, is_dataclass, replace
 from datetime import date, datetime, time, timedelta
 from hashlib import sha256
 from io import StringIO
@@ -138,7 +138,8 @@ def manual(params):
 
 def _jsonable(value):
     if is_dataclass(value):
-        return _jsonable(asdict(value))
+        # Serialize fields directly: asdict would first deep-copy the whole ledger.
+        return {field.name: _jsonable(getattr(value, field.name)) for field in fields(value)}
     if isinstance(value, dict):
         return {str(k): _jsonable(v) for k, v in value.items()}
     if isinstance(value, (tuple, list)):
@@ -253,7 +254,8 @@ def run(request, progress=None):
         output.update(headline_scope="Full history / fixed policy (not OOS)",
                       headline=_summary(result), policy=_jsonable(policy),
                       score=OBJECTIVES[objective_name](result))
-        output["risk"] = _single_risk(result, history, policy, risk)
+        if rolling is None:
+            output["risk"] = _single_risk(result, history, policy, risk)
         if rolling is not None:
             windows = engine.rolling_backtest(spec, history, policy, config, rolling=rolling,
                                               objective=OBJECTIVES[objective_name], risk=risk)

@@ -62,6 +62,22 @@ def test_full_lucid_path_consistency_payout_floor_and_cash():
     assert result.attempts == 1 and result.failed_attempts == 0
 
 
+def test_cached_cash_is_exact_replace_safe_and_export_is_detached():
+    from dataclasses import asdict
+    from fractions import Fraction
+    from dashboard.replay import _jsonable
+    result = Engine().backtest(spec(), funded_history(), DollarPolicy.constant(100), config())
+    assert result.net_cash == float(sum((Fraction(str(e.cash)) for e in result.events), Fraction(0)))
+    assert result.__dict__["net_cash"] == result.net_cash
+    changed = replace(result, events=())
+    assert changed.net_cash == 0 and result.net_cash == 344.8
+    exported = _jsonable(result)
+    assert exported == _jsonable(asdict(result))
+    assert "net_cash" not in exported  # cache internals are not schema fields
+    exported["events"][0]["cash"] = 999
+    assert result.events[0].cash != 999
+
+
 def test_one_giant_day_never_bypasses_consistency():
     day = date(2026, 9, 1)
     result = Engine().backtest(spec(), history(trade(day, target=3000)),
