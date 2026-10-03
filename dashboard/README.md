@@ -40,6 +40,34 @@ configuration. The original CSV is not included; preserve it alongside its expor
 Generated histories can be downloaded as CSV; their generator parameters and realized
 statistics are included in result provenance.
 
+## Joint risk and target discovery
+
+Open `/research.html` (**Target search**) and click **Discover policy** without
+entering trades. This page calls the existing `fit_targets` API through
+`research.py` and the shared worker/server adapter. It does not duplicate the
+account engine or use the named example to seed optimization.
+
+Defaults: 100 independent model paths, 30 sessions, 70/30 training/holdout split,
+20 generations, population 8, training seed 42 and holdout seed 43. A flat
+$500-risk/$500-target initial policy is searched over declared dollar levels.
+Choose continuous dollars or expanded account-state regimes for other studies.
+The maximum risk can be $2,000. Large path counts and searches can take minutes;
+Pages runs in a cancellable worker. Local requests have no cancellation.
+
+The selected policy and flat baseline are evaluated on untouched holdout paths;
+the named example is evaluated afterward on the same paths for comparison only.
+The report includes uncertainty, cash distributions, funding risk, bankroll
+curves, a separate settled-cycle ultimate approximation, and the first holdout
+path's decisions (not a cherry-picked successful path). JSON retains provenance.
+Changing settings after inspecting holdout is not fresh validation.
+
+Each bracket's hit probability changes with its stop, target, drift and volatility.
+The assumed clock completes one eventual bracket per available session, not a
+market passage-time simulation. Zero-cost/zero-delay defaults are idealized,
+not broker quotes. The model-path split is not historical OOS. Neither a global
+optimum nor improvement over the example is guaranteed. See the
+[research contract](../docs/ANALYTICAL_MODEL.md#joint-risk-and-target-research).
+
 ## Rolling historical starts
 
 Choose **Evaluation method → Rolling historical starts**, then set window length

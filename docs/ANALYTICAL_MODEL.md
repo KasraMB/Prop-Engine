@@ -2,6 +2,15 @@
 
 ## Joint risk and target research
 
+The [Target search dashboard](https://kasramb.github.io/Prop-Engine/research.html)
+exposes this API without manual trade input. It starts from a flat policy,
+searches training paths, then compares the frozen policy, initial baseline and
+named example on identical independent holdout tapes. The example is never a
+search seed. Reported distributions and funding-risk metrics use the selected
+policy; ultimate ruin is a separate empirical settled-cycle approximation.
+The representative trace is the first holdout tape, not the most successful one.
+Search bounds, grids, model/scenario inputs and all results are exported in JSON.
+
 Added 2026-10-03. `target_research.py` reuses the chronological `_Replay`
 lifecycle and its existing interpreter, feasibility projection and payout ledger.
 There is no second production implementation of the account rules. This mode

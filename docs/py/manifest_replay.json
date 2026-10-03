@@ -1,5 +1,5 @@
 {
-  "bundle_sha256": "78e3c424e49567b2aa0008d1979219223bbcebf228fb5d7a024207472ec1030a",
+  "bundle_sha256": "22644e434326da300f653defd4412c28933d96aab78fe7126d29f387b1c1e72a",
   "files": [
     {
       "path": "numba.py",
@@ -151,7 +151,11 @@
     },
     {
       "path": "replay.py",
-      "sha256": "03ac718f7ffa0096122c49cffe59bc5cc68f0d5df91c5035cf8db340c65b5124"
+      "sha256": "112e06f66e84f65201f2a8536b632f4654bb38f5e8ad5cb9dbdeece70b83b7ed"
+    },
+    {
+      "path": "research.py",
+      "sha256": "2ae878cc08093cac6079a6d1fb0d4483afadb08f3373d5defd2f106bf5faefa4"
     }
   ]
 }

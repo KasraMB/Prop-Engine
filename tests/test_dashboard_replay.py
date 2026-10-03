@@ -128,6 +128,7 @@ def test_committed_replay_assets_and_bridge_are_synchronized():
                          ("history.js", "history.js"), ("trace.js", "trace.js"), ("replay.js", "replay.js"),
                          ("rolling.js", "rolling.js"),
                          ("risk.js", "risk.js"),
+                         ("research.html", "research.html"), ("research.js", "research.js"),
                          ("replay.css", "replay.css"), ("replay-worker.js", "replay-worker.js")):
         assert (root / "dashboard" / name).read_text(encoding="utf-8") == (root / "docs" / target).read_text(encoding="utf-8")
     source = (root / "dashboard/replay.py").read_text(encoding="utf-8")

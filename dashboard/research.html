@@ -1,0 +1,541 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Propfirm Engine | Target search</title>
+    <link rel="stylesheet" href="replay.css" />
+    <script src="research.js" defer></script>
+    <script src="risk.js" defer></script>
+  </head>
+  <body data-runtime="browser">
+    <header>
+      <a class="brand" href="index.html"
+        >P<span>/</span>E <small>PROPFIRM ENGINE</small></a
+      >
+      <nav aria-label="Main navigation">
+        <a href="index.html">Strategy replay</a
+        ><a href="trace.html">Account trace</a
+        ><a href="research.html" aria-current="page">Target search</a
+        ><a href="https://github.com/KasraMB/Prop-Engine">Source ↗</a>
+      </nav>
+    </header>
+    <main>
+      <div class="intro">
+        <div>
+          <p class="eyebrow">PROPFIRM ENGINE / RESEARCH WORKSPACE</p>
+          <h1>Discover risk and target policies</h1>
+          <p class="lede">
+            Search dollar risk and profit targets by account stage. No manual
+            trades or seeded solution. Select on 70% of independent model paths;
+            evaluate on the untouched 30%.
+          </p>
+        </div>
+        <div class="runtime">
+          <span class="dot"></span><span id="runtime">Initializing engine…</span
+          ><small id="build">Canonical Python engine</small>
+        </div>
+      </div>
+      <form id="researchForm">
+        <fieldset id="controls">
+          <div class="setup-grid">
+            <section class="panel">
+              <div class="section-title">
+                <span class="step">01</span>
+                <h2>Bracket outcome model</h2>
+              </div>
+              <div class="fields">
+                <label
+                  >Gross drift μ<input
+                    id="mu"
+                    type="number"
+                    value="0"
+                    step="any"
+                    required
+                /></label>
+                <label
+                  >Gross volatility σ<input
+                    id="sigma"
+                    type="number"
+                    value="1000"
+                    min="0.000001"
+                    step="any"
+                    required
+                /></label>
+                <label
+                  >Total model paths<input
+                    id="paths"
+                    type="number"
+                    value="100"
+                    min="7"
+                    max="2000"
+                    required
+                /></label>
+                <label
+                  >Sessions per path<input
+                    id="sessions"
+                    type="number"
+                    value="30"
+                    min="1"
+                    max="10000"
+                    required
+                /></label>
+                <label
+                  >Start date<input
+                    id="start_date"
+                    type="date"
+                    value="2026-01-05"
+                    required
+                /></label>
+                <label
+                  >Holdout seed<input
+                    id="holdout_seed"
+                    type="number"
+                    value="43"
+                    min="0"
+                    max="4294967295"
+                    required
+                /></label>
+              </div>
+              <p class="muted">
+                One eventual stop-or-target outcome per available session. At
+                zero drift and cost, P(win) = stop / (stop + target). New
+                targets get new probabilities—not reused historical wins.
+              </p>
+              <p class="muted">
+                μ and σ share an arbitrary diffusion-time unit. This model does
+                not predict holding time, tick execution, or achievable market
+                cash/day. The 70/30 split is over model paths, not historical
+                data.
+              </p>
+            </section>
+            <section class="panel">
+              <div class="section-title">
+                <span class="step">02</span>
+                <h2>LucidFlex 50K · DLL off</h2>
+              </div>
+              <div class="fields">
+                <label
+                  >Initial wallet ($)<input
+                    id="initial_wallet"
+                    type="number"
+                    min="0"
+                    step=".01"
+                    value="2000"
+                    required
+                /></label>
+                <label
+                  >Evaluation fee ($)<input
+                    id="eval_fee"
+                    type="number"
+                    min="0"
+                    step=".01"
+                    value="105.20"
+                    required
+                /></label>
+                <label
+                  >Reset fee ($)<input
+                    id="reset_fee"
+                    type="number"
+                    min="0"
+                    step=".01"
+                    value="105"
+                    required
+                /></label>
+                <label
+                  >Round-trip cost / contract ($)<input
+                    id="cost_per_contract"
+                    type="number"
+                    min="0"
+                    step="any"
+                    value="0"
+                    required
+                /></label>
+                <label
+                  >Fixed cost / trade ($)<input
+                    id="cost_per_trade"
+                    type="number"
+                    min="0"
+                    step="any"
+                    value="0"
+                    required
+                /></label>
+                <label
+                  >Payment fee / receipt ($)<input
+                    id="payment_fee"
+                    type="number"
+                    min="0"
+                    step="any"
+                    value="0"
+                    required
+                /></label>
+                <label
+                  >Approval delay (hours)<input
+                    id="approval_delay_hours"
+                    type="number"
+                    min="0"
+                    step="any"
+                    value="0"
+                    required
+                /></label>
+                <label
+                  >Receipt delay (hours)<input
+                    id="receipt_delay_hours"
+                    type="number"
+                    min="0"
+                    step="any"
+                    value="0"
+                    required
+                /></label>
+                <label
+                  >Activation delay (hours)<input
+                    id="activation_delay_hours"
+                    type="number"
+                    min="0"
+                    step="any"
+                    value="0"
+                    required
+                /></label>
+                <label
+                  >Retry delay (hours)<input
+                    id="retry_delay_hours"
+                    type="number"
+                    min="0"
+                    step="any"
+                    value="0"
+                    required
+                /></label>
+              </div>
+              <p class="muted">
+                Idealized zero-cost, immediate-settlement defaults match the
+                research example. Fees are dated examples. One theoretical
+                contract with adjustable dollar brackets; all payouts retained.
+                The account engine still applies consistency, drawdown, payout
+                rules and retries.
+              </p>
+            </section>
+          </div>
+          <section class="panel">
+            <div class="section-title">
+              <span class="step">03</span>
+              <h2>Search space</h2>
+            </div>
+            <div class="fields">
+              <label
+                >Account regimes<select id="regime_set">
+                  <option value="compact">
+                    Evaluation / funded build / funded fallback
+                  </option>
+                  <option value="detailed">
+                    Expanded: days left, prior payout and profit
+                  </option>
+                </select></label
+              >
+              <label
+                >Search actions<select id="search_actions">
+                  <option value="grid">Declared dollar levels</option>
+                  <option value="continuous">
+                    Continuous, rounded to cents
+                  </option>
+                </select></label
+              >
+              <label
+                >Initial flat risk ($)<input
+                  id="initial_risk"
+                  type="number"
+                  min=".01"
+                  step=".01"
+                  value="500"
+                  required
+              /></label>
+              <label
+                >Initial flat target ($)<input
+                  id="initial_target"
+                  type="number"
+                  min=".01"
+                  step=".01"
+                  value="500"
+                  required
+              /></label>
+              <label
+                >Risk minimum ($)<input
+                  id="risk_min"
+                  type="number"
+                  min=".01"
+                  step=".01"
+                  value="500"
+                  required
+              /></label>
+              <label
+                >Risk maximum ($)<input
+                  id="risk_max"
+                  type="number"
+                  min=".01"
+                  step=".01"
+                  value="2000"
+                  required
+              /></label>
+              <label
+                >Target minimum ($)<input
+                  id="target_min"
+                  type="number"
+                  min=".01"
+                  step=".01"
+                  value="150"
+                  required
+              /></label>
+              <label
+                >Target maximum ($)<input
+                  id="target_max"
+                  type="number"
+                  min=".01"
+                  step=".01"
+                  value="3000"
+                  required
+              /></label>
+              <label class="grid-field"
+                >Risk levels ($, comma-separated)<input
+                  id="risk_levels"
+                  value="500,1000,1500,2000"
+                  required
+              /></label>
+              <label class="grid-field"
+                >Target levels ($, comma-separated)<input
+                  id="target_levels"
+                  value="150,500,1000,1500,2000,3000"
+                  required
+              /></label>
+            </div>
+            <p class="muted">
+              The initial policy has the same risk and target in every regime.
+              “Funded build” means five winning days left before the first
+              payout; other funded states use the fallback. The expanded set
+              adds specific days-left, prior-payout and profit regimes, in
+              first-match order. Search is heuristic, not proof of a global
+              optimum.
+            </p>
+          </section>
+          <section class="panel">
+            <div class="section-title">
+              <span class="step">04</span>
+              <h2>Optimize and evaluate</h2>
+            </div>
+            <div class="fields">
+              <label
+                >Objective (maximize)<select id="objective">
+                  <option value="net_cash_per_day">
+                    Mean external cash / calendar day
+                  </option>
+                  <option value="net_cash">Mean net external cash</option>
+                </select></label
+              >
+              <label
+                >Generations<input
+                  id="generations"
+                  type="number"
+                  min="0"
+                  max="100"
+                  value="20"
+                  required
+              /></label>
+              <label
+                >Population<input
+                  id="population"
+                  type="number"
+                  min="2"
+                  max="32"
+                  value="8"
+                  required
+              /></label>
+              <label
+                >Training / optimizer seed<input
+                  id="seed"
+                  type="number"
+                  min="0"
+                  max="4294967295"
+                  value="42"
+                  required
+              /></label>
+              <label
+                >Funding-risk target (%)<input
+                  id="target_ruin"
+                  type="number"
+                  min="0"
+                  max="100"
+                  step=".1"
+                  value="1"
+                  required
+              /></label>
+              <label
+                >Worst-tail fraction (%)<input
+                  id="risk_tail"
+                  type="number"
+                  min=".1"
+                  max="100"
+                  step=".1"
+                  value="5"
+                  required
+              /></label>
+            </div>
+            <p class="muted">
+              The supplied $2,000/$1,500 → $2,000/$2,000 → $2,000/$150 example
+              is evaluated only after selection as a reference. It is never
+              inserted into the search. Repeatedly tuning to holdout results
+              invalidates that holdout.
+            </p>
+            <button id="run" type="submit" disabled>Discover policy</button>
+          </section>
+        </fieldset>
+      </form>
+      <div class="run-status">
+        <p id="status" role="status" aria-live="polite">Loading engine…</p>
+        <button id="cancel" type="button" class="secondary" hidden>
+          Cancel search</button
+        ><button id="retryBoot" type="button" class="secondary" hidden>
+          Retry engine loading
+        </button>
+      </div>
+      <p id="error" class="error" role="alert" hidden></p>
+      <section id="results" hidden>
+        <div class="result-heading">
+          <div>
+            <p class="eyebrow">UNTOUCHED MODEL HOLDOUT</p>
+            <h2>Discovered policy</h2>
+          </div>
+          <button id="download" class="secondary" type="button">
+            Download result JSON ↓
+          </button>
+        </div>
+        <p id="researchScope" class="muted"></p>
+        <div id="metrics" class="metrics"></div>
+        <section class="panel">
+          <h3>Selected dollar risk and targets</h3>
+          <p class="muted">
+            Net loss budgets and net profit targets. Actual risk is capped by
+            remaining loss buffer; costs are translated into gross brackets.
+            Unvisited training regimes retain the flat baseline.
+          </p>
+          <div class="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>Regime (first match)</th>
+                  <th>Conditions</th>
+                  <th>Initial risk / target</th>
+                  <th>Selected risk</th>
+                  <th>Selected target</th>
+                  <th>IS observed</th>
+                </tr>
+              </thead>
+              <tbody id="researchPolicy"></tbody>
+            </table>
+          </div>
+        </section>
+        <section class="panel">
+          <h3>Same-path holdout comparison</h3>
+          <p class="muted">
+            The reference is a post-selection comparison, not an optimizer seed.
+            A selected policy can underperform on holdout.
+          </p>
+          <div class="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>Policy</th>
+                  <th>Mean objective</th>
+                  <th>Standard error</th>
+                  <th>Mean net cash</th>
+                  <th>Cash P5 / median / P95</th>
+                  <th>Received payout</th>
+                </tr>
+              </thead>
+              <tbody id="researchComparison"></tbody>
+            </table>
+          </div>
+        </section>
+        <section id="riskPanel" class="panel" hidden>
+          <div class="section-title">
+            <h3>Holdout cash risk and bankroll</h3>
+            <button id="printReport" type="button" class="secondary">
+              Print results
+            </button>
+          </div>
+          <p id="riskScope" class="muted"></p>
+          <div id="riskMetrics" class="metrics"></div>
+          <div id="riskDistributionViews">
+            <h4>Bankroll versus finite-horizon funding failure</h4>
+            <svg
+              id="bankrollChart"
+              viewBox="0 0 720 260"
+              role="img"
+              aria-label="Holdout bankroll versus funding failure"
+            ></svg>
+            <p id="riskCapitalNote" class="muted"></p>
+            <details>
+              <summary>Outcome distributions</summary>
+              <div class="table-scroll">
+                <table>
+                  <thead id="riskDistributionHead"></thead>
+                  <tbody id="riskDistributions"></tbody>
+                </table>
+              </div>
+            </details>
+            <p id="riskTailNote" class="muted"></p>
+          </div>
+          <details>
+            <summary>Risk definitions and limits</summary>
+            <dl id="riskDefinitions"></dl>
+          </details>
+        </section>
+        <section class="panel">
+          <h3>Ultimate ruin: independent-cycle approximation</h3>
+          <p id="ultimateScope" class="muted"></p>
+          <div id="ultimateMetrics" class="metrics"></div>
+          <p class="muted">
+            Complete settled cycles are pooled independently. Receipt overlap,
+            fee-state dependence and market dependence are not preserved;
+            excluding unfinished accounts can bias this law. Confidence excludes
+            law-estimation error. The full engine's infinite-horizon ruin
+            probability is not established by finite simulations.
+          </p>
+        </section>
+        <section class="panel">
+          <h3>Representative decision trace</h3>
+          <p class="muted">
+            First holdout path—not the best path and not the average. Full rule
+            events are included in the export.
+          </p>
+          <div class="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>Session index</th>
+                  <th>Regime</th>
+                  <th>Loss buffer</th>
+                  <th>Actual risk</th>
+                  <th>Target</th>
+                  <th>P(win)</th>
+                  <th>Outcome</th>
+                </tr>
+              </thead>
+              <tbody id="researchDecisions"></tbody>
+            </table>
+          </div>
+        </section>
+        <section id="provenancePanel" class="panel">
+          <details>
+            <summary>Model, selected policy and assumptions</summary>
+            <pre id="provenance"></pre>
+          </details>
+        </section>
+      </section>
+    </main>
+    <footer>
+      <span>Propfirm Engine · research workspace</span
+      ><a
+        href="https://github.com/KasraMB/Prop-Engine/blob/main/docs/ANALYTICAL_MODEL.md"
+        >Model contract ↗</a
+      >
+    </footer>
+  </body>
+</html>

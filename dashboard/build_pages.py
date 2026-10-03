@@ -64,20 +64,22 @@ def main() -> None:
     manifest = _copy_engine()
     (DOCS_PY / "numba.py").write_text(NUMBA_SHIM, encoding="utf-8", newline="\n")
     _write_browser_copy("replay.py", "replay.py")
+    _write_browser_copy("research.py", "research.py")
     for source, target in (("replay.html", "index.html"), ("replay.html", "trace.html"),
                            ("replay.css", "replay.css"), ("replay.js", "replay.js"),
                            ("history.js", "history.js"), ("trace.js", "trace.js"),
                            ("rolling.js", "rolling.js"),
                            ("risk.js", "risk.js"),
+                           ("research.html", "research.html"), ("research.js", "research.js"),
                            ("replay-worker.js", "replay-worker.js")):
         (ROOT / "docs" / target).write_text((DASH / source).read_text(encoding="utf-8"),
                                            encoding="utf-8", newline="\n")
     files = [{"path": p, "sha256": sha256((DOCS_PY / p).read_bytes()).hexdigest()}
-             for p in ["numba.py"] + manifest + ["replay.py"]]
+             for p in ["numba.py"] + manifest + ["replay.py", "research.py"]]
     version = sha256(json.dumps(files, sort_keys=True).encode()).hexdigest()
     (DOCS_PY / "manifest_replay.json").write_text(
         json.dumps({"bundle_sha256": version, "files": files}, indent=2) + "\n", encoding="utf-8", newline="\n")
-    print(f"wrote replay/trace bundle to {DOCS_PY}: {len(files)} verified Python files")
+    print(f"wrote dashboard bundle to {DOCS_PY}: {len(files)} verified Python files")
 
 
 if __name__ == "__main__":

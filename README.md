@@ -301,6 +301,24 @@ python dashboard/server.py
 # Open http://localhost:8000
 ```
 
+To discover **risk and profit targets together**, open
+[Target search](https://kasramb.github.io/Prop-Engine/research.html) and click
+**Discover policy**. No trade entry or CSV is required. Set drift, volatility,
+path count, horizon and account costs; the optimizer searches independent risk
+and target amounts for evaluation, funded build and remaining funded trades.
+An expanded regime set distinguishes payout proximity, profit and payout history.
+The default starts flat at $500/$500, not from the named example. Dollar grids
+include exact eligibility thresholds; continuous-dollar search is also available.
+
+Results show the discovered policy, independent 30% model holdout performance,
+cash percentiles, variance, finite-horizon funding risk and a separately labelled
+ultimate-cycle approximation. The named example is compared **after selection**,
+never supplied as a candidate. Search can miss it or underperform it; no global
+optimum is claimed. These are bracket-model experiments, **not historical strategy
+validation**. Each available session resolves one eventual bracket; market holding
+time and price-level tick constraints are not simulated. Defaults use zero costs
+and delays as an explicit idealized scenario. Export JSON to retain all inputs.
+
 Upload the bracket CSV described above or generate a synthetic history with
 configurable win rate, reward/risk ratio, stop size, sessions, trades per session,
 seed and return model. Set fees/costs/delays and ordered dollar-risk regimes.

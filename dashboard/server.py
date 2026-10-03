@@ -1,4 +1,4 @@
-"""Loopback dashboard server. Both pages use the shared chronological adapter."""
+"""Loopback server for replay, account trace and joint target research."""
 from __future__ import annotations
 
 import json
@@ -27,7 +27,9 @@ class Handler(BaseHTTPRequestHandler):
         path = urlsplit(self.path).path
         if path in ("/", "/index.html", "/trace", "/trace.html"):
             self._file("replay.html", "text/html")
-        elif path in ("/replay.js", "/history.js", "/trace.js", "/rolling.js", "/risk.js", "/replay.css"):
+        elif path in ("/research", "/research.html"):
+            self._file("research.html", "text/html")
+        elif path in ("/replay.js", "/history.js", "/trace.js", "/rolling.js", "/risk.js", "/research.js", "/replay.css"):
             self._file(path[1:], "text/css" if path.endswith(".css") else "text/javascript")
         else:
             self._send(404, {"error": "not found"})
@@ -35,7 +37,7 @@ class Handler(BaseHTTPRequestHandler):
     def _file(self, name, ctype):
         with open(os.path.join(_HERE, name), "rb") as stream:
             content = stream.read()
-        if name == "replay.html":
+        if name in ("replay.html", "research.html"):
             content = content.replace(b'data-runtime="browser"', b'data-runtime="server"')
         self._send(200, content, ctype)
 
@@ -61,7 +63,7 @@ class Handler(BaseHTTPRequestHandler):
 
 def main():
     server = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
-    print(f"Propfirm Engine: http://localhost:{PORT} (replay) /trace.html (trace)")
+    print(f"Propfirm Engine: http://localhost:{PORT} (replay) /trace.html (trace) /research.html (target search)")
     try:
         server.serve_forever()
     except KeyboardInterrupt:

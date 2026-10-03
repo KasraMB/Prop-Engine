@@ -205,6 +205,12 @@ def run(request, progress=None):
     if not isinstance(request, dict):
         raise ValueError("request must be a JSON object")
     mode = request.get("mode")
+    if mode == "model_search":
+        if __package__:
+            from .research import run_research
+        else:
+            from research import run_research
+        return run_research(request, progress=progress)
     if mode not in ("backtest", "fit"):
         raise ValueError("mode must be backtest or fit")
     if request.get("profile") != "lucidflex_50k_dll_off":

@@ -9,6 +9,7 @@ function renderRisk(result) {
   const single = r.paths < 2,
     d = r.distributions,
     o = r.options;
+  const model = result.mode === "model_search";
   const scope = result.mode === "fit" ? "OOS only" : "Full history; not OOS";
   const source =
     result.request.history_source?.kind === "synthetic"
@@ -17,6 +18,9 @@ function renderRisk(result) {
   $("riskScope").textContent = single
     ? `${source}${scope}. One observed path cannot estimate a result distribution or future ruin probability. Select rolling historical starts to compare multiple windows.`
     : `${source}${scope}. ${r.paths} historical windows; ${d.calendar_days.minimum.toFixed(2)}–${d.calendar_days.maximum.toFixed(2)} elapsed calendar days per window. Overlapping windows are dependent. Performance uses the configured wallet; bankroll requirements use the same policy with funding constraints removed.`;
+  if (model)
+    $("riskScope").textContent =
+      `${r.paths} independent model holdout paths; fixed selected policy, configured wallet. Confidence describes Monte Carlo sampling conditional on the model, not uncertainty about real-market performance.`;
   $("riskDistributionViews").hidden = single;
   $("riskMetrics").replaceChildren();
   if (single) {
@@ -61,7 +65,7 @@ function renderRisk(result) {
       percentage(r.ruin_probability),
       o.bankroll == null
         ? "No finite analysis bankroll specified"
-        : `${r.ruined_paths} / ${r.paths} windows at ${money(o.bankroll)}`,
+        : `${r.ruined_paths} / ${r.paths} ${model ? "paths" : "windows"} at ${money(o.bankroll)}`,
       undefined,
       "riskMetrics",
     );
@@ -75,13 +79,16 @@ function renderRisk(result) {
     metric(
       "Net cash standard deviation",
       money(d.net_cash.standard_deviation),
-      `Across ${r.paths} window outcomes`,
+      `Across ${r.paths} ${model ? "model-path" : "window"} outcomes`,
       undefined,
       "riskMetrics",
     );
     drawBankroll(r);
     $("riskCapitalNote").textContent =
       `Bankroll covers the largest cash deficit before receipts arrive, not just the final loss. At ${money(r.required_bankroll)}, observed shortfall frequency is ${percentage(r.achieved_empirical_ruin_probability)}. No independent-sample confidence guarantee is available from these historical windows; zero observed failures does not mean zero future risk.`;
+    if (model)
+      $("riskCapitalNote").textContent =
+        `Capital covers interim cash deficits, not only terminal losses. ${r.confidence_supported_bankroll == null ? "Too few independent paths to support the requested bankroll risk at this confidence level." : `${percentage(o.confidence)} confidence-supported bankroll: ${money(r.confidence_supported_bankroll)}.`} This is finite-horizon model risk; zero observed failures does not establish zero future risk.`;
     const head = document.createElement("tr");
     for (const label of [
       "Measure",

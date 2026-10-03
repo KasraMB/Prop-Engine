@@ -279,6 +279,67 @@ def test_rolling_results_export_chart_and_scope_in_real_browser(site):
         browser.close()
 
 
+def test_target_discovery_without_manual_history_in_real_browser(site):
+    from playwright.sync_api import sync_playwright
+    from dashboard.replay import run
+    url, runtime = site
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        page = browser.new_page(viewport={"width": 1440, "height": 1000})
+        errors = []
+        page.on("pageerror", lambda error: errors.append(str(error)))
+        page.goto(url + "research.html")
+        page.wait_for_function("ready || !document.getElementById('error').hidden", timeout=180_000)
+        assert page.locator("#error").is_hidden(), page.locator("#error").inner_text()
+        assert page.locator('input[type="file"]').count() == 0
+        for key, value in {"paths": "10", "sessions": "7", "generations": "2", "population": "4"}.items():
+            page.locator("#" + key).fill(value)
+        assert page.locator("#risk_max").input_value() == "2000"
+        expected = run(page.evaluate("collectResearch()"))
+        page.locator("#run").click()
+        page.wait_for_function("!busy && (latest !== null || !document.getElementById('error').hidden)", timeout=120_000)
+        assert page.locator("#error").is_hidden(), page.locator("#error").inner_text()
+        actual = page.evaluate("latest")
+        assert actual["fit"]["policy"] == expected["fit"]["policy"]
+        assert actual["fit"]["holdout"]["score"] == pytest.approx(expected["fit"]["holdout"]["score"])
+        assert actual["fit"]["candidate_seeds"] == 0
+        assert actual["reference_used_for_selection"] is False
+        assert actual["risk"] == expected["risk"]
+        assert "7 training / 3 holdout" in page.locator("#researchScope").inner_text()
+        assert page.locator("#researchPolicy tr").count() == 3
+        assert page.locator("#researchComparison tr").count() == 3
+        assert page.locator("#researchDecisions tr").count() > 0
+        assert "model" in page.locator("#riskScope").inner_text()
+        assert page.locator("#bankrollChart polyline").count() == 1
+        page.locator("#riskDistributionHead").evaluate("e => e.closest('details').open = true")
+        assert "Variance" in page.locator("#riskDistributionHead").inner_text()
+        with page.expect_download() as download:
+            page.locator("#download").click()
+        exported = json.loads(Path(download.value.path()).read_text())
+        assert exported == actual
+        if os.environ.get("BROWSER_SCREENSHOT_DIR"):
+            target = Path(os.environ["BROWSER_SCREENSHOT_DIR"])
+            target.mkdir(parents=True, exist_ok=True)
+            page.screenshot(path=str(target / f"research-{runtime}.png"), full_page=True)
+        page.emulate_media(media="print")
+        page.evaluate("window.dispatchEvent(new Event('beforeprint'))")
+        assert page.locator("#riskPanel").is_visible()
+        page.evaluate("window.dispatchEvent(new Event('afterprint'))")
+        page.emulate_media(media="screen")
+        page.set_viewport_size({"width": 390, "height": 844})
+        assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+        if os.environ.get("BROWSER_SCREENSHOT_DIR"):
+            page.screenshot(path=str(target / f"research-mobile-{runtime}.png"), full_page=True)
+        page.locator("#risk_min").fill("2000")
+        assert page.locator("#results").is_hidden()
+        page.locator("#run").click()
+        page.wait_for_function("!document.getElementById('error').hidden", timeout=30_000)
+        assert "bounds" in page.locator("#error").inner_text()
+        assert page.locator("#run").is_enabled()
+        assert not errors
+        browser.close()
+
+
 def test_manual_trace_uses_current_engine_and_steps_payout_events(site):
     from playwright.sync_api import sync_playwright
     from dashboard.replay import run
