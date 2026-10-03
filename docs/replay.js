@@ -184,6 +184,14 @@ function startEngine() {
   resetWorker();
   worker = new Worker("replay-worker.js");
   worker.onmessage = ({ data }) => {
+    if (data.type === "progress") {
+      const visits = data.estimated_trade_visits;
+      $("status").textContent = visits
+        ? `Estimated work: ${visits.toLocaleString()} trade visits. Running the full request; larger searches take longer. Cancel is available.`
+        : data.stage === "holdout"
+          ? "Search complete. Evaluating the frozen policy on holdout data…"
+          : `Searching: ${data.evaluations} / up to ${data.maximum_evaluations} candidate evaluations. Cancel is available.`;
+    }
     if (data.type === "status") $("runtime").textContent = data.message;
     if (data.type === "ready") {
       ready = true;

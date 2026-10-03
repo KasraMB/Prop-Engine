@@ -139,15 +139,19 @@ def test_rolling_adapter_scores_windows_and_keeps_chronological_ledger():
     assert "baseline" not in full["rolling"]
 
 
-def test_rolling_adapter_rejects_incomplete_partitions_and_excessive_work(monkeypatch):
+def test_rolling_adapter_rejects_incomplete_partitions_but_allows_large_search(monkeypatch):
     req = request_fixture()
     req.update(mode="fit", rolling={"window_sessions": 7})
     with pytest.raises(ValueError, match="no complete"):
         replay.run(req)
     req["rolling"] = {"window_sessions": 4}
     monkeypatch.setattr(replay, "_rolling_work", lambda *args: 2_000_000)
-    with pytest.raises(ValueError, match="work limit"):
-        replay.run(req)
+    req["risk_bounds"] = {name: [50, 2000] for name in req["risk_bounds"]}
+    updates = []
+    result = replay.run(req, progress=updates.append)
+    assert result["estimated_trade_visits"] > 2_000_000
+    assert updates[0]["estimated_trade_visits"] == result["estimated_trade_visits"]
+    assert any(u["stage"] == "holdout" for u in updates)
+    assert result["evaluations"] > 1
     req["mode"] = "backtest"
-    with pytest.raises(ValueError, match="work limit"):
-        replay.run(req)
+    assert replay.run(req)["estimated_trade_visits"] > 2_000_000

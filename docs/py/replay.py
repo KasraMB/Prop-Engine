@@ -187,12 +187,10 @@ def _rolling_summary(result):
 
 def _rolling_work(history, rolling):
     slices = window_slices(history, rolling)
-    if len(slices) > 2000:
-        raise ValueError("Rolling dashboard limit is 2,000 starts per partition; increase start spacing")
     return sum(end - start for start, end in slices)
 
 
-def run(request):
+def run(request, progress=None):
     """Replay or fit with explicit assumptions and an OOS-only headline on fit."""
     if not isinstance(request, dict):
         raise ValueError("request must be a JSON object")
@@ -224,8 +222,10 @@ def run(request):
               "csv_sha256": sha256(request["csv"].encode("utf-8")).hexdigest(),
               "request": {k: v for k, v in request.items() if k != "csv"}}
     if mode == "backtest":
-        if rolling is not None and _rolling_work(history, rolling) + len(history.trades) > 2_000_000:
-            raise ValueError("Rolling evaluation exceeds dashboard work limit; increase start spacing")
+        work = len(history.trades) + (_rolling_work(history, rolling) if rolling else 0)
+        output["estimated_trade_visits"] = work
+        if progress:
+            progress({"stage": "replay", "estimated_trade_visits": work})
         result = engine.backtest(spec, history, policy, config)
         output.update(headline_scope="Full history / fixed policy (not OOS)",
                       headline=_summary(result), policy=_jsonable(policy),
@@ -241,17 +241,20 @@ def run(request):
         value = search[name]
         if type(value) is not int or not lower <= value <= upper:
             raise ValueError(f"{name} must be an integer from {lower} to {upper}")
-    if len(history.trades) * (search["generations"] * search["population"] + 1) > 2_000_000:
-        raise ValueError("Search exceeds dashboard work limit; reduce search size or use the Python API")
     # The dashboard fixes 70/30; callers cannot silently override the headline split.
     train, test = history.split(0.70)
+    candidates = search["generations"] * search["population"] + 2
+    work = len(train.trades) * candidates + len(history.trades) + len(test.trades)
     if rolling is not None:
-        work = (_rolling_work(train, rolling) * (search["generations"] * search["population"] + 2)
+        work = (_rolling_work(train, rolling) * (candidates + 1)
                 + _rolling_work(test, rolling) * 2 + 2 * len(history.trades))
-        if work > 2_000_000:
-            raise ValueError("Rolling search exceeds dashboard work limit; increase start spacing or reduce search size")
+    output["estimated_trade_visits"] = work
+    if progress:
+        progress({"stage": "search", "estimated_trade_visits": work,
+                  "evaluations": 0, "maximum_evaluations": candidates})
     fitted = engine.fit(spec, history, config, policy=policy, risk_bounds=request["risk_bounds"],
-                        objective=OBJECTIVES[objective_name], train_fraction=0.70, rolling=rolling, **search)
+                        objective=OBJECTIVES[objective_name], train_fraction=0.70, rolling=rolling,
+                        progress=progress, **search)
     baseline = engine.backtest(spec, test, policy, config)
     output.update(headline_scope="Out of sample / final 30% of sessions",
                   headline=_summary(fitted.out_of_sample), score=fitted.score,

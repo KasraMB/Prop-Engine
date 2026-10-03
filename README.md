@@ -28,6 +28,45 @@ python -m pip install -e ".[dev]"
 python -m pytest -q
 ```
 
+## Research state-dependent risk and targets
+
+Historical replay keeps recorded brackets fixed. For **model-based** joint
+risk/target search, use the separate `propfirm_engine.target_research` API:
+
+```python
+from datetime import timedelta
+from propfirm_engine import BacktestConfig
+from propfirm_engine.firms.lucidflex import replay_50k
+from propfirm_engine.target_research import BracketModel, fit_targets, lucidflex_example
+
+spec = replay_50k(eval_fee=105.20, reset_fee=105, contract_type="micro")
+config = BacktestConfig(0, timedelta(0), timedelta(0), timedelta(0))
+policy = lucidflex_example()  # explicit baseline, not a discovered result
+names = [r.name for r in policy.sizing.regimes]
+fit = fit_targets(
+    spec, BracketModel(sessions=60, mu=0, sigma=1000), config,
+    policy=policy,
+    risk_bounds={n: (50, 2000) for n in names},
+    target_bounds={n: (150, 3000) for n in names},
+    paths=100, seed=42, holdout_seed=43,
+    objective=lambda result: result.net_cash_per_day,
+)
+print(fit.policy, fit.holdout.score, fit.holdout.score_standard_error)
+```
+
+Each changed bracket gets a drift-aware hit probability; the existing account
+engine handles consistency, winning days, drawdown, payouts, fees and restarts.
+The assumed clock is one completed bracket per available session, **not simulated
+market passage time**. The 70/30 split here is independent model paths, not
+historical IS/OOS. Read [assumptions and verification](docs/ANALYTICAL_MODEL.md#joint-risk-and-target-research)
+before interpreting the cash/day result. Real-price validation is not implemented.
+
+To search from a flat $500/$500 policy without supplying the example as a seed:
+
+```sh
+python benchmarks/target_policy.py --paths 100 --sessions 30 --generations 20
+```
+
 ## Backtest a trade history
 
 Each row describes one completed trade, including its original stop and target

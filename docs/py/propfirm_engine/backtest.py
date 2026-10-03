@@ -106,8 +106,10 @@ def _check_support(spec):
 class _Replay:
     """Coordinates existing rules, feasibility projection and dated payout accounting."""
 
-    def __init__(self, spec, history, policy, config):
+    def __init__(self, spec, history, policy, config, *, bracket_factory=None):
         self.spec, self.history, self.policy, self.config = spec, history, policy, config
+        # Internal research hook; the public historical API never retargets trades.
+        self.bracket_factory = bracket_factory
         compiled = _check_support(spec)
         self.phases = {p.role: p for p in compiled.phases}
         self.source = {p.role: p for p in spec.account.phases}
@@ -305,6 +307,8 @@ class _Replay:
         if regime.risk_dollars == 0:
             self.emit(trade.entry_at, "policy_skip", regime=regime.name)
             return
+        if self.bracket_factory is not None:
+            trade = self.bracket_factory(trade, regime, self, day_index)
         fixed = Fraction(str(self.config.cost_per_trade))
         cost = Fraction(str(self.config.cost_per_contract))
         per_unit = Fraction(str(trade.stop_loss)) + cost

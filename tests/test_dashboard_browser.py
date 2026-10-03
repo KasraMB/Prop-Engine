@@ -52,6 +52,9 @@ def test_upload_fit_export_and_errors_in_real_browser(site, tmp_path):
         page.wait_for_function("document.getElementById('fileStatus').textContent.includes('history.csv')")
         page.locator("#generations").fill("2")
         page.locator("#population").fill("4")
+        assert page.locator('[data-field="maximum"]').count() > 0
+        for field in page.locator('[data-field="maximum"]').all():
+            field.fill("2000")
         request = page.evaluate("collect()")
         expected = run(request)
         page.locator("#run").click()
@@ -65,7 +68,11 @@ def test_upload_fit_export_and_errors_in_real_browser(site, tmp_path):
         result = json.loads(Path(download.value.path()).read_text())
         assert result["score"] == pytest.approx(expected["score"], abs=1e-8)
         assert result["headline"]["events"] == expected["headline"]["events"]
-        assert result["policy"] == expected["policy"]
+        for actual_regime, expected_regime in zip(result["policy"]["regimes"], expected["policy"]["regimes"], strict=True):
+            # Browser and native linear algebra may differ in the last bits.
+            # Executed event ledgers above must still agree exactly.
+            assert actual_regime["risk_dollars"] == pytest.approx(expected_regime["risk_dollars"], abs=1e-10, rel=0)
+            assert {k:v for k,v in actual_regime.items() if k != "risk_dollars"} == {k:v for k,v in expected_regime.items() if k != "risk_dollars"}
         assert len(page.locator("#cashChart polyline").all()) == 2
         chart = page.evaluate("cashSeries(latest)")
         assert chart["start"] == result["training"]["start"]
@@ -130,9 +137,12 @@ def test_upload_fit_export_and_errors_in_real_browser(site, tmp_path):
         page.locator("#gen_trades_per_day").fill("4")
         if runtime == "static":
             page.locator("#mode").select_option("fit")
+            page.locator("#rollingMode").select_option("rolling")
             page.locator("#generations").fill("100")
             page.locator("#population").fill("32")
             page.locator("#run").click()
+            page.wait_for_function("document.getElementById('status').textContent.includes('candidate evaluations') || !document.getElementById('error').hidden", timeout=60_000)
+            assert page.locator("#error").is_hidden(), page.locator("#error").inner_text()
             page.locator("#cancel").click()
             assert page.locator("#results").is_hidden()
             page.wait_for_function("!document.getElementById('run').disabled", timeout=180_000)

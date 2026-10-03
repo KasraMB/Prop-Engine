@@ -37,12 +37,16 @@ async function boot() {
       py.FS.writeFile(dest, new Uint8Array(bytes));
     }),
   );
+  py.globals.set("report_progress", (payload) =>
+    postMessage({ type: "progress", ...JSON.parse(payload) }),
+  );
   py.runPython(`import sys, json
 sys.path.insert(0, "/pkg")
 from replay import run, generate, manual
 def run_json(action, payload):
     handler = {"run": run, "generate": generate, "manual": manual}[action]
-    return json.dumps(handler(json.loads(payload)), allow_nan=False)
+    kwargs = {"progress": lambda update: report_progress(json.dumps(update))} if action == "run" else {}
+    return json.dumps(handler(json.loads(payload), **kwargs), allow_nan=False)
 `);
   execute = py.globals.get("run_json");
   postMessage({ type: "ready", version: manifest.bundle_sha256.slice(0, 12) });
