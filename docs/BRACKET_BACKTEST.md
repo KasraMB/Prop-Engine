@@ -111,6 +111,51 @@ search-selected value. Choose regimes and bounds before opening OOS results.
   declared session's close. Gaps/weekends count as elapsed time. Cash after that
   horizon is not included; `outstanding_payouts` is separately reported.
 
+## Rolling historical starts
+
+Added 2026-10-03. `RollingConfig(window_sessions, stride_sessions=1)` selects
+fixed-length windows of complete **observed sessions**, not elapsed days. Actual
+timestamps, gaps, brackets and trade ordering remain unchanged. Each start gets
+a fresh account and the configured initial wallet. Its lifecycle still retries
+after failures and live handoffs. This is start-date sensitivity, not resampling.
+
+`Engine.rolling_backtest(..., rolling=rolling, objective=None)` returns compact
+per-window records and an equal-weight mean objective. Defaults use each window's
+net external cash divided by its own elapsed calendar days. This is a mean of
+rates across starts, not a ratio of summed cash to summed days. A custom objective
+receives each canonical `BacktestResult`, must return a finite real scalar and
+is averaged the same way. No independent-sample standard errors are supplied.
+
+Candidate starts are session indices 0, stride, 2*stride, etc. Incomplete tail
+windows are excluded and counted; no complete windows is an error. Complete
+windows can still end before an evaluation resolves or before a payout arrives:
+
+- First-evaluation outcomes are passed, failed, unresolved, not started (wallet),
+  or not applicable (direct funded). Later retries cannot overwrite the first
+  evaluation outcome. Pass rate divides passes by started first evaluations,
+  including unresolved ones. No started evaluations yields `None`, not zero.
+- Time to pass is elapsed calendar days from the first evaluation's phase start,
+  conditional on its passing inside the window. Other windows have no pass time.
+- Payout frequency counts windows with a receipt event; approvals alone do not
+  count. MLL frequency counts windows with an actual `FAIL_TRAILING_DD`, not
+  `CAPPED_OUT` or inactivity. Both lifecycle frequencies include later attempts.
+- Cash, fees, receipts, executed trades and failed attempts cover the whole
+  window lifecycle. Outstanding payouts are separate. Maximum **external cash**
+  drawdown measures peak-to-trough cumulative receipts minus fees, starting at
+  zero; it is not trading equity drawdown and does not infer intratrade prices.
+- Distributions report arithmetic mean, median, min/max and linear-interpolated
+  5th/95th percentiles. These describe dependent window outcomes, not confidence
+  bounds or a count of independent futures. Overlapping profits are never summed.
+
+Passing `rolling` to `Engine.fit` splits whole sessions first, then optimizes the
+mean IS-window objective. No window crosses the split. Search settings and window
+length/spacing must be selected before inspecting OOS. The frozen policy is
+reported on OOS windows; `fit.score` is their mean objective. The original single
+chronological replays remain available alongside `in_sample_rolling` and
+`out_of_sample_rolling`, so neither view is silently replaced. Compact window
+records retain session bounds and fingerprints; replay those exact bounds with
+`Engine.backtest` when a full event ledger is needed.
+
 ## Fitting and reporting
 
 `Engine.fit` splits whole chronological sessions at floor(0.70 * session_count).

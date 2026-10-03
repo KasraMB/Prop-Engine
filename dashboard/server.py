@@ -27,7 +27,7 @@ class Handler(BaseHTTPRequestHandler):
         path = urlsplit(self.path).path
         if path in ("/", "/index.html", "/trace", "/trace.html"):
             self._file("replay.html", "text/html")
-        elif path in ("/replay.js", "/history.js", "/trace.js", "/replay.css"):
+        elif path in ("/replay.js", "/history.js", "/trace.js", "/rolling.js", "/replay.css"):
             self._file(path[1:], "text/css" if path.endswith(".css") else "text/javascript")
         else:
             self._send(404, {"error": "not found"})

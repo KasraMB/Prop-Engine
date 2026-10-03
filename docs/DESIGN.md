@@ -16,6 +16,7 @@ The initial operating scope is one active account with repeated attempts.
 | `payouts.py`, `cashflows.py` | Payout events and external cash accounting |
 | `backtest.py` | Chronological lifecycle orchestration using existing components |
 | `optimizer.py`, `fitting.py` | Search and chronological held-out policy evaluation |
+| `rolling.py` | Whole-session historical windows and compact outcomes over the same backtest engine |
 | `analytical.py` | Explicitly scoped diffusion approximations |
 | `firms/` | Account configurations; no firm-name branches in execution logic |
 
@@ -25,6 +26,12 @@ The initial operating scope is one active account with repeated attempts.
 `Engine.fit` selects named dollar-risk regimes on IS and reports the frozen
 policy on the chronological OOS partition. Per-trade historical reward/risk
 ratios are preserved. Custom objectives receive complete lifecycle results.
+
+Optional rolling evaluation changes the sampling of historical starts, not the
+rule engine. Windows retain timestamps and ordering, reset account/wallet state,
+and never cross IS/OOS boundaries. Optimizer candidates use mean IS-window scores;
+the reported score uses untouched OOS windows. Single chronological replay results
+remain available. Overlapping outcomes are not independent observations.
 
 `Engine.run` is the separate resampled Monte Carlo research path. Its strict
 input-capability checks remain active; closed summaries do not establish ordered

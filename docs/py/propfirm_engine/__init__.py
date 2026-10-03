@@ -6,6 +6,7 @@ from .execution import (
 )
 from .backtest import BacktestEvent, BacktestResult
 from .fitting import HoldoutFit
+from .rolling import RollingConfig, RollingWindow, RollingResult
 from .payouts import PayoutEvent, PayoutRequest, PayoutLedger
 from .analytical import (
     BarrierEstimate, SessionMoments, barrier_pass_probability,
@@ -117,6 +118,7 @@ from .rules import (
 __all__ = [
     "BracketTrade", "BracketHistory", "RiskRegime", "DollarPolicy",
     "LifecycleSpec", "BacktestConfig", "BacktestEvent", "BacktestResult", "HoldoutFit",
+    "RollingConfig", "RollingWindow", "RollingResult",
     # enums
     "FAILURE_THRESHOLD",
     "ExitCode",

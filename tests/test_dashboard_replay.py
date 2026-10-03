@@ -112,8 +112,42 @@ def test_committed_replay_assets_and_bridge_are_synchronized():
     root = Path(__file__).resolve().parents[1]
     for name, target in (("replay.html", "index.html"), ("replay.html", "trace.html"),
                          ("history.js", "history.js"), ("trace.js", "trace.js"), ("replay.js", "replay.js"),
+                         ("rolling.js", "rolling.js"),
                          ("replay.css", "replay.css"), ("replay-worker.js", "replay-worker.js")):
         assert (root / "dashboard" / name).read_text(encoding="utf-8") == (root / "docs" / target).read_text(encoding="utf-8")
     source = (root / "dashboard/replay.py").read_text(encoding="utf-8")
     filtered = "\n".join(line for line in source.splitlines() if not line.startswith("sys.path.insert(")) + "\n"
     assert filtered == (root / "docs/py/replay.py").read_text(encoding="utf-8")
+
+
+def test_rolling_adapter_scores_windows_and_keeps_chronological_ledger():
+    req = request_fixture()
+    req.update(mode="fit", rolling={"window_sessions": 4, "stride_sessions": 2})
+    result = replay.run(req)
+    rolling = result["rolling"]
+    assert result["selection_basis"] == "mean_window_objective"
+    assert result["score"] == rolling["headline"]["summary"]["score"]
+    assert len(rolling["training"]["windows"]) == 6
+    assert len(rolling["headline"]["windows"]) == 2
+    assert rolling["headline"]["excluded_incomplete_starts"] == 1
+    assert result["headline"]["events"] and result["training"]["events"]
+    assert [w["first_session"] for w in rolling["headline"]["windows"]] == [w["first_session"] for w in rolling["baseline"]["windows"]]
+    json.dumps(result, allow_nan=False)
+    req["mode"] = "backtest"
+    full = replay.run(req)
+    assert len(full["rolling"]["headline"]["windows"]) == 9
+    assert "baseline" not in full["rolling"]
+
+
+def test_rolling_adapter_rejects_incomplete_partitions_and_excessive_work(monkeypatch):
+    req = request_fixture()
+    req.update(mode="fit", rolling={"window_sessions": 7})
+    with pytest.raises(ValueError, match="no complete"):
+        replay.run(req)
+    req["rolling"] = {"window_sessions": 4}
+    monkeypatch.setattr(replay, "_rolling_work", lambda *args: 2_000_000)
+    with pytest.raises(ValueError, match="work limit"):
+        replay.run(req)
+    req["mode"] = "backtest"
+    with pytest.raises(ValueError, match="work limit"):
+        replay.run(req)

@@ -8,6 +8,7 @@
     <script src="replay.js" defer></script>
     <script src="history.js" defer></script>
     <script src="trace.js" defer></script>
+    <script src="rolling.js" defer></script>
   </head>
   <body data-runtime="browser">
     <header>
@@ -516,6 +517,40 @@ entry_at,exit_at,session,stop_loss,take_profit,won
                   required
               /></label>
             </div>
+            <div id="rollingControls" class="replay-only">
+              <label
+                >Evaluation method<select id="rollingMode">
+                  <option value="single">Single chronological run</option>
+                  <option value="rolling">Rolling historical starts</option>
+                </select></label
+              >
+              <fieldset id="rollingParameters" hidden disabled>
+                <div class="fields">
+                  <label
+                    >Window length (sessions)<input
+                      id="window_sessions"
+                      type="number"
+                      min="1"
+                      value="20"
+                      required
+                  /></label>
+                  <label
+                    >Start spacing (sessions)<input
+                      id="stride_sessions"
+                      type="number"
+                      min="1"
+                      value="1"
+                      required
+                  /></label>
+                </div>
+                <p class="muted">
+                  Every complete window starts a fresh account and wallet. In
+                  fit mode, select on IS windows and report OOS windows.
+                  Incomplete tails are excluded; overlapping starts are not
+                  independent simulations.
+                </p>
+              </fieldset>
+            </div>
             <p class="muted fit-only">
               IS-unvisited regimes retain their initial risk. OOS is a holdout
               only if it is not reused to tune the strategy or search. Custom
@@ -600,6 +635,69 @@ entry_at,exit_at,session,stop_loss,take_profit,won
           <pre id="traceDetails"></pre>
         </section>
         <div id="metrics" class="metrics"></div>
+        <p id="chronologicalNote" class="muted" hidden>
+          Rolling objective above; other lifecycle cards and the cumulative cash
+          chart describe the separate single chronological replay, not sums
+          across windows.
+        </p>
+        <section id="rollingPanel" class="panel" hidden>
+          <h3 id="rollingTitle">Rolling historical starts</h3>
+          <p id="rollingScope" class="muted"></p>
+          <div id="rollingMetrics" class="metrics"></div>
+          <h4>Net cash / calendar day by window start</h4>
+          <svg
+            id="rollingChart"
+            viewBox="0 0 700 230"
+            role="img"
+            aria-label="Per-window net cash per calendar day by historical start date"
+          ></svg>
+          <p id="rollingOutcomes" class="muted"></p>
+          <p class="muted">
+            Pass rate: first evaluation only, including unresolved started
+            evaluations in the denominator. Payout and MLL rates: any received
+            payout or actual MLL breach within a window, including retries.
+            Overlapping starts are dependent; percentiles describe outcomes, not
+            confidence intervals.
+          </p>
+          <details>
+            <summary>Window distributions and records</summary>
+            <div class="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Measure</th>
+                    <th>Mean</th>
+                    <th>Median</th>
+                    <th>P05</th>
+                    <th>P95</th>
+                  </tr>
+                </thead>
+                <tbody id="rollingDistributions"></tbody>
+              </table>
+            </div>
+            <p class="muted">
+              External cash drawdown includes fees and received payouts, not
+              trading-account equity. Full window records are included in the
+              JSON export; the table shows at most 500.
+            </p>
+            <div class="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Start session</th>
+                    <th>End session</th>
+                    <th>First evaluation</th>
+                    <th>Net cash</th>
+                    <th>Cash / day</th>
+                    <th>Payouts received</th>
+                    <th>Attempts</th>
+                  </tr>
+                </thead>
+                <tbody id="rollingWindows"></tbody>
+              </table>
+            </div>
+          </details>
+        </section>
         <div class="setup-grid result-grid">
           <section class="panel">
             <h3>Cumulative external net cash</h3>

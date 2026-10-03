@@ -135,12 +135,49 @@ fit = engine.fit(
 )
 ```
 
+## Rolling historical starts
+
+Keep the market sequence intact and reset the account and wallet at each selected
+session start. Each window uses the same repeated-attempt engine, including retries
+after breaches and live handoffs. No trades are shuffled or dates rebased.
+
+```python
+from propfirm_engine import RollingConfig
+
+# Five sessions fits both partitions of the small example above.
+rolling = RollingConfig(window_sessions=5, stride_sessions=1)
+starts = engine.rolling_backtest(spec, history, policy, config, rolling=rolling)
+print(starts.summary)  # per-window distributions, first-evaluation outcomes and rates
+
+fit = engine.fit(
+    spec, history, config,
+    policy=policy,
+    risk_bounds={r.name: (50, 500) for r in policy.regimes},
+    rolling=rolling, seed=42,
+)
+print(fit.score)  # mean OOS-window net cash / calendar day
+print(fit.out_of_sample_rolling.summary)
+```
+
+Fitting splits sessions 70/30 **before** building windows. Each partition must
+contain at least one complete window. The objective is the equal-weight mean of
+per-window scores; a custom callable still receives a single `BacktestResult`.
+The full chronological IS/OOS replays remain in `fit.in_sample` / `fit.out_of_sample`.
+Incomplete tail starts are counted and excluded. Unresolved evaluations within
+complete windows are reported separately, not treated as failures.
+
+Overlapping starts are dependent historical scenarios, not independent future
+simulations. Their cashflows must not be summed as portfolio profit; reported
+percentiles describe window outcomes, not confidence intervals. See the
+[rolling evaluation contract](docs/BRACKET_BACKTEST.md#rolling-historical-starts).
+
 ## API map
 
 | Task | Entry point |
 | --- | --- |
 | Import sequential stop/target records | `BracketHistory.from_records(...)` |
 | Replay dated account attempts | `Engine.backtest(...)` |
+| Evaluate ordered historical starting windows | `Engine.rolling_backtest(...)` |
 | Fit dollar regimes and evaluate held-out history | `Engine.fit(...)` |
 | Resampled Monte Carlo research on trade summaries | `Engine.run(...)` |
 | Drift-aware barrier approximations | [Analytical API](docs/ANALYTICAL_MODEL.md) |

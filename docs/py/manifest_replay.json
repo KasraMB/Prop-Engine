@@ -1,5 +1,5 @@
 {
-  "bundle_sha256": "f81a93a6d770d4ebff0f09c461ce9b19d2664c72ffca8f0e01a33bd2d2e823ae",
+  "bundle_sha256": "8df60b43a75ab3f613933dd4be0c8cce099e9a8c0b0a3061a6729567598f1dc5",
   "files": [
     {
       "path": "numba.py",
@@ -7,7 +7,7 @@
     },
     {
       "path": "propfirm_engine/__init__.py",
-      "sha256": "916373405e87cf83e2afdfdf0064445bd0adad234fbd927027af00985ac6848a"
+      "sha256": "9eadb4236912ade70139496de4763a1dc7600c8199308545006efdb99c753ea2"
     },
     {
       "path": "propfirm_engine/analytical.py",
@@ -39,7 +39,7 @@
     },
     {
       "path": "propfirm_engine/engine.py",
-      "sha256": "60212886183824bbc999973895927ee0c1467f5f1cb84faf6504c443aa55c64f"
+      "sha256": "6d04977813740228fc5cc0fa181ae50b3a6fc37d837499a3ab811c2f42868477"
     },
     {
       "path": "propfirm_engine/enums.py",
@@ -67,7 +67,7 @@
     },
     {
       "path": "propfirm_engine/fitting.py",
-      "sha256": "6f075565e3da7dfe4413bcce3f51236a84a88ad360c75b8a3ca91572453fe5d4"
+      "sha256": "7e62fdfc7382e477cfd319e289ce2c2854b61e7bbee9fe255ca6d92f0a84eb98"
     },
     {
       "path": "propfirm_engine/kernels.py",
@@ -110,6 +110,10 @@
       "sha256": "873ef3bd64b5b3a55e7284d878516025419b7ab7b98327139355c0ff3092f3ee"
     },
     {
+      "path": "propfirm_engine/rolling.py",
+      "sha256": "c6e656217932bd65d32ae2435e8bd503b45e1d51163f4747f328b6170f6f5745"
+    },
+    {
       "path": "propfirm_engine/rules.py",
       "sha256": "b223803be0614d5d1c6919df167914933dbeda46a07a0705f5db94298c48677f"
     },
@@ -135,7 +139,7 @@
     },
     {
       "path": "replay.py",
-      "sha256": "fbe7c142be6d4415770dd83334352cd4e2c852b66696f55e524443458635ff87"
+      "sha256": "8df6f6168ef4998aecc62301b21f10413ebcdcedbe73faabef9b396b376629c3"
     }
   ]
 }

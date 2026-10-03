@@ -40,6 +40,27 @@ configuration. The original CSV is not included; preserve it alongside its expor
 Generated histories can be downloaded as CSV; their generator parameters and realized
 statistics are included in result provenance.
 
+## Rolling historical starts
+
+Choose **Evaluation method → Rolling historical starts**, then set window length
+and start spacing in observed sessions. In fit mode, the optimizer scores the
+mean IS-window objective and reports OOS-window results with an initial-policy
+comparison on exactly the same starts. In fixed-policy mode, windows cover the
+full supplied history and are explicitly not labeled OOS.
+
+The objective card becomes the mean window score. The rolling panel shows window
+counts, excluded tails, first-evaluation outcomes, lifecycle payout/MLL frequencies,
+cash distributions and a plot by historical starting date. All window summaries
+are exported in JSON; the table shows at most 500. The full chronological cash
+chart and other lifecycle cards remain separate, never sums across overlapping
+windows. Trace mode remains a single chronological event viewer.
+
+Each partition needs a complete window. The dashboard caps starts at 2,000 per
+partition and bounds total candidate-window trade work at two million; increase
+start spacing or use the Python API for larger studies. No trading data is fetched
+and no new randomness is introduced by rolling evaluation. Overlapping starts
+are dependent; percentiles are outcome spread, not confidence intervals.
+
 ## Synthetic inputs and account trace
 
 The synthetic input controls win probability, gross reward/risk ratio, base stop

@@ -14,7 +14,8 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
-from propfirm_engine import BacktestConfig, BracketHistory, DollarPolicy, Engine, RiskRegime
+from propfirm_engine import BacktestConfig, BracketHistory, DollarPolicy, Engine, RiskRegime, RollingConfig
+from propfirm_engine.rolling import window_slices
 from propfirm_engine.firms.lucidflex import replay_50k
 from propfirm_engine.synthetic import IIDGenerator, RegimeSwitchingGenerator, StochasticVolGenerator
 from zoneinfo import ZoneInfo
@@ -181,6 +182,17 @@ def _partition(history):
             "last_session": history.sessions[-1].isoformat()}
 
 
+def _rolling_summary(result):
+    return {**_jsonable(result), "summary": result.summary}
+
+
+def _rolling_work(history, rolling):
+    slices = window_slices(history, rolling)
+    if len(slices) > 2000:
+        raise ValueError("Rolling dashboard limit is 2,000 starts per partition; increase start spacing")
+    return sum(end - start for start, end in slices)
+
+
 def run(request):
     """Replay or fit with explicit assumptions and an OOS-only headline on fit."""
     if not isinstance(request, dict):
@@ -206,16 +218,24 @@ def run(request):
     if objective_name not in OBJECTIVES:
         raise ValueError("Unsupported dashboard objective; custom callables belong in the Python API")
     engine = Engine()
+    rolling = RollingConfig(**request["rolling"]) if request.get("rolling") is not None else None
     output = {"schema_version": 1, "mode": mode, "profile": request["profile"],
               "objective": objective_name, "direction": "maximize", "input": _partition(history),
               "execution_model": "sequential_ideal_brackets",
               "csv_sha256": sha256(request["csv"].encode("utf-8")).hexdigest(),
               "request": {k: v for k, v in request.items() if k != "csv"}}
     if mode == "backtest":
+        if rolling is not None and _rolling_work(history, rolling) + len(history.trades) > 2_000_000:
+            raise ValueError("Rolling evaluation exceeds dashboard work limit; increase start spacing")
         result = engine.backtest(spec, history, policy, config)
         output.update(headline_scope="Full history / fixed policy (not OOS)",
                       headline=_summary(result), policy=_jsonable(policy),
                       score=OBJECTIVES[objective_name](result))
+        if rolling is not None:
+            windows = engine.rolling_backtest(spec, history, policy, config, rolling=rolling,
+                                              objective=OBJECTIVES[objective_name])
+            output.update(rolling={"headline": _rolling_summary(windows)},
+                          score=windows.score, selection_basis="mean_window_objective")
         return output
     search = dict(request["search"])
     for name, lower, upper in (("generations", 0, 100), ("population", 2, 32), ("seed", 0, 2**32 - 1)):
@@ -226,8 +246,13 @@ def run(request):
         raise ValueError("Search exceeds dashboard work limit; reduce search size or use the Python API")
     # The dashboard fixes 70/30; callers cannot silently override the headline split.
     train, test = history.split(0.70)
+    if rolling is not None:
+        work = (_rolling_work(train, rolling) * (search["generations"] * search["population"] + 2)
+                + _rolling_work(test, rolling) * 2 + 2 * len(history.trades))
+        if work > 2_000_000:
+            raise ValueError("Rolling search exceeds dashboard work limit; increase start spacing or reduce search size")
     fitted = engine.fit(spec, history, config, policy=policy, risk_bounds=request["risk_bounds"],
-                        objective=OBJECTIVES[objective_name], train_fraction=0.70, **search)
+                        objective=OBJECTIVES[objective_name], train_fraction=0.70, rolling=rolling, **search)
     baseline = engine.backtest(spec, test, policy, config)
     output.update(headline_scope="Out of sample / final 30% of sessions",
                   headline=_summary(fitted.out_of_sample), score=fitted.score,
@@ -236,4 +261,12 @@ def run(request):
                   split={"train": _partition(train), "test": _partition(test),
                          "fraction": 0.70, "boundary_policy": fitted.boundary_policy},
                   evaluations=fitted.evaluations, seed=fitted.seed)
+    if rolling is not None:
+        baseline_rolling = engine.rolling_backtest(spec, test, policy, config, rolling=rolling,
+                                                   objective=OBJECTIVES[objective_name])
+        output.update(selection_basis="mean_window_objective", rolling={
+            "headline": _rolling_summary(fitted.out_of_sample_rolling),
+            "training": _rolling_summary(fitted.in_sample_rolling),
+            "baseline": _rolling_summary(baseline_rolling),
+        })
     return output

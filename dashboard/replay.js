@@ -244,6 +244,13 @@ function collect(modeOverride = null) {
     mode: modeOverride || (traceView ? "backtest" : $("mode").value),
     csv: csvText,
     history_source: sourceMetadata,
+    rolling:
+      !traceView && $("rollingMode").value === "rolling"
+        ? {
+            window_sessions: Number($("window_sessions").value),
+            stride_sessions: Number($("stride_sessions").value),
+          }
+        : null,
     objective: $("objective").value,
     account: {
       eval_fee: Number($("eval_fee").value),
@@ -323,10 +330,16 @@ function render(result) {
   $("metrics").replaceChildren();
   metric(
     result.objective === "net_cash"
-      ? "Objective · net external cash"
-      : "Objective · net cash / calendar day",
+      ? "Objective · " +
+          (result.rolling ? "mean window net cash" : "net external cash")
+      : "Objective · " +
+          (result.rolling
+            ? "mean window cash / day"
+            : "net cash / calendar day"),
     money(result.score),
-    "Observed result, not population EV",
+    result.rolling
+      ? "Equal-weight mean across reported windows"
+      : "Observed result, not population EV",
     result.score,
   );
   metric(
@@ -368,7 +381,8 @@ function render(result) {
     "Initial policy, same scenario and holdout",
   );
   const observed = new Set(
-    (result.training?.events || []).map((e) => e.regime).filter(Boolean),
+    result.rolling?.training?.visited_regimes ||
+      (result.training?.events || []).map((e) => e.regime).filter(Boolean),
   );
   $("selectedPolicy").replaceChildren();
   result.policy.regimes.forEach((regime, i) => {
@@ -423,6 +437,7 @@ function render(result) {
     2,
   );
   drawCash(result);
+  renderRolling(result);
   $("results").hidden = false;
 }
 function cashPoints(result, offset = 0) {

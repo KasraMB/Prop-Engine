@@ -145,6 +145,72 @@ def test_upload_fit_export_and_errors_in_real_browser(site, tmp_path):
         browser.close()
 
 
+def test_rolling_results_export_chart_and_scope_in_real_browser(site):
+    from playwright.sync_api import sync_playwright
+    from dashboard.replay import run
+    url, runtime = site
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        page = browser.new_page(viewport={"width": 1440, "height": 1000})
+        errors = []; page.on("pageerror", lambda error: errors.append(str(error)))
+        page.goto(url)
+        page.wait_for_function("ready || !document.getElementById('error').hidden", timeout=180_000)
+        assert page.locator("#error").is_hidden()
+        page.locator("#generate").click()
+        page.wait_for_function("!busy && csvText.length > 0", timeout=30_000)
+        page.locator("#rollingMode").select_option("rolling")
+        page.locator("#window_sessions").fill("10")
+        page.locator("#stride_sessions").fill("3")
+        page.locator("#generations").fill("1")
+        page.locator("#population").fill("4")
+        expected = run(page.evaluate("collect()"))
+        page.locator("#run").click()
+        page.wait_for_function("!busy && latest !== null", timeout=120_000)
+        actual = page.evaluate("latest")
+        assert actual["rolling"] == expected["rolling"]
+        assert actual["score"] == pytest.approx(expected["score"])
+        assert page.locator("#rollingPanel").is_visible()
+        assert "OOS" in page.locator("#rollingTitle").inner_text()
+        assert page.locator("#rollingChart circle").count() == 5
+        assert page.locator("#rollingWindows tr").count() == 5
+        assert page.locator("#cashChart polyline").count() == 2
+        assert page.locator("#oosBoundary").count() == 1
+        assert "mean window" in page.locator("#metrics").inner_text()
+        assert "16 IS windows" in page.locator("#rollingScope").inner_text()
+        for dot in page.locator("#rollingChart circle").all():
+            assert 70 <= float(dot.get_attribute("cx")) <= 680
+            assert 25 <= float(dot.get_attribute("cy")) <= 190
+            assert dot.locator("title").text_content()
+        with page.expect_download() as download:
+            page.locator("#download").click()
+        exported = json.loads(Path(download.value.path()).read_text())
+        assert exported["rolling"] == actual["rolling"]
+        page.locator("#rollingPanel details").evaluate("e => e.open = true")
+        if os.environ.get("BROWSER_SCREENSHOT_DIR"):
+            target = Path(os.environ["BROWSER_SCREENSHOT_DIR"]); target.mkdir(parents=True, exist_ok=True)
+            page.locator("#rollingPanel").screenshot(path=str(target / f"rolling-{runtime}.png"))
+        page.set_viewport_size({"width": 390, "height": 844})
+        assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+        page.locator("#window_sessions").fill("999")
+        assert page.locator("#results").is_hidden()
+        page.locator("#run").click()
+        page.wait_for_function("!document.getElementById('error').hidden", timeout=30_000)
+        assert "no complete" in page.locator("#error").inner_text()
+        page.locator("#window_sessions").fill("10")
+        page.locator("#mode").select_option("backtest")
+        page.locator("#run").click()
+        page.wait_for_function("!busy && latest !== null", timeout=90_000)
+        assert "not OOS" in page.locator("#rollingTitle").inner_text()
+        assert page.locator("#rollingChart circle").count() == 24
+        page.locator("#rollingMode").select_option("single")
+        page.locator("#run").click()
+        page.wait_for_function("!busy && latest !== null", timeout=30_000)
+        assert page.locator("#rollingPanel").is_hidden()
+        assert page.locator("#chronologicalNote").is_hidden()
+        assert not errors
+        browser.close()
+
+
 def test_manual_trace_uses_current_engine_and_steps_payout_events(site):
     from playwright.sync_api import sync_playwright
     from dashboard.replay import run
