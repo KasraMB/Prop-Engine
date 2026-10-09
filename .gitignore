@@ -33,6 +33,7 @@ coverage.xml
 
 # Local market data and generated results
 /Data/
+/research/
 /results/
 /Test_Strategies/results/
 /Test_Strategies/*.csv
