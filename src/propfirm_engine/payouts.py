@@ -98,6 +98,7 @@ class PayoutLedger:
         self._events = []
         self._cumulative_gross = Fraction(0)
         self._approved_count = 0
+        self._terminated = False
 
     @property
     def balance(self):
@@ -129,7 +130,7 @@ class PayoutLedger:
 
     @property
     def breached(self):
-        return self._floor is not None and self._balance <= self._floor
+        return self._terminated or (self._floor is not None and self._balance <= self._floor)
 
     @property
     def censored(self):
@@ -164,6 +165,17 @@ class PayoutLedger:
             raise ValueError("drawdown floor cannot decrease")
         self._floor = floor
         self._emit(at, "floor_update")
+
+    def terminate(self, at, net_pnl=0):
+        at = self._time(at)
+        if self._pending is not None or self._terminated:
+            raise ValueError("cannot terminate a pending or terminated ledger")
+        pnl = _money(net_pnl, "net_pnl")
+        self._balance += pnl
+        self._cycle_profit += pnl
+        self._session_profit += pnl
+        self._terminated = True
+        self._emit(at, "termination", pnl)
 
     def close_session(self, at, session):
         at = self._time(at)

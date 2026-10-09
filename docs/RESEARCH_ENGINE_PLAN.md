@@ -84,13 +84,13 @@ reproduce it. Compiled execution and the broader performance gates remain open.
 
 ### 2. Incremental account replay
 
-- [ ] Adapt the current lifecycle coordinator to fills and marks without jumping
+- [x] Adapt the current lifecycle coordinator to fills and marks without jumping
   from entry directly to exit.
-- [ ] Reuse existing closed-P&L gates, payout ledger and retry/wallet accounting.
+- [x] Reuse existing closed-P&L gates, payout ledger and retry/wallet accounting.
 - [ ] Detect breach at the first supplied observation, cancel outstanding orders,
   apply explicit liquidation, and ignore later hypothetical recovery.
-- [ ] Track closed balance separately from open equity and peak/floor state.
-- [ ] Support partial exits, overlapping positions and multi-instrument exposure.
+- [x] Track closed balance separately from open equity and peak/floor state.
+- [x] Support partial exits, overlapping positions and multi-instrument exposure.
 - [ ] Define account transitions while positions or orders remain open.
 - [ ] Make skip, order rejection and research abandonment explicit policies.
 - [ ] Correct inactivity clocks with separate session/expiry cutoffs, timezone,
@@ -99,6 +99,40 @@ reproduce it. Compiled execution and the broader performance gates remain open.
 
 Acceptance: early-exit import through fees and retries, unrealized breach before a
 profitable exit, simultaneous portfolio moves, and trace/summary metric parity.
+
+Recorded-fill milestone: `Engine.replay_events` adapts the existing `_Replay`
+coordinator and `_ReferenceSim` rules to streaming fills and atomic portfolio
+marks. Arbitrary exits, FIFO partials/reversals, EOD floors, continuous observed
+breaches, contract units, payouts, wallet constraints and retries are covered.
+General order and calendar events remain open. See [event replay](EVENT_REPLAY.md).
+
+Explicit `observed_marks` fidelity is required. Stale marks fail validation.
+Forced closes use fresh last marks and a selected per-contract fee. Positions
+are closed at session cutoff; evaluation transitions wait for flat. A skipped
+source portfolio must return to flat before recording resumes. These are explicit
+recorded-history scenarios, not general order rejection or callback semantics.
+The account cannot recover after breach. Approved receipts survive termination.
+Order cancellation and the separate inactivity expiry calendar remain open.
+
+Acceptance evidence includes a hand-calculated full LucidFlex payout path,
+100-session randomized bracket parity, partial exits and allocated fees,
+simultaneous offsetting marks, breach before a later winning exit, pending-payout
+skips, live handoff, wallet exhaustion, exact inactivity ties, trace parity and
+future-data prefix invariance. The adapter uses the existing support guards;
+other firm-rule combinations and optimizer input contracts are not expanded.
+
+Verification: 1,530 tests passed, 10 optional browser tests skipped and two known
+deprecation warnings. The executable event API example passes. The browser
+bundle contains 46 verified Python modules. The wheel builds and contains only
+the engine and package metadata. Private papers, notes and market data remain
+outside version control.
+
+Mark-heavy benchmark: Python 3.12.7 on Windows, three warm medians including event
+creation and replay setup. With trace off, 2,000/20,000 events took 0.161/1.664
+seconds, with 19,302/18,792 peak traced Python bytes. With trace on, they took
+0.192/1.800 seconds and 387,434/3,774,910 bytes. One held contract and two fills
+isolate mark-stream scaling; execution/lifecycle logs still grow with fills.
+This is not a compiled, multi-asset, native-memory or optimization benchmark.
 
 ### 3. Orders and strategy adapters
 

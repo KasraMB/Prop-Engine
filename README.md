@@ -10,10 +10,13 @@ firm rules and lifecycle settings remain separate from execution and optimizatio
 ## Status
 
 General order and portfolio execution is being developed under the
-[research engine plan](docs/RESEARCH_ENGINE_PLAN.md). The new fill/mark accounting
-component is available, but is not yet a replacement for the replay APIs below.
+[research engine plan](docs/RESEARCH_ENGINE_PLAN.md). Recorded fills and ordered
+portfolio marks now support arbitrary exits, partials and concurrent instruments
+through `Engine.replay_events`. See the [event replay API](docs/EVENT_REPLAY.md)
+for its explicit observation and liquidation assumptions. Strategy callbacks,
+general order execution and optimization of this new input are still planned.
 
-The chronological API implements the agreed **sequential stop-or-target model**.
+The bracket API implements the agreed **sequential stop-or-target model**.
 It reuses the existing rule interpreter, feasibility projection, payout ledger,
 and CMA-ES optimizer. It does not reconstruct market paths from closed trades.
 

@@ -304,6 +304,30 @@ class _ReferenceSim:
             return _MAXED_OUT
         return _ALIVE
 
+    def observe(self, balance, equity, day, *, traded=False, allow_pass=False):
+        """Apply an ordered portfolio observation, keeping balance and equity distinct."""
+        if traded and day != self.cur_day:
+            if self.cur_day != -1:
+                raise ValueError("close the previous session before observing a new one")
+            self.day_pnl = self._cash(0)
+            self.day_low = equity
+            self.cur_day = day
+            self.n_days += 1
+        balance, equity = self._cash(balance), self._cash(equity)
+        delta = balance - self.equity
+        self.equity = balance
+        self.day_pnl += delta
+        self.total_pnl += delta
+        self.day_low = min(self.day_low, equity)
+        hit, severity, code = self._first_fail(_CONTINUOUS, equity)
+        if hit:
+            if severity != _HARD:
+                raise ValueError("portfolio observations require hard failure rules")
+            return code
+        self._apply_adjusts(_CONTINUOUS)
+        self.stage_mask = self._stage_mask()
+        return _PASSED if allow_pass and self._all_pass(balance) else _ALIVE
+
     # --- the main loop ---------------------------------------------------- #
 
     def run(self, ret, day, trade_low, *, finalize=True) -> SimResult:

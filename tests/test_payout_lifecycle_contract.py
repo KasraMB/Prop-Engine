@@ -78,6 +78,29 @@ def test_trading_resumes_after_approval_before_receipt():
     assert obj.receipt_cashflows(T0)[0].amount == 440
 
 
+def test_termination_preserves_approved_receipts_and_blocks_recovery():
+    obj = ready()
+    at = T0 + timedelta(days=4)
+    rid = obj.request(at, 500, flat=True)
+    obj.approve(at)
+    obj.terminate(at, 10)
+    assert obj.balance == 50_510 and obj.breached
+    assert obj.maximum_request() == 0
+    with pytest.raises(ValueError, match="blocked"):
+        obj.record_trade(at, 1000)
+    with pytest.raises(ValueError, match="terminated"):
+        obj.terminate(at)
+    obj.receive(at + timedelta(days=1), rid)
+    assert obj.receipt_cashflows(T0)[0].amount == 450
+
+
+def test_termination_can_book_liquidation_after_balance_breach():
+    obj = ledger()
+    obj.record_trade(T0, -2000)
+    obj.terminate(T0, -5)
+    assert obj.balance == 47_995 and obj.breached
+
+
 def test_cycle_losses_do_not_disappear_behind_retained_profit():
     obj = ledger()
     earn(obj, [1000] * 5)

@@ -175,6 +175,11 @@ class Engine:
         from .market_replay import replay_prices
         return replay_prices(spec, sessions, policy, targets, instrument, config, **kwargs)
 
+    def replay_events(self, spec, events, instruments, config, **kwargs):
+        """Recorded fills and portfolio marks on the chronological account lifecycle."""
+        from .event_replay import replay_events
+        return replay_events(spec, events, instruments, config, **kwargs)
+
     def ruin(self, spec, history, policy, config, **kwargs):
         """Fixed-policy bootstrap funding risk and labelled ultimate cycle approximation."""
         from .ruin import bootstrap_ruin

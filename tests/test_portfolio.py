@@ -228,3 +228,65 @@ def test_invalid_contracts_and_event_fields():
             Marks(AT, prices)
     with pytest.raises(TypeError):
         list(ordered([object()]))
+
+
+def test_preview_and_close_effect_allocate_fifo_fees():
+    book = Book([ES])
+    book.apply(fill(0, 2, 100, 4))
+    book.apply(fill(1, 1, 101, 3))
+    exit_fill = fill(2, -4, 102, 8)
+    before = book.snapshot()
+    preview = book.preview(exit_fill)
+    assert book.snapshot() == before
+    actual = book.apply(exit_fill)
+    assert actual == preview
+    assert actual.realized == 250 and actual.closed == 3 and actual.closed_net == 237
+    final = book.apply(fill(3, 1, 101, 1))
+    assert final.closed_net == 47
+    assert book.balance == 284
+
+
+def test_fee_bearing_lots_do_not_average_away_fifo_costs():
+    book = Book([ES])
+    book.apply(fill(0, 1, 100, 1))
+    book.apply(fill(1, 1, 100, 5))
+    assert book.apply(fill(2, -1, 101, 2)).closed_net == 47
+    assert book.apply(fill(3, -1, 101, 2)).closed_net == 43
+
+
+def test_cash_adjustments_keep_trading_results_and_clock():
+    book = Book([ES], balance=50_000)
+    book.apply(fill(0, 1, 100, 2))
+    book.adjust(AT, -500)
+    assert book.balance == 49_498 and book.realized == 0 and book.fees == 2
+    with pytest.raises(ValueError, match="chronological"):
+        book.adjust(AT - timedelta(seconds=1), 10)
+    with pytest.raises(ValueError, match="aware"):
+        book.adjust(AT.replace(tzinfo=None), 10)
+
+
+def test_copy_marks_does_not_rewind_cash_adjustment_clock():
+    source, target = Book([ES]), Book([ES])
+    source.apply(Marks(AT, (("ES", 100),)))
+    later = AT + timedelta(seconds=1)
+    target.adjust(later, -10)
+    target.copy_marks(source)
+    assert target.snapshot().at == later
+    with pytest.raises(ValueError, match="strictly increase"):
+        target.apply(fill(1, 1, 100))
+    target.apply(Fill(later, "ES", 1, 101))
+    assert target.quantity("ES") == 1
+
+
+def test_liquidation_requires_valid_time_fee_and_mark_age():
+    book = Book([ES])
+    book.apply(fill(0, 2, 100))
+    later = AT + timedelta(seconds=1)
+    with pytest.raises(ValueError, match="stale"):
+        book.check_marks(later, timedelta(0))
+    for when, fee in ((AT.replace(tzinfo=None), 1), (AT, -1)):
+        with pytest.raises(ValueError):
+            list(book.liquidation(when, fee))
+    for close in book.liquidation(later, F("1.25")):
+        book.apply(close)
+    assert book.flat and book.balance == F("-2.5")

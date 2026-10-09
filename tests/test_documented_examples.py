@@ -9,7 +9,7 @@ import pytest
 
 @pytest.mark.parametrize("name", ["README.md", "docs/CASHFLOW_SCENARIOS.md",
                                  "docs/PAYOUT_LIFECYCLE.md", "docs/ORB_REFERENCE.md",
-                                 "docs/ANALYTICAL_MODEL.md"])
+                                 "docs/ANALYTICAL_MODEL.md", "docs/EVENT_REPLAY.md"])
 def test_current_documented_python_examples(name, tmp_path, monkeypatch):
     root = Path(__file__).resolve().parents[1]
     examples = re.findall(r"```python\n(.*?)\n```", (root / name).read_text(encoding="utf-8"),
@@ -36,7 +36,7 @@ def test_current_documented_python_examples(name, tmp_path, monkeypatch):
                 day += timedelta(days=1)
     for index, example in enumerate(examples):
         exec(compile(example, f"{name}:example-{index}", "exec"),
-             namespace if name == "README.md" else {})
+             namespace if name in ("README.md", "docs/EVENT_REPLAY.md") else {})
     if name == "README.md":
         assert namespace["fit"].score == namespace["fit"].out_of_sample_score
         assert len(namespace["fit"].train_sessions) == 14

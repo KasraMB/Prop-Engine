@@ -71,7 +71,7 @@ class BacktestResult:
     outstanding_payouts: float
     assumptions: tuple[str, ...]
     spec: LifecycleSpec
-    policy: DollarPolicy
+    policy: DollarPolicy | None
     config: BacktestConfig
     history_fingerprint: str
 
@@ -124,11 +124,12 @@ class _Replay:
     """Coordinates existing rules, feasibility projection and dated payout accounting."""
 
     def __init__(self, spec, history, policy, config, *, bracket_factory=None,
-                 execution_factory=None, session_closes=None):
+                 execution_factory=None, session_closes=None, sessions=None):
         self.spec, self.history, self.policy, self.config = spec, history, policy, config
         self.fixed_cost = Fraction(str(config.cost_per_trade))
         self.contract_cost = Fraction(str(config.cost_per_contract))
-        self.risk_budgets = {r.name: Fraction(str(r.risk_dollars)) for r in policy.regimes}
+        self.risk_budgets = ({r.name: Fraction(str(r.risk_dollars)) for r in policy.regimes}
+                             if policy is not None else {})
         self.activity_threshold = Fraction(str(spec.activity_threshold))
         # Internal research hook; the public historical API never retargets trades.
         self.bracket_factory = bracket_factory
@@ -145,7 +146,6 @@ class _Replay:
         self.sim = self.ledger = None
         self.role = "eval" if "eval" in self.phases else "funded"
         self.next_role = self.role
-        self.available_at = history.trades[0].entry_at
         self.wallet = (None if config.initial_wallet is None
                        else Fraction(str(config.initial_wallet)))
         self.status = "HORIZON"
@@ -155,11 +155,13 @@ class _Replay:
         self.failed_at = None
         self.activity_epoch = 0
         # The horizon consists of complete declared sessions, not N sessions / 5.
-        first, last = history.sessions[0], history.sessions[-1]
+        sessions = history.sessions if history is not None else sessions
+        first, last = sessions[0], sessions[-1]
         self.start = datetime.combine(first - timedelta(days=1), spec.session_open,
                                       self.tz).astimezone(timezone.utc)
+        self.available_at = history.trades[0].entry_at if history is not None else self.start
         self.end = self.close_at(last)
-        for trade in history.trades:
+        for trade in history.trades if history is not None else ():
             if trade.session.weekday() not in spec.session_weekdays:
                 raise ValueError("trade lies on a closed weekday")
             opening = datetime.combine(trade.session - timedelta(days=1),
@@ -410,18 +412,19 @@ class _Replay:
         if abs(sim.equity - before) >= self.activity_threshold:
             self.activity(exit_at)
         self.emit(exit_at, "trade", quantity=quantity, regime=regime.name)
-        if result.code == ExitCode.PASSED:
-            self.emit(exit_at, "evaluation_pass", code="PASSED")
+        self.handle_result(exit_at, result.code, regime.name)
+        self.advance(exit_at)
+
+    def handle_result(self, at, code, regime=None):
+        if code == ExitCode.PASSED:
+            self.emit(at, "evaluation_pass", code="PASSED")
             self.next_role = "funded" if "funded" in self.phases else None
-            self.available_at = exit_at + self.config.activation_delay
+            self.available_at = at + self.config.activation_delay
             if self.next_role is None:
                 self.handoff = True
                 self.status = "EVALUATION_PASSED"
-        elif result.code != ExitCode.ALIVE:
-            self.fail(exit_at, ExitCode(result.code).name)
-        # The qualifying close renewed activity (or ended the account), making
-        # the deferred deadline stale. Consume it without suppressing others.
-        self.advance(exit_at)
+        elif code != ExitCode.ALIVE:
+            self.fail(at, ExitCode(code).name, regime=regime)
 
     def close(self, session):
         at = self.close_at(session)
@@ -462,12 +465,15 @@ class _Replay:
                 self.trade(trade, index)
             self.close(session)
         self.advance(self.end)
+        return self.result()
+
+    def result(self, *, fingerprint=None, assumptions=None):
         outstanding = sum(float(r.net) for ledger in self.ledgers for r in ledger.requests
                           if r.status in ("pending", "approved"))
         return BacktestResult(
             tuple(self.events), self.start, self.end, self.attempts, self.failures,
             self.status, float(self.sim.equity) if self.sim else None, outstanding,
-            self.spec.assumptions + (
+            self.spec.assumptions + (assumptions if assumptions is not None else (
                 "qualifying trade close precedes inactivity at the identical timestamp; strictly earlier expiry remains unsupported",
                 "sequential ideal stop/target fills; no gaps or slippage",
                 "gross per-contract historical stop/target outcomes are held fixed",
@@ -477,9 +483,9 @@ class _Replay:
                 "retries start no earlier than the next observed session",
                 "live handoff starts a fresh paid attempt under the same retry delay and wallet constraints; not a failure",
                 "live-account value and receipts after the observation horizon are excluded",
-            ),
+            )),
             self.spec, self.policy, self.config,
-            sha256(repr(self.history.trades).encode("utf-8")).hexdigest(),
+            fingerprint if fingerprint is not None else sha256(repr(self.history.trades).encode("utf-8")).hexdigest(),
         )
 
 
