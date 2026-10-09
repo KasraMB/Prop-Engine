@@ -180,6 +180,11 @@ class Engine:
         from .event_replay import replay_events
         return replay_events(spec, events, instruments, config, **kwargs)
 
+    def replay_strategy(self, spec, markets, instruments, config, strategy, **kwargs):
+        """Run an external causal strategy against explicit quote execution models."""
+        from .strategy import replay_strategy
+        return replay_strategy(spec, markets, instruments, config, strategy, **kwargs)
+
     def ruin(self, spec, history, policy, config, **kwargs):
         """Fixed-policy bootstrap funding risk and labelled ultimate cycle approximation."""
         from .ruin import bootstrap_ruin

@@ -12,7 +12,7 @@ from propfirm_engine.firms.lucidflex import replay_50k
 from propfirm_engine.market_replay import _resolve, replay_prices
 
 NY = ZoneInfo("America/New_York")
-SPEC = replay_50k(eval_fee=105.2, reset_fee=105, contract_type="mini")
+SPEC = replay_50k(eval_fee=105.2, reset_fee=105, contract_type="mini", elapsed_inactivity=True)
 CONFIG = BacktestConfig(0, timedelta(0), timedelta(0), timedelta(0))
 POLICY = DollarPolicy.constant(2000)
 TARGETS = {r.name: 1500 for r in POLICY.regimes}

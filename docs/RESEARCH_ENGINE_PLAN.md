@@ -87,13 +87,13 @@ reproduce it. Compiled execution and the broader performance gates remain open.
 - [x] Adapt the current lifecycle coordinator to fills and marks without jumping
   from entry directly to exit.
 - [x] Reuse existing closed-P&L gates, payout ledger and retry/wallet accounting.
-- [ ] Detect breach at the first supplied observation, cancel outstanding orders,
+- [x] Detect breach at the first supplied observation, cancel outstanding orders,
   apply explicit liquidation, and ignore later hypothetical recovery.
 - [x] Track closed balance separately from open equity and peak/floor state.
 - [x] Support partial exits, overlapping positions and multi-instrument exposure.
 - [ ] Define account transitions while positions or orders remain open.
 - [ ] Make skip, order rejection and research abandonment explicit policies.
-- [ ] Correct inactivity clocks with separate session/expiry cutoffs, timezone,
+- [x] Correct inactivity clocks with separate session/expiry cutoffs, timezone,
   non-trading days and exact-time ordering.
 - [ ] Route the bracket adapter through the shared semantics with parity tests.
 
@@ -136,19 +136,47 @@ This is not a compiled, multi-asset, native-memory or optimization benchmark.
 
 ### 3. Orders and strategy adapters
 
-- [ ] Market, limit, stop-market and stop-limit order state machines.
-- [ ] Amend/cancel, partial fills, linked exits and OCO behavior.
-- [ ] Fixed, trailing, time, signal and multi-target exits.
+- [x] Market, limit, stop-market and stop-limit order state machines.
+- [x] Amend/cancel, partial fills, linked exits and OCO behavior.
+- [x] Fixed, trailing, time, signal and multi-target exits.
 - [ ] Long/short, pyramiding, reversals and explicit multi-leg execution.
 - [ ] Recorded-fill, opportunity and strategy-driven replay adapters.
-- [ ] External causal strategy callbacks, warm-up and fill feedback.
-- [ ] Instrument-specific costs, ticks, multipliers and mini/micro equivalence.
+- [x] External causal strategy callbacks, warm-up and fill feedback.
+- [x] Instrument-specific costs, ticks, multipliers and mini/micro equivalence.
 - [ ] Replaceable bar, trade and quote execution models and slippage models.
 - [ ] Overnight positions and forced exits governed by the selected profile.
 
 Acceptance: the same strategy can enter and exit without changing account code;
 changed exits regenerate dependent signals; ambiguous bars are labeled. No order
 book or live brokerage integration is required for the first research release.
+
+Quote strategy milestone: `Engine.replay_strategy` now drives `Order`/`Amend`/
+`Cancel` actions through the same event accounting and account coordinator.
+Explicit quote marks, shared per-side liquidity, adverse execution models,
+partial fills, stop gaps, persistent stop-limit triggers, submission-anchored
+trailing exits, OCO, linked exits and pending exposure are tested. Immutable
+callbacks receive actual account and fill outcomes. Warm-up cannot buy or trade
+an account. Multi-leg orders remain sequential, not atomic spread execution.
+See [strategy replay](STRATEGY_REPLAY.md). General bar execution, overnight
+holding, broader rules and search are still open.
+
+Calendar decision: the owner approved local activity date plus 30 calendar days
+at 16:15 New York, including weekends. `LifecycleSpec.inactivity_close` selects
+the local cutoff; None preserves the prior elapsed-time scenario. LucidFlex
+defaults to the chosen cutoff; `elapsed_inactivity=True` explicitly restores
+old research behavior. Tests cover DST, weekend expiry and exact closing ties.
+This is a selected scenario, not a newly verified official cutoff.
+
+License decision: the owner selected MIT. LICENSE and package metadata now carry
+that license; registry publication is still not authorized.
+
+Quote milestone verification: 1,560 tests passed with 10 optional browser tests
+skipped; the subsequently added executable strategy example passed separately.
+The browser bundle contains 48 verified Python modules. The synthetic callback
+benchmark (Python 3.12.7, three warm runs, trace off) took 0.364/3.192 seconds for
+2,000/20,000 quotes. Peak traced Python allocations were 21,763/20,763 bytes.
+This holds one position with two fills, includes quote creation and immutable
+callback snapshots, and does not measure many-order storage or native memory.
 
 ### 4. General firm profiles
 
@@ -221,8 +249,8 @@ obtain a favorable benchmark. Monetary scaling and overflow need explicit tests.
 
 ## Open decisions
 
-- The user states inactivity expiry is at 16:15. Confirm the exact date/calendar
-  convention from official evidence before replacing the elapsed-day scenario.
+- The official inactivity page still does not specify a cutoff. The selected
+  16:15 calendar-date convention above is explicitly user-approved, not official.
 - Existing sub-contract policies skip while insufficient account buffer ends an
   attempt. The general API must expose the chosen behavior, not silently change
   existing saved runs. The user's research convention is abandonment when unable
@@ -231,8 +259,8 @@ obtain a favorable benchmark. Monetary scaling and overflow need explicit tests.
   execution profile. No missing quote or intrabar path may be guessed silently.
 - Stop/target outcomes, forced closes and post-handoff restarts from earlier
   experiments are adapters/scenarios, not restrictions of the general core.
-- The public license needs an explicit owner choice before a package release.
-  GitHub pushes are authorized; publishing to a package registry is not implied.
+- MIT was selected by the owner. GitHub pushes are authorized; publishing to a
+  package registry is not implied.
 
 ## Completion
 

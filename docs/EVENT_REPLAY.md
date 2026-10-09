@@ -68,8 +68,9 @@ Evaluation, reset, activation and payment fees retain their existing meanings.
   due at a market timestamp run first, except an eligible closing fill wins an
   exact inactivity tie. Activity uses FIFO realized P&L net of allocated entry
   and exit fees. Entry fees alone do not qualify.
-- The profile still uses its documented elapsed-day inactivity scenario. The
-  requested 16:15 expiry-calendar convention is not yet implemented.
+- LucidFlex now defaults to the user-selected 16:15 New York cutoff on the local
+  activity date plus 30 calendar days, including weekends. To reproduce old
+  elapsed-time research, pass `elapsed_inactivity=True` to `replay_50k`.
 
 ## Account behavior
 

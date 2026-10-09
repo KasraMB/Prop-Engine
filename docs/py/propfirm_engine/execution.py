@@ -178,6 +178,7 @@ class LifecycleSpec:
     activity_threshold: float = 1.0
     reset_valid_days: int | None = None
     assumptions: tuple[str, ...] = ()
+    inactivity_close: time | None = None
 
     def __post_init__(self):
         object.__setattr__(self, "funded_tiers", tuple(tuple(t) for t in self.funded_tiers))
@@ -188,6 +189,9 @@ class LifecycleSpec:
             raise ValueError("session_weekdays must contain weekday numbers 0..6")
         _number(self.reset_fee, "reset_fee")
         _number(self.activity_threshold, "activity_threshold")
+        if self.inactivity_close is not None and (not isinstance(self.inactivity_close, time)
+                                                  or self.inactivity_close.tzinfo is not None):
+            raise ValueError("inactivity_close must be a local time without timezone")
         for name in ("inactivity_days", "reset_valid_days"):
             value = getattr(self, name)
             if value is not None and (type(value) is not int or value < 1):

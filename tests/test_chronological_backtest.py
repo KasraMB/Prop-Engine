@@ -39,7 +39,7 @@ def config(**kwargs):
 
 
 def spec():
-    return replay_50k(eval_fee=105.20, reset_fee=105, contract_type="micro")
+    return replay_50k(eval_fee=105.20, reset_fee=105, contract_type="micro", elapsed_inactivity=True)
 
 
 def funded_history(extra=0):

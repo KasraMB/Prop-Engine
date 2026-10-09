@@ -307,7 +307,12 @@ class _Replay:
     def activity(self, at):
         self.activity_epoch += 1
         if self.spec.inactivity_days is not None:
-            self.schedule(at + timedelta(days=self.spec.inactivity_days),
+            deadline = at + timedelta(days=self.spec.inactivity_days)
+            if self.spec.inactivity_close is not None:
+                expiry_date = at.astimezone(self.tz).date() + timedelta(days=self.spec.inactivity_days)
+                deadline = datetime.combine(expiry_date, self.spec.inactivity_close,
+                                            self.tz).astimezone(timezone.utc)
+            self.schedule(deadline,
                           "inactivity", self.ledger, self.attempts, self.activity_epoch)
 
     def fail(self, at, code, regime=None):

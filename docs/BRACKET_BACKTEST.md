@@ -74,6 +74,12 @@ search-selected value. Choose regimes and bounds before opening OOS results.
 
 ## Lifecycle and cash
 
+Calendar update (2026-10-08): the owner selected inactivity expiry at 16:15 New
+York on the last qualifying close's local date plus 30 calendar days, including
+weekends. This is now the LucidFlex default. `elapsed_inactivity=True` restores
+the older elapsed-time scenario described below. The official inactivity page
+was rechecked and still does not specify that cutoff; it is a user assumption.
+
 - One active account; retries occur no earlier than the next observed session.
 - Failed evaluations use the supplied reset fee; failed funded accounts start
   a new purchase at the supplied evaluation fee. Actual reset eligibility after

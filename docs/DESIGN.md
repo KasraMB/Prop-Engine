@@ -38,9 +38,11 @@ Snapshots expose each mark's timestamp; the accounting layer does not invent a
 staleness policy. Snapshots are optional and immutable. Closed lots are discarded;
 there is no retained execution history unless a caller records it.
 
-This component does not yet execute orders, apply firm rules or replace
-`Engine.backtest`. Those integrations are tracked in the research engine plan.
-Existing replay semantics remain unchanged.
+`Engine.replay_events` applies the shared account lifecycle to recorded fills.
+`Engine.replay_strategy` adds causal callbacks and quote-based order execution.
+Both keep explicit observation and liquidation assumptions. `Engine.backtest`
+remains the sequential bracket adapter. Broader rule and optimization work is
+tracked in the research engine plan.
 
 `Engine.backtest` processes an immutable sequential stop/target history.
 `Engine.fit` selects named dollar-risk regimes on IS and reports the frozen

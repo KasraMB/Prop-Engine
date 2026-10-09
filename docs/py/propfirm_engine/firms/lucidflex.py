@@ -111,15 +111,18 @@ def firm() -> Firm:
     return Firm("Lucid", (program,))
 
 
-def replay_50k(*, eval_fee, reset_fee, contract_type):
+def replay_50k(*, eval_fee, reset_fee, contract_type, elapsed_inactivity=False):
     """50K DLL-off lifecycle scenario. Fees and mini/micro choice are explicit.
 
     Public rules checked 2026-09-26. See the execution guide for evidence limits.
     Cost per contract belongs to BacktestConfig, not this firm preset.
     """
     from dataclasses import replace
+    from datetime import time
     from ..execution import LifecycleSpec
 
+    if type(elapsed_inactivity) is not bool:
+        raise ValueError("elapsed_inactivity must be bool")
     if contract_type not in ("mini", "micro"):
         raise ValueError("contract_type must be mini or micro")
     multiplier = 10 if contract_type == "micro" else 1
@@ -131,6 +134,7 @@ def replay_50k(*, eval_fee, reset_fee, contract_type):
         reset_fee=reset_fee,
         request_lock_floor=50_100.0,
         inactivity_days=30,
+        inactivity_close=None if elapsed_inactivity else time(16, 15),
         reset_valid_days=30,
         assumptions=(
             "LucidFlex 50K DLL off; public numeric rules checked 2026-09-26",
@@ -139,7 +143,9 @@ def replay_50k(*, eval_fee, reset_fee, contract_type):
             "retained-profit payout basis and $1 fresh cycle profit: user-confirmed",
             "negative funded profit retains the starting scaling tier (scenario interpretation)",
             "scaling bands use exact lower thresholds, not rounded displayed dollars",
-            "inactivity clock restarts on a trade with absolute net P&L >= $1; exact elapsed 30-day boundary",
+            ("inactivity clock restarts on a trade with absolute net P&L >= $1; exact elapsed 30-day boundary"
+             if elapsed_inactivity else
+             "inactivity expires at 16:15 New York on the qualifying close's local date plus 30 calendar days, including weekends; user-selected scenario"),
             "five approved payouts end each simulated-funded account; earlier live transfer unmodeled",
             "fresh evaluation after live handoff: user-selected research lifecycle, not a firm entitlement",
             "session schedule excludes holidays/early closes unless input is filtered by its producer",

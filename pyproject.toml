@@ -8,6 +8,8 @@ version = "0.1.0"
 description = "A research simulator for futures prop-firm strategies, sizing policies and repeated-attempt economics."
 readme = "README.md"
 requires-python = ">=3.11"
+license = "MIT"
+license-files = ["LICENSE"]
 dependencies = [
     "numpy>=1.26",
     "numba>=0.59",

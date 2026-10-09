@@ -32,7 +32,7 @@ def dates(n):
 
 
 def spec():
-    return replay_50k(eval_fee=105.2, reset_fee=105, contract_type="mini")
+    return replay_50k(eval_fee=105.2, reset_fee=105, contract_type="mini", elapsed_inactivity=True)
 
 
 def config(**kwargs):
@@ -280,3 +280,24 @@ def test_randomized_equivalent_brackets_preserve_lifecycle_cash():
     assert result.replay.net_cash == baseline.net_cash
     assert result.replay.final_balance == baseline.final_balance
     assert result.replay.failed_attempts == baseline.failed_attempts
+
+
+@pytest.mark.parametrize("first,last,expiry", [
+    (date(2026, 9, 1), date(2026, 10, 1), date(2026, 10, 1)),
+    (date(2026, 10, 9), date(2026, 11, 9), date(2026, 11, 8)),
+])
+def test_calendar_inactivity_uses_local_cutoff_including_weekends_and_dst(first, last, expiry):
+    profile = replay_50k(eval_fee=105.2, reset_fee=105, contract_type="mini")
+    result = run(round_trip(first, 1), sessions=(first, last), spec=profile)
+    failure, = [e for e in result.replay.events if e.kind == "failure"]
+    assert failure.at == at(expiry, 16, 15)
+    assert failure.code == "FAIL_INACTIVITY"
+
+
+def test_calendar_inactivity_exact_cutoff_qualifying_close_wins():
+    last = date(2026, 10, 1)
+    profile = replay_50k(eval_fee=105.2, reset_fee=105, contract_type="mini")
+    events = round_trip(FIRST, 1) + [Fill(at(last, 16, 14), "X", 1, 10_000),
+                                   Fill(at(last, 16, 15), "X", -1, 10_001)]
+    result = run(events, sessions=(FIRST, last), spec=profile)
+    assert result.replay.failed_attempts == 0

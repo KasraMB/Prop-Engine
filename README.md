@@ -13,8 +13,10 @@ General order and portfolio execution is being developed under the
 [research engine plan](docs/RESEARCH_ENGINE_PLAN.md). Recorded fills and ordered
 portfolio marks now support arbitrary exits, partials and concurrent instruments
 through `Engine.replay_events`. See the [event replay API](docs/EVENT_REPLAY.md)
-for its explicit observation and liquidation assumptions. Strategy callbacks,
-general order execution and optimization of this new input are still planned.
+for its explicit observation and liquidation assumptions. Causal strategy
+callbacks and quote-based orders are available through `Engine.replay_strategy`;
+see the [strategy API](docs/STRATEGY_REPLAY.md). General strategy optimization,
+additional execution models and broader profiles remain on the roadmap.
 
 The bracket API implements the agreed **sequential stop-or-target model**.
 It reuses the existing rule interpreter, feasibility projection, payout ledger,

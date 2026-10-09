@@ -30,8 +30,8 @@ def run(count, trace=False):
             "peak_python_bytes": peak}
 
 
-def replay_run(count, trace=False, record=False):
-    from propfirm_engine import BacktestConfig, Engine, Marks
+def replay_run(count, trace=False, record=False, strategy=False):
+    from propfirm_engine import BacktestConfig, Engine, Marks, Market, Order, Quote, QuoteModel
     from propfirm_engine.firms.lucidflex import replay_50k
     spec = replay_50k(eval_fee=105.2, reset_fee=105, contract_type="mini")
     config = BacktestConfig(0, timedelta(0), timedelta(0), timedelta(0))
@@ -43,14 +43,25 @@ def replay_run(count, trace=False, record=False):
             yield Marks(at, (("ES", 100),), seq=seq)
         yield Fill(at, "ES", -1, 100, seq=count - 1)
 
+    class Hold:
+        def on_market(self, context, market):
+            if market.seq == 0:
+                return [Order("entry", "ES", 1)]
+            if market.seq == count - 2:
+                return [Order("exit", "ES", -1, reduce_only=True)]
+
     if trace:
         tracemalloc.start()
     start = perf_counter()
-    result = Engine().replay_events(
-        spec, events(), [Instrument("ES", 50, .25)], config,
-        sessions=(date(2026, 1, 5),), fidelity="observed_marks", mark_fills=True,
-        max_mark_age=timedelta(0), liquidation_fee=0, trace=record,
-    )
+    options = dict(sessions=(date(2026, 1, 5),), fidelity="observed_marks",
+                   max_mark_age=timedelta(0), liquidation_fee=0, trace=record)
+    if strategy:
+        markets = (Market(at, (Quote("ES", 100, 100, 100),), seq=i) for i in range(count))
+        result = Engine().replay_strategy(spec, markets, [Instrument("ES", 50, .25)], config,
+                                          Hold(), models={"ES": QuoteModel()}, **options).result
+    else:
+        result = Engine().replay_events(spec, events(), [Instrument("ES", 50, .25)], config,
+                                        mark_fills=True, **options)
     seconds = perf_counter() - start
     peak = tracemalloc.get_traced_memory()[1] if trace else None
     if trace:
@@ -64,16 +75,17 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--events", type=int, default=100_000)
     parser.add_argument("--repeat", type=int, default=3)
-    parser.add_argument("--mode", choices=("book", "replay"), default="book")
+    parser.add_argument("--mode", choices=("book", "replay", "strategy"), default="book")
     parser.add_argument("--record", action="store_true")
     args = parser.parse_args()
     if args.events < 2 or args.events % 2:
         parser.error("events must be an even integer >= 2")
     if args.repeat < 1:
         parser.error("repeat must be positive")
-    if args.record and args.mode != "replay":
-        parser.error("--record requires --mode replay")
-    execute = run if args.mode == "book" else lambda n, trace=False: replay_run(n, trace, args.record)
+    if args.record and args.mode == "book":
+        parser.error("--record requires --mode replay or strategy")
+    execute = run if args.mode == "book" else lambda n, trace=False: replay_run(
+        n, trace, args.record, strategy=args.mode == "strategy")
     execute(100)
     rows = []
     for count in (args.events, args.events * 10):

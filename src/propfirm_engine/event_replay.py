@@ -212,7 +212,10 @@ class _EventReplay(_Replay):
         if event is not None:
             raise ValueError("event lies after the declared observation horizon")
         self.advance(self.end)
-        result = self.result(fingerprint=self.digest.hexdigest(), assumptions=(
+        return self.finish_result()
+
+    def finish_result(self, assumptions=None):
+        result = self.result(fingerprint=self.digest.hexdigest(), assumptions=assumptions or (
             "recorded quantities and arbitrary exits; no sizing or target optimization",
             "observed marks only; no claim about unobserved intrabar equity",
             f"fill prices update marks: {self.mark_fills}; maximum mark age: {self.max_mark_age}",

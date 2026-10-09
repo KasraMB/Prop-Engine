@@ -10,6 +10,8 @@ from .market_replay import PriceSession, PriceDecision, PriceReplay
 from .events import Fill, Marks, merge_events
 from .portfolio import Book, BookState, Position
 from .event_replay import EventReplay, EventState
+from .orders import Quote, Market, Order, Cancel, Amend, OrderState, OrderEvent, QuoteModel
+from .strategy import Context, StrategyReplay
 from .slippage import TickDistribution, SlippageModel
 from .price_fitting import PriceEvaluation, PriceFit, evaluate_prices
 from .fitting import HoldoutFit
@@ -125,6 +127,8 @@ from .rules import (
 )
 
 __all__ = [
+    "Quote", "Market", "Order", "Cancel", "Amend", "OrderState", "OrderEvent",
+    "QuoteModel", "Context", "StrategyReplay",
     "EventReplay", "EventState",
     "Fill", "Marks", "merge_events", "Book", "BookState", "Position",
     "Instrument", "PriceSession", "PriceDecision", "PriceReplay",
