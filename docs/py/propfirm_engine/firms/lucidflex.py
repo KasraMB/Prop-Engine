@@ -49,6 +49,18 @@ SPLIT = 0.9  # 90% to the trader
 MAX_PAYOUTS = 5
 QUALIFYING_DAYS = 5  # trading days with the minimum daily profit
 
+RULE_VERSION = "lucidflex-50k-2026-10-08"
+SOURCES = (
+    ("evaluation", "https://support.lucidtrading.com/en/articles/12945790-lucidflex-evaluation-account"),
+    ("drawdown", "https://support.lucidtrading.com/en/articles/12945815-lucidflex-drawdown"),
+    ("payouts", "https://support.lucidtrading.com/en/articles/12945796-lucidflex-payouts"),
+    ("scaling", "https://support.lucidtrading.com/en/articles/12945808-lucidflex-scaling-plan"),
+    ("hours", "https://support.lucidtrading.com/en/articles/11404729-allowed-trading-times"),
+    ("inactivity", "https://support.lucidtrading.com/en/articles/11404632-inactivity-policy"),
+    ("commissions", "https://support.lucidtrading.com/en/articles/11508978-approved-products-and-commissions"),
+    ("review", "https://support.lucidtrading.com/en/articles/11404742-prohibited-microscalping"),
+)
+
 
 def _mll_rule(size: int, amount: int) -> TrailingDrawdownRule:
     return TrailingDrawdownRule(
@@ -114,7 +126,7 @@ def firm() -> Firm:
 def replay_50k(*, eval_fee, reset_fee, contract_type, elapsed_inactivity=False):
     """50K DLL-off lifecycle scenario. Fees and mini/micro choice are explicit.
 
-    Public rules checked 2026-09-26. See the execution guide for evidence limits.
+    Public rules checked 2026-10-08. See the execution guide for evidence limits.
     Cost per contract belongs to BacktestConfig, not this firm preset.
     """
     from dataclasses import replace
@@ -128,6 +140,7 @@ def replay_50k(*, eval_fee, reset_fee, contract_type, elapsed_inactivity=False):
     multiplier = 10 if contract_type == "micro" else 1
     return LifecycleSpec(
         account=replace(build_account(50_000), eval_fee=eval_fee),
+        rule_version=RULE_VERSION,
         eval_contract_limit=4 * multiplier,
         funded_tiers=((float("-inf"), 2 * multiplier),
                       (1000.0, 3 * multiplier), (2000.0, 4 * multiplier)),
@@ -137,7 +150,7 @@ def replay_50k(*, eval_fee, reset_fee, contract_type, elapsed_inactivity=False):
         inactivity_close=None if elapsed_inactivity else time(16, 15),
         reset_valid_days=30,
         assumptions=(
-            "LucidFlex 50K DLL off; public numeric rules checked 2026-09-26",
+            "LucidFlex 50K DLL off; public numeric rules checked 2026-10-08",
             "strict 50% evaluation consistency; undocumented cushion excluded by user",
             "MLL uses open equity: user-confirmed interpretation",
             "retained-profit payout basis and $1 fresh cycle profit: user-confirmed",
@@ -153,4 +166,4 @@ def replay_50k(*, eval_fee, reset_fee, contract_type, elapsed_inactivity=False):
     )
 
 
-__all__ = ["SPECS", "build_account", "firm", "replay_50k"]
+__all__ = ["SPECS", "RULE_VERSION", "SOURCES", "build_account", "firm", "replay_50k"]

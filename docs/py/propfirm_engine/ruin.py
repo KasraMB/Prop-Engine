@@ -220,8 +220,9 @@ def _settled_cycles(result):
             groups.setdefault(event.attempt, []).append(event)
     cycles, excluded = [], 0
     for events in groups.values():
-        complete = any(e.kind in ("failure", "live_handoff") for e in events)
-        settled = sum(e.kind == "request" for e in events) == sum(e.kind == "receipt" for e in events)
+        complete = any(e.kind in ("failure", "live_handoff", "abandonment") for e in events)
+        settled = (sum(e.kind == "request" for e in events) - sum(e.kind == "rejection" for e in events)
+                   == sum(e.kind == "receipt" for e in events))
         if not complete or not settled:
             excluded += 1
             continue

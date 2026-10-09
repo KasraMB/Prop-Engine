@@ -1,7 +1,7 @@
 # Strategy replay
 
 Recording is selected with `recording="search"`, `"research"` (default), or
-`"trace"`. Search retains the external cash ledger and event/order counts, but
+`"trace"`. Search retains cash, cycle-settlement markers and event/order counts, but
 discards delivered order logs and non-cash lifecycle records. Research retains
 those logs; trace also retains every observed account state. `trace=True` is the
 legacy spelling of trace mode. `sink(event)` can stream lifecycle, order and

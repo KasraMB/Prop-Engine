@@ -180,9 +180,12 @@ class LifecycleSpec:
     assumptions: tuple[str, ...] = ()
     inactivity_close: time | None = None
     flatten_at_close: bool = True
+    rule_version: str = "custom"
 
     def __post_init__(self):
         object.__setattr__(self, "funded_tiers", tuple(tuple(t) for t in self.funded_tiers))
+        if not isinstance(self.rule_version, str) or not self.rule_version:
+            raise ValueError("rule_version must be a nonempty string")
         object.__setattr__(self, "assumptions", tuple(self.assumptions))
         object.__setattr__(self, "session_weekdays", tuple(self.session_weekdays))
         if not self.session_weekdays or any(type(d) is not int or d not in range(7)

@@ -1,6 +1,6 @@
 # Research engine plan
 
-Updated: 2026-10-08
+Updated: 2026-10-09
 
 ## Goal
 
@@ -57,7 +57,7 @@ Do not rewrite history, fabricate authorship metadata or add attribution trailer
 - [x] Concurrent instruments and account-wide mark-to-market equity.
 - [x] Explicit fees, price precision, contract units and gross/net definitions.
 - [x] Validate chronology, identifiers and finite values.
-- [ ] Validate input capabilities against the requested execution and firm rules.
+- [x] Validate input capabilities against the requested execution and firm rules.
 - [x] Keep portfolio snapshots separate from retained event history.
 - [x] Integrate search, research and trace recording modes with lifecycle results.
 
@@ -139,11 +139,11 @@ This is not a compiled, multi-asset, native-memory or optimization benchmark.
 - [x] Market, limit, stop-market and stop-limit order state machines.
 - [x] Amend/cancel, partial fills, linked exits and OCO behavior.
 - [x] Fixed, trailing, time, signal and multi-target exits.
-- [ ] Long/short, pyramiding, reversals and explicit multi-leg execution.
-- [ ] Recorded-fill, opportunity and strategy-driven replay adapters.
+- [x] Long/short, pyramiding, reversals and explicit multi-leg execution.
+- [x] Recorded-fill, opportunity and strategy-driven replay adapters.
 - [x] External causal strategy callbacks, warm-up and fill feedback.
 - [x] Instrument-specific costs, ticks, multipliers and mini/micro equivalence.
-- [ ] Replaceable bar, trade and quote execution models and slippage models.
+- [x] Replaceable bar, trade and quote execution models and slippage models.
 - [x] Overnight positions and forced exits governed by the selected profile.
 
 Acceptance: the same strategy can enter and exit without changing account code;
@@ -187,7 +187,7 @@ callback snapshots, and does not measure many-order storage or native memory.
 - [x] Multiple evaluation stages and configurable phase transitions.
 - [x] Payout request, approval/denial, deduction, receipt and processing calendars.
 - [x] Configurable withdrawal policy, retained buffer and restart policy.
-- [ ] Versioned official-source evidence and per-profile acceptance fixtures.
+- [x] Versioned official-source evidence and per-profile acceptance fixtures.
 
 Start with LucidFlex 50K DLL off. Do not equate a registered rule with executor
 support. Unknown discretionary decisions remain explicit scenarios.
@@ -247,7 +247,7 @@ deprecation warnings. The browser bundle remains synchronized at 49 modules.
 - [x] Explicit open-position/warm-up treatment at fold boundaries.
 - [x] Preserve cross-asset and strategy-state dependencies during resampling.
 - [x] Report historical, execution and market uncertainty separately.
-- [ ] Finite-horizon funding ruin and separately labeled ultimate approximations.
+- [x] Finite-horizon funding ruin and separately labeled ultimate approximations.
 
 OOS never chooses candidates, search settings, regime definitions or stopping.
 Repeatedly inspected holdouts are research evidence, not untouched final tests.
@@ -338,6 +338,38 @@ Retention milestone verification: 1,655 tests passed, 10 optional browser tests
 skipped, and two known deprecation warnings. The prior fitting checkpoint also
 passed GitHub's Python 3.11/3.12/3.13 and real-browser jobs; Pages deployed it.
 The local browser bundle at this checkpoint contains 52 verified Python files.
+
+Input extension: external Opportunity policies use the same order callbacks and
+skip pre-horizon signals instead of replaying them as fresh OOS entries. TradeTick
+and Bar adapters require explicit last_trade/ohlc_path fidelity, synthetic spread
+and liquidity. Provenance travels on individual Market events and prepared tapes;
+iterators cannot silently strip the approximation guard. Ordered feed merging
+requires explicit atomic/rejected timestamp ties. See [market inputs](MARKET_INPUTS.md).
+
+Basket selects all-or-none market/limit legs for distinct instruments on one
+observation. Portfolio rules see combined settlement, not artificial intermediate
+leg loss. Legged orders remain available. Nested OCO/parent baskets and atomic
+partial fills are rejected, not guessed. Pending exposure remains conservative.
+Acceptance cases include liquidity waits, IOC, cancellation, fees, loss/recovery
+and offsetting exits that would falsely breach under sequential settlement.
+
+The Lucid reference now carries rule_version lucidflex-50k-2026-10-08 with eight
+official help URLs. Evaluation, drawdown, payout, scaling, hours, inactivity,
+commissions and review pages were rechecked. Numeric, interpreted and unmodelled
+terms are separated in the execution guide. No additional firm preset is claimed
+verified. Preflight reports the supported adapter/profile capabilities.
+
+General strategy evaluations retain complete cash-cycle summaries and expose the
+existing IID ultimate approximation separately from finite-horizon risk. Denied
+requests no longer count as missing receipts, and voluntary closed abandonment
+completes a cash cycle without becoming a firm breach. Censored cycles are counted
+and excluded with an explicit selection-bias warning.
+
+Adapter milestone verification: 1,682 tests passed, 10 optional browser tests
+skipped, and two known deprecation warnings. Public market-input examples execute
+without external data. The synchronized browser bundle contains 55 verified
+Python files. Remaining work is search stability, workload/budget reporting and
+the final build, performance and release gates below.
 
 ## Required acceptance cases
 

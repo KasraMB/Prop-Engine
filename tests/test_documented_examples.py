@@ -10,7 +10,8 @@ import pytest
 @pytest.mark.parametrize("name", ["README.md", "docs/CASHFLOW_SCENARIOS.md",
                                  "docs/PAYOUT_LIFECYCLE.md", "docs/ORB_REFERENCE.md",
                                  "docs/ANALYTICAL_MODEL.md", "docs/EVENT_REPLAY.md",
-                                 "docs/STRATEGY_REPLAY.md", "docs/STRATEGY_FITTING.md"])
+                                 "docs/STRATEGY_REPLAY.md", "docs/STRATEGY_FITTING.md",
+                                 "docs/MARKET_INPUTS.md"])
 def test_current_documented_python_examples(name, tmp_path, monkeypatch):
     root = Path(__file__).resolve().parents[1]
     examples = re.findall(r"```python\n(.*?)\n```", (root / name).read_text(encoding="utf-8"),

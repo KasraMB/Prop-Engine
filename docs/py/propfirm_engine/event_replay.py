@@ -142,7 +142,8 @@ class _EventReplay(_Replay):
         self.event_counts[event.kind] += 1
         if self.sink is not None:
             self.sink(event)
-        if self.recording != "search" or event.cash or event.kind == "wallet_wait":
+        if self.recording != "search" or event.cash or event.kind in (
+                "fee", "wallet_wait", "request", "rejection", "failure", "live_handoff", "abandonment"):
             super().append_event(event)
 
     def phase_limit(self, index):

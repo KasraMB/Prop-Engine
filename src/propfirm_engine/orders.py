@@ -28,13 +28,29 @@ class Quote:
 
 
 @dataclass(frozen=True, slots=True)
+class MarketSource:
+    fidelity: str = "observed_marks"
+    assumptions: tuple[str, ...] = ()
+
+    def __post_init__(self):
+        if self.fidelity not in ("observed_marks", "last_trade", "ohlc_path", "mixed_scenario"):
+            raise ValueError("unknown market source fidelity")
+        object.__setattr__(self, "assumptions", tuple(self.assumptions))
+        if any(not isinstance(a, str) for a in self.assumptions):
+            raise ValueError("source assumptions must be strings")
+
+
+@dataclass(frozen=True, slots=True)
 class Market:
     at: datetime
     quotes: tuple[Quote, ...]
     seq: int = 0
+    source: MarketSource | None = None
 
     def __post_init__(self):
         _header(self)
+        if self.source is not None and not isinstance(self.source, MarketSource):
+            raise TypeError("market source must be MarketSource")
         quotes = tuple(self.quotes)
         if (not quotes or any(not isinstance(q, Quote) for q in quotes)
                 or len({q.symbol for q in quotes}) != len(quotes)):
@@ -154,6 +170,24 @@ class QuoteModel:
 
 
 @dataclass(frozen=True, slots=True)
+class Basket:
+    id: str
+    legs: tuple[Order, ...]
+
+    def __post_init__(self):
+        _symbol(self.id)
+        object.__setattr__(self, "legs", tuple(self.legs))
+        if (len(self.legs) < 2 or any(not isinstance(o, Order) for o in self.legs)
+                or len({o.symbol for o in self.legs}) != len(self.legs)
+                or len({o.id for o in self.legs}) != len(self.legs)
+                or self.id in {o.id for o in self.legs}):
+            raise ValueError("basket needs distinct leg IDs and instruments, separate from its group ID")
+        if (any(o.kind not in ("market", "limit") or o.parent is not None or o.oco is not None for o in self.legs)
+                or len({o.tif for o in self.legs}) != 1):
+            raise ValueError("atomic baskets require market/limit legs, one time in force and no parent/OCO")
+
+
+@dataclass(frozen=True, slots=True)
 class _OrderRef:
     symbol: str
     quantity: int
@@ -182,6 +216,7 @@ class Broker:
         self.marks = {}
         self.compact, self.sink = compact, sink
         self.counts = Counter()
+        self.groups, self.members, self.group_ids = {}, {}, set()
 
     def observe(self, market):
         self.marks.update((q.symbol, q.mark) for q in market.quotes)
@@ -215,18 +250,22 @@ class Broker:
                    for s, u in self.units.items())
 
     def submit(self, action, at, quantities, limit, *, enabled=True):
+        if isinstance(action, Basket):
+            return self.submit_basket(action, at, quantities, limit, enabled=enabled)
         if isinstance(action, Cancel):
             self.cancel(action.id, at, "requested")
             return
         amend = isinstance(action, Amend)
         order = action.order if amend else action
         if not isinstance(order, Order):
-            raise TypeError("strategy actions must be Order, Amend or Cancel")
+            raise TypeError("strategy actions must be Order, Basket, Amend or Cancel")
         old = self.orders.get(order.id)
         reason = None
         if not enabled:
             reason = "account_unavailable"
-        elif (amend and order.id not in self.pending) or (not amend and old is not None):
+        elif amend and order.id in self.members:
+            reason = "cancel_replace_basket"
+        elif (amend and order.id not in self.pending) or (not amend and (old is not None or order.id in self.group_ids)):
             reason = "unknown_order" if amend else "duplicate_id"
         elif order.symbol not in self.instruments:
             reason = "unknown_instrument"
@@ -257,7 +296,35 @@ class Broker:
         self.note(at, order.id, "amended" if amend else "accepted")
         return True
 
+    def submit_basket(self, basket, at, quantities, limit, *, enabled):
+        if basket.id in self.orders or basket.id in self.group_ids:
+            self.note(at, basket.id, "rejected", "duplicate_id")
+            return False
+        self.group_ids.add(basket.id)
+        accepted = []
+        for leg in basket.legs:
+            if not self.submit(leg, at, quantities, limit, enabled=enabled):
+                for id in accepted:
+                    self.cancel(id, at, "basket_rejected")
+                self.note(at, basket.id, "rejected", "invalid_leg")
+                return False
+            accepted.append(leg.id)
+        self.groups[basket.id] = tuple(accepted)
+        self.members.update((id, basket.id) for id in accepted)
+        self.note(at, basket.id, "accepted")
+        return True
+
     def cancel(self, id, at, reason):
+        if id in self.members:
+            id = self.members[id]
+        if id in self.groups:
+            members = self.groups.pop(id)
+            for leg in members:
+                self.members.pop(leg, None)
+            for leg in members:
+                self.cancel(leg, at, reason)
+            self.note(at, id, "cancelled", reason)
+            return
         state = self.pending.pop(id, None)
         if state is None:
             self.note(at, id, "rejected", "not_working")
@@ -271,16 +338,23 @@ class Broker:
 
     def cancel_all(self, at, reason, *, day_only=False):
         for id, state in tuple(self.pending.items()):
-            if not day_only or state.order.tif == "day":
+            if id in self.pending and (not day_only or state.order.tif == "day"):
                 self.cancel(id, at, reason)
 
-    def match(self, market, quantities, execute):
+    def match(self, market, quantities, execute, execute_many=None):
         quotes = {q.symbol: q for q in market.quotes}
         capacity = {(q.symbol, side): n for q in market.quotes
                     for side, n in ((1, q.ask_size), (-1, q.bid_size))}
+        handled = set()
         for id in tuple(self.pending):
             state = self.pending.get(id)
             if state is None:
+                continue
+            if id in self.members:
+                group = self.members[id]
+                if group not in handled:
+                    handled.add(group)
+                    self.match_basket(group, market, quotes, capacity, quantities, execute_many)
                 continue
             order = state.order
             if order.expires is not None and market.at >= order.expires:
@@ -342,3 +416,49 @@ class Broker:
                             self.cancel(other, market.at, "oco")
             if order.tif == "ioc" and id in self.pending:
                 self.cancel(id, market.at, "ioc_remainder")
+
+    def match_basket(self, group, market, quotes, capacity, quantities, execute):
+        if execute is None:
+            raise ValueError("atomic basket execution requires a portfolio executor")
+        ids = self.groups[group]
+        states = [self.pending[id] for id in ids]
+        if any(s.order.expires is not None and s.order.expires <= market.at for s in states):
+            self.cancel(group, market.at, "expired")
+            return
+        fills, holdings = [], quantities()
+        for state in states:
+            order = state.order
+            quote = quotes.get(order.symbol)
+            side, n = (1 if order.quantity > 0 else -1), abs(order.quantity)
+            available = capacity.get((order.symbol, side))
+            held = holdings.get(order.symbol, 0)
+            if (quote is None or available is not None and available < n
+                    or order.reduce_only and (held*side >= 0 or abs(held) < n)):
+                break
+            model, instrument = self.models[order.symbol], self.instruments[order.symbol]
+            price = model.price(order, quote, instrument)
+            if price is None:
+                break
+            price = money(price)
+            instrument.ticks(price)
+            if order.limit is not None and side*(price-order.limit) > 0:
+                raise ValueError("execution model exceeded the order limit")
+            fills.append((order, order.quantity, price, model.cost(order.quantity, first=True)))
+        if len(fills) == len(states):
+            executed = execute(fills)
+            if executed is None:
+                return
+            self.groups.pop(group, None)
+            for state, fill in zip(states, executed, strict=True):
+                order = state.order
+                self.pending.pop(order.id, None)
+                self.members.pop(order.id, None)
+                self.orders[order.id] = self.archive(replace(state, remaining=0,
+                    filled=abs(order.quantity), status="filled"))
+                side = 1 if order.quantity > 0 else -1
+                if capacity[order.symbol, side] is not None:
+                    capacity[order.symbol, side] -= abs(order.quantity)
+                self.note(market.at, order.id, "filled", fill=fill)
+            self.note(market.at, group, "filled")
+        elif states[0].order.tif == "ioc":
+            self.cancel(group, market.at, "ioc_remainder")

@@ -11,9 +11,11 @@ from .events import Fill, Marks, merge_events
 from .portfolio import Book, BookState, Position
 from .event_replay import EventReplay, EventState, PayoutContext
 from .calendars import ProcessingCalendar
-from .orders import Quote, Market, Order, Cancel, Amend, Abandon, OrderState, OrderEvent, QuoteModel
+from .orders import Quote, Market, MarketSource, Order, Basket, Cancel, Amend, Abandon, OrderState, OrderEvent, QuoteModel
 from .strategy import Context, StrategyReplay, ReplayCancelled
 from .market_data import MarketTape, MarketView
+from .feeds import Bar, TradeTick, MarketFeed, bar_quotes, trade_quotes, merge_markets
+from .opportunities import Opportunity, OpportunityStrategy, OpportunityReplay
 from .randomness import RandomStream
 from .strategy_fitting import (
     Parameter, InfeasiblePolicy, StrategyPath, StrategyEvaluation, StrategyFit,
@@ -66,6 +68,7 @@ from .data import (
     slice_days,
 )
 from .engine import Engine, Outcomes, RunConfig, UnsupportedInputCapabilityError
+from .capabilities import ReplaySupport, check_replay
 from .model import Account, Firm, Phase, Program, Variant
 from .objectives import (
     annualized_return_on_fee,
@@ -135,6 +138,11 @@ from .rules import (
 )
 
 __all__ = [
+    "ReplaySupport", "check_replay",
+    "Basket",
+    "Opportunity", "OpportunityStrategy", "OpportunityReplay",
+    "MarketSource",
+    "Bar", "TradeTick", "MarketFeed", "bar_quotes", "trade_quotes", "merge_markets",
     "RandomStream",
     "StrategyWalkForward", "evaluate_scenarios",
     "Parameter", "InfeasiblePolicy", "StrategyPath", "StrategyEvaluation", "StrategyFit",

@@ -122,6 +122,13 @@ fresh identical strategy and execution seeds for capital estimation. No finite
 historical sample establishes ultimate ruin. The existing complete-cycle
 approximation remains separately labelled in the [risk API](BRACKET_BACKTEST.md).
 
+`evaluation.ultimate_ruin(bankroll=1000)` runs that approximation on settled
+complete account cycles from the evaluation's unrestricted-wallet paths. It counts
+excluded open/unsettled cycles, handles denied requests separately from unpaid
+approved requests, and labels the IID/censoring assumptions. No complete cycles
+returns `not_identified`, not zero ruin. Research abandonment completes a cash
+cycle without being relabelled a firm failure.
+
 Use `RandomStream(seed, channel)` in stochastic strategies/models for keyed
 `uniform(*key)` or `normal(*key)` draws. Keys should identify a market opportunity,
 symbol and execution leg, not the count of previously executed trades. Policies

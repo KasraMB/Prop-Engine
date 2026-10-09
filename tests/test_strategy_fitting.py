@@ -231,3 +231,22 @@ def test_invalid_model_and_objective_errors_are_not_converted_to_infeasible():
         fit(objective=lambda evaluation: float("nan"))
     with pytest.raises(ValueError, match="cannot override"):
         fit(setup=lambda seed: setup(seed) | {"sessions": ()})
+
+
+def test_complete_cycle_approximation_is_separate_from_finite_horizon_metrics():
+    result = evaluate_strategy(SPEC, tape(), CONFIG, Daily, params={"quantity": 1}, setup=setup)
+    assert result.ultimate_ruin(bankroll=1000)["status"] == "not_identified"
+    from propfirm_engine import Abandon
+
+    class End(Daily):
+        def on_market(self, context, market):
+            if market.at.minute == 2:
+                return [Abandon()]
+            return super().on_market(context, market)
+
+    result = evaluate_strategy(SPEC, tape(), CONFIG, End, params={"quantity": 1}, setup=setup)
+    assert len(result.paths[0].cycles) == 10
+    ultimate = result.ultimate_ruin(bankroll=1000, paths=2, max_cycles=2)
+    assert ultimate["status"] == "certain_ruin"
+    assert "IID cycle approximation" in ultimate["warning"]
+    assert result.metrics["ruin_probability"] is None

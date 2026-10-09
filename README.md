@@ -18,7 +18,9 @@ callbacks and quote-based orders are available through `Engine.replay_strategy`;
 see the [strategy API](docs/STRATEGY_REPLAY.md). `Engine.fit_strategy` adds shared
 market tapes, declared parameter search, chronological OOS, rolling windows and
 walk-forward refits. See [strategy fitting](docs/STRATEGY_FITTING.md). Additional
-execution models and the remaining release gates are tracked in the roadmap.
+input adapters include external opportunities, explicit bar/trade scenarios and
+atomic or legged multi-instrument orders. See [market inputs](docs/MARKET_INPUTS.md).
+The remaining release gates are tracked in the roadmap.
 
 The bracket API implements the agreed **sequential stop-or-target model**.
 It reuses the existing rule interpreter, feasibility projection, payout ledger,

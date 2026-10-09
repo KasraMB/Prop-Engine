@@ -293,7 +293,10 @@ ruin estimate or annualized return is inferred from fee/payout cashflows.
 
 ## LucidFlex evidence and deliberate boundaries
 
-Official sources rechecked 2026-09-26:
+Official sources rechecked 2026-10-08. The replay profile records
+`rule_version="lucidflex-50k-2026-10-08"`; its source URLs also ship in
+`propfirm_engine.firms.lucidflex.SOURCES`. This versions the public numeric
+snapshot, not a certification of an account agreement or checkout price.
 
 - [Evaluation](https://support.lucidtrading.com/en/articles/12945790-lucidflex-evaluation-account):
   50K target $3,000, loss distance $2,000, 50% consistency, 4 minis/40 micros.
@@ -415,6 +418,28 @@ conditional on the cycle law, **not** law-estimation uncertainty or model error.
 Zero simulated failures is not silently reported as zero ultimate risk.
 
 ## Verification
+
+The 2026-10-08 audit distinguishes three evidence classes:
+
+- Official numeric mechanics: $3,000 evaluation target, $2,000 drawdown,
+  $50,100 locked floor, 50% evaluation consistency, four evaluation minis;
+  funded scaling at $1,000/$2,000 profit; five $150 qualifying days, $500 minimum,
+  50% retained-profit cap up to $2,000, 90% trader split and five payouts.
+- Selected interpretations/scenarios: strict consistency without the unspecified
+  cushion; observed open-equity breach checks; profit measured above $50,000;
+  $1 cycle gate; no trading while requests are pending; calendar-date inactivity
+  at 16:15 New York with qualifying closes winning exact ties; restarting after
+  live handoff. Public wording does not establish all these execution details.
+- External/unmodelled terms: checkout/reset prices remain explicit inputs;
+  commissions are selected per instrument and side, not a universal fee; holidays,
+  discretionary reviews, live onboarding and account-specific agreements are not
+  invented. The microscalping page describes a review trigger, not an automatic
+  deterministic breach that the engine can assume.
+
+The public hours page gives 16:45 flattening and 18:00 reopening. That session
+cutoff is separate from the selected 16:15 inactivity scenario. Holiday early
+closes require supplied calendar overrides. Approval, deduction and receipt clocks
+remain distinct; published processing expectations are not exact simulated times.
 
 Tests include hand-calculated complete evaluation/funded/payout traces, fee and
 rounding boundaries, variable trade ratios, pending-payment clocks, scaling,

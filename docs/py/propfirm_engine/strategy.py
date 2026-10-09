@@ -6,7 +6,7 @@ from fractions import Fraction
 from .enums import ExitCode
 from .event_replay import EventReplay, _EventReplay
 from .events import Fill, Marks, event_key
-from .orders import Abandon, Broker, Market, OrderEvent, OrderState
+from .orders import Abandon, Broker, Market, MarketSource, OrderEvent, OrderState
 from .portfolio import BookState
 from .market_data import MarketTape, MarketView
 
@@ -28,6 +28,7 @@ class Context:
     orders: tuple[OrderState, ...]
     phase_name: str
     next_phase_name: str | None
+    start: datetime
 
 
 @dataclass(frozen=True)
@@ -48,7 +49,16 @@ class _StrategyReplay(_EventReplay):
             raise TypeError("strategy must implement on_market(context, market)")
         if "mark_fills" in kwargs:
             raise ValueError("strategy execution uses explicit market marks")
+        self.input_fidelity = getattr(markets, "fidelity", kwargs.get("fidelity", "observed_marks"))
+        self.input_assumptions = tuple(getattr(markets, "assumptions", ()))
+        MarketSource(self.input_fidelity, self.input_assumptions)
+        if kwargs.get("fidelity") != self.input_fidelity:
+            raise ValueError(f"explicit fidelity='{self.input_fidelity}' is required for this market source")
+        if getattr(warmup, "fidelity", self.input_fidelity) != self.input_fidelity:
+            raise ValueError("warmup fidelity must match the main market feed")
+        kwargs["fidelity"] = "observed_marks"
         super().__init__(spec, (), instruments, config, mark_fills=False, **kwargs)
+        self.digest.update(repr((self.input_fidelity, self.input_assumptions)).encode())
         self.prepared = isinstance(markets, (MarketTape, MarketView))
         if self.prepared:
             tape = markets.tape if isinstance(markets, MarketView) else markets
@@ -91,7 +101,8 @@ class _StrategyReplay(_EventReplay):
                        remaining, self.sim.payouts_taken if self.sim else 0,
                        not warmup and self.eligible(self.clock), warmup,
                        tuple(self.broker.pending.values()), self.phase_name(),
-                       self.spec.account.phases[self.next_index].name if self.next_role else None)
+                       self.spec.account.phases[self.next_index].name if self.next_role else None,
+                       self.start)
 
     def actions(self, actions, *, enabled=True):
         if actions is None:
@@ -139,6 +150,11 @@ class _StrategyReplay(_EventReplay):
     def validate_market(self, market, *, prepared=False):
         if not isinstance(market, Market):
             raise TypeError("strategy replay requires Market observations")
+        fidelity = market.source.fidelity if market.source is not None else "observed_marks"
+        if fidelity != self.input_fidelity:
+            raise ValueError(f"explicit fidelity='{fidelity}' is required for the market observations")
+        if market.source is not None and not self.input_assumptions:
+            self.input_assumptions = market.source.assumptions
         if self.last_market is not None and event_key(market) <= self.last_market:
             raise ValueError("market keys must strictly increase")
         self.last_market = event_key(market)
@@ -185,6 +201,39 @@ class _StrategyReplay(_EventReplay):
         self.settle(fill, self.day)
         return fill
 
+    def execute_many(self, legs):
+        if not self.eligible(self.clock) or self.next_role is not None:
+            return None
+        holdings, fills = self.quantities(), []
+        for order, quantity, price, fee in legs:
+            holdings[order.symbol] += quantity
+            self.seq += 1
+            fills.append(Fill(self.clock, order.symbol, quantity, price, fee, self.seq))
+        if sum(abs(n)*self.units[s] for s, n in holdings.items()) > self.limit:
+            self.broker.cancel(legs[0][0].id, self.clock, "contract_limit")
+            return None
+        effects = [self.book.preview(fill) for fill in fills]
+        qualifies = any(e.closed and abs(e.closed_net) >= self.activity_threshold for e in effects)
+        self.advance(self.clock, qualifying_close=qualifies)
+        if self.book is None or self.next_role is not None:
+            return None
+        before = self.book.balance
+        for fill in fills:
+            self.book.apply(fill)
+        self.book.check_marks(self.clock, self.max_mark_age)
+        code = self.sim.observe(self.book.balance, self.book.equity, self.day,
+                                traded=True, allow_pass=self.book.flat)
+        if self.ledger is not None:
+            self.ledger.record_trade(self.clock, self.book.balance-before)
+        if qualifies:
+            self.activity(self.clock)
+        self.fill_count += len(fills)
+        for fill in fills:
+            self.emit(fill.at, "basket_fill", quantity=fill.quantity)
+        self.record(self.clock, "basket_fill")
+        self.handle_result(self.clock, code)
+        return tuple(fills)
+
     def finish_session(self, session, day):
         self.clock = self.close_at(session)
         self.broker.cancel_all(self.clock, "session_close", day_only=not self.spec.flatten_at_close)
@@ -220,7 +269,7 @@ class _StrategyReplay(_EventReplay):
                 self.advance(market.at, qualifying_close=True)
                 self.mark(market)
                 if self.book is not None and self.eligible(market.at) and self.next_role is None:
-                    self.broker.match(market, self.quantities, self.execute)
+                    self.broker.match(market, self.quantities, self.execute, self.execute_many)
                 self.advance(market.at)
                 self.notifications()
                 self.actions(self.strategy.on_market(self.context(), market))
@@ -229,13 +278,15 @@ class _StrategyReplay(_EventReplay):
         if market is not None:
             raise ValueError("market observation lies after the declared horizon")
         self.advance(self.end)
-        result = self.finish_result((
+        result = self.finish_result(self.input_assumptions + (
             "causal strategy callbacks; orders become executable on the next observed market event",
-            "observed quote execution; no inferred intrabar paths or order book queue priority",
+            f"execution source: {self.input_fidelity}; no claim of unobserved intrabar history or order book queue priority",
             "atomic quote marks precede order matching and callbacks; hard breach cancels all working orders",
             "quote sizes bound shared per-side liquidity; omitted sizes mean unlimited scenario liquidity",
             "stop triggers use supplied marks; market and stop gaps execute at supplied bid/ask plus the execution model",
             "OCO cancels siblings on any fill; linked reduce-only exits cannot reverse the portfolio",
+            "Basket legs fill all-or-none on one market observation; portfolio rules observe their combined settlement",
+            "atomic baskets are an explicit execution scenario, not an exchange or platform fill guarantee",
             "session cutoff follows the profile; DAY orders expire, GTC survives only when holding is allowed",
             f"forced closes use fresh last marks and {self.liquidation_fee} fee per contract",
             "configured withdrawal, approval/denial and processing scenarios; no trading while pending",

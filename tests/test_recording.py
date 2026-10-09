@@ -89,6 +89,15 @@ def test_search_cash_risk_matches_a_complete_funded_payout_path():
     assert compact.book == full.book
 
 
+def test_rejected_requests_do_not_exclude_an_otherwise_settled_cycle():
+    from types import SimpleNamespace
+    from propfirm_engine import CashCycle
+    from propfirm_engine.ruin import _settled_cycles
+    events = [SimpleNamespace(kind=k, cash=c, attempt=1)
+              for k, c in (("fee", -100), ("request", 0), ("rejection", 0), ("abandonment", 0))]
+    assert _settled_cycles(SimpleNamespace(events=events)) == ([CashCycle(-100, 100)], 0)
+
+
 def test_legacy_caches_are_bounded_lru():
     from propfirm_engine import CompiledRuleCache
     from propfirm_engine.rules import ProfitTargetRule

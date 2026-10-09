@@ -1,5 +1,5 @@
 {
-  "bundle_sha256": "8e268af4f6d0938272fbbebfe94d6288b94eb020b5f8b68023af3b2e3817e98a",
+  "bundle_sha256": "b9d8e17bb5efc45fc1841dd4605c0264eed4dc6ee814fe45fc55ee3e0aa56126",
   "files": [
     {
       "path": "numba.py",
@@ -7,7 +7,7 @@
     },
     {
       "path": "propfirm_engine/__init__.py",
-      "sha256": "fa8f3970582c3619921f29c8941a1384a5a3756140546f56ed0f0da3cf487911"
+      "sha256": "46dab8431129ca02a45dc78bca3042583b1e8730c729fb0d003c8d8a92dc26a2"
     },
     {
       "path": "propfirm_engine/analytical.py",
@@ -24,6 +24,10 @@
     {
       "path": "propfirm_engine/calendars.py",
       "sha256": "00fdfa258644f1b9548e39ca512c01ff293ea3643d3f8889783eb26a0c73cffa"
+    },
+    {
+      "path": "propfirm_engine/capabilities.py",
+      "sha256": "f0157cbee30e40654a2777d84f0bf150f9b2f2b3e21986a4554e8bfcb158204b"
     },
     {
       "path": "propfirm_engine/cashflows.py",
@@ -43,7 +47,7 @@
     },
     {
       "path": "propfirm_engine/engine.py",
-      "sha256": "e1c394540f8959ccd9ca85a5d1ed2167f539756bf4f2fe188ecb1d23abd5c9d1"
+      "sha256": "78b55002fb932e64bef6a98f63982f7bdba8a0a668ede82075a69a455b58687e"
     },
     {
       "path": "propfirm_engine/enums.py",
@@ -51,7 +55,7 @@
     },
     {
       "path": "propfirm_engine/event_replay.py",
-      "sha256": "116dc795dd92682c7cedc261db6b38f6bee3e1313d77af2b0b331bd5fdd53b28"
+      "sha256": "caf17ba901f649aa534b42c625ffe8a6f3da0f5a73b82585cd89fd4a1ca6bc32"
     },
     {
       "path": "propfirm_engine/events.py",
@@ -59,11 +63,15 @@
     },
     {
       "path": "propfirm_engine/execution.py",
-      "sha256": "7eec0f1eaa36a32a8f819c06c5b797b26cea72a053367795bec1d466e248a357"
+      "sha256": "3a49cc85a9687db6abb4c04aaf95e6df6f7273d80c8f0b902e554e7a64bbcff7"
     },
     {
       "path": "propfirm_engine/feasibility.py",
       "sha256": "266f4bc44ac936a354fca5384d1693963957b5ff976ff9fcae8d9a71e60633f9"
+    },
+    {
+      "path": "propfirm_engine/feeds.py",
+      "sha256": "2106a9f251533bd7d79fe172e0511847dd388eb69b1e2acc6fa4de3dfb686aab"
     },
     {
       "path": "propfirm_engine/fingerprint.py",
@@ -75,7 +83,7 @@
     },
     {
       "path": "propfirm_engine/firms/lucidflex.py",
-      "sha256": "93422cc6d9a658cdecda52e8acaaef3238aa6a08e58abccef57a5c8aa68975f9"
+      "sha256": "f3c15e43a0bcab24a71485872eaf51ed4f0911b7633d814f026becfe48ac7a2b"
     },
     {
       "path": "propfirm_engine/fitting.py",
@@ -95,7 +103,7 @@
     },
     {
       "path": "propfirm_engine/market_data.py",
-      "sha256": "8a709c506bda23dbd9fbdd1c5a3e11908c92e73043e10a287e2f310780c43518"
+      "sha256": "5f13025b902740346b76d70aa8341c5158829be6f9e00ab3e26182073565f6d4"
     },
     {
       "path": "propfirm_engine/market_replay.py",
@@ -110,12 +118,16 @@
       "sha256": "dbc98d01e2f9f782f317181c090988ce92a4acb6ceb4de9383f37e6b972b08e4"
     },
     {
+      "path": "propfirm_engine/opportunities.py",
+      "sha256": "2c82d160d576cfe527dae3c0813feee79410bd5ec4dd4741d551a88aab75817d"
+    },
+    {
       "path": "propfirm_engine/optimizer.py",
       "sha256": "98fa0373d9c0040fd8fe7c0e560e130d9fa16341ccb196503e4c3feb611b71c9"
     },
     {
       "path": "propfirm_engine/orders.py",
-      "sha256": "56532f9d55f4c4aa2c21904379d316f33705676364b0a62712f56dc45024f9cd"
+      "sha256": "e97e3e8981930517cc01169a98d98696bfbca55966a341f7eea92f500dec8c1e"
     },
     {
       "path": "propfirm_engine/payouts.py",
@@ -159,7 +171,7 @@
     },
     {
       "path": "propfirm_engine/ruin.py",
-      "sha256": "1786f446e0261343767f669b67d38dafbc4f3594f9571441158a486293ce9b1a"
+      "sha256": "1769a8a992b6a413c7ca41edf77ff4e621eaacf43febc4b7a69660bf5b00f645"
     },
     {
       "path": "propfirm_engine/rules.py",
@@ -183,11 +195,11 @@
     },
     {
       "path": "propfirm_engine/strategy.py",
-      "sha256": "cee93a1451f656183dccbbf64238542e94e72624a48f0486f9e02794a82e006a"
+      "sha256": "cc34f8f94573d1f1c5f2aeffdfdec53563ca0cd8cd1b85086a16778330ef27bb"
     },
     {
       "path": "propfirm_engine/strategy_fitting.py",
-      "sha256": "9247ab42370d5d56a14430573a52d49570af6b4c9e94d4185a7797b70217ec2f"
+      "sha256": "3468f84a0b2e2db7250c0f13b4f93b7961a40e67e33bb463843ecc0510572677"
     },
     {
       "path": "propfirm_engine/synthetic.py",

@@ -180,6 +180,11 @@ class Engine:
         from .event_replay import replay_events
         return replay_events(spec, events, instruments, config, **kwargs)
 
+    def check_replay(self, spec, **kwargs):
+        """Validate a declared account/input capability contract before preparing data."""
+        from .capabilities import check_replay
+        return check_replay(spec, **kwargs)
+
     def replay_strategy(self, spec, markets, instruments, config, strategy, **kwargs):
         """Run an external causal strategy against explicit quote execution models."""
         from .strategy import replay_strategy
@@ -189,6 +194,11 @@ class Engine:
         """Optimize declared causal strategy parameters on IS; report OOS metrics."""
         from .strategy_fitting import fit_strategy
         return fit_strategy(spec, tape, config, factory, **kwargs)
+
+    def replay_opportunities(self, spec, markets, instruments, config, opportunities, policy, **kwargs):
+        """Deliver causal external opportunities to a resizable order policy."""
+        from .opportunities import replay_opportunities
+        return replay_opportunities(spec, markets, instruments, config, opportunities, policy, **kwargs)
 
     def walk_strategy(self, spec, tape, config, factory, **kwargs):
         """Chronological refits with fresh account state for each OOS fold."""

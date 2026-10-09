@@ -1,7 +1,6 @@
 """Immutable columnar quotes with zero-copy session windows."""
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta, timezone as utc_zone
-from fractions import Fraction
 from hashlib import sha256
 from zoneinfo import ZoneInfo
 
@@ -9,7 +8,7 @@ import numpy as np
 
 from .events import event_key
 from .instruments import Instrument
-from .orders import Market, Quote
+from .orders import Market, MarketSource, Quote
 
 
 _EPOCH = datetime(1970, 1, 1, tzinfo=utc_zone.utc)
@@ -37,8 +36,15 @@ class MarketTape:
     quotes: np.ndarray
     offsets: np.ndarray
     fingerprint: str
+    fidelity: str
+    assumptions: tuple[str, ...]
+    source: MarketSource | None
 
     def __init__(self, markets, instruments, *, sessions, timezone="America/New_York", session_open=time(18)):
+        fidelity = getattr(markets, "fidelity", "observed_marks")
+        assumptions = tuple(getattr(markets, "assumptions", ()))
+        MarketSource(fidelity, assumptions)
+        known_source = hasattr(markets, "fidelity")
         instruments, sessions = tuple(instruments), tuple(sessions)
         if (not instruments or any(not isinstance(i, Instrument) for i in instruments)
                 or len({i.symbol for i in instruments}) != len(instruments)):
@@ -57,6 +63,11 @@ class MarketTape:
         for market in markets:
             if not isinstance(market, Market):
                 raise TypeError("MarketTape requires Market observations")
+            origin = market.source or MarketSource()
+            if previous is None and not known_source:
+                fidelity, assumptions = origin.fidelity, origin.assumptions
+            if origin.fidelity != fidelity:
+                raise ValueError("mixed input fidelities require an explicit merged market feed")
             key = event_key(market)
             if previous is not None and key <= previous:
                 raise ValueError("market keys must strictly increase")
@@ -79,12 +90,14 @@ class MarketTape:
                                -1 if quote.ask_size is None else quote.ask_size))
         frame_data, quote_data = _freeze(frames, _FRAME), _freeze(quotes, _QUOTE)
         offsets = _freeze([0, *np.cumsum(counts).tolist()], np.dtype("<i8"))
-        digest = sha256(repr((instruments, sessions, timezone, session_open)).encode())
+        digest = sha256(repr((instruments, sessions, timezone, session_open, fidelity, assumptions)).encode())
         digest.update(frame_data.tobytes())
         digest.update(quote_data.tobytes())
         for name, value in dict(instruments=instruments, sessions=sessions, timezone=timezone,
                                 session_open=session_open, frames=frame_data, quotes=quote_data,
-                                offsets=offsets, fingerprint=digest.hexdigest()).items():
+                                offsets=offsets, fingerprint=digest.hexdigest(), fidelity=fidelity,
+                                assumptions=assumptions,
+                                source=MarketSource(fidelity, assumptions) if fidelity != "observed_marks" or assumptions else None).items():
             object.__setattr__(self, name, value)
 
     @property
@@ -111,7 +124,7 @@ class MarketTape:
                                 int(row["mark"])*tick,
                                 None if row["bid_size"] < 0 else int(row["bid_size"]),
                                 None if row["ask_size"] < 0 else int(row["ask_size"])))
-        return Market(_EPOCH + timedelta(microseconds=int(frame["time"])), tuple(quotes), int(frame["seq"]))
+        return Market(_EPOCH + timedelta(microseconds=int(frame["time"])), tuple(quotes), int(frame["seq"]), self.source)
 
 
 @dataclass(frozen=True)
@@ -132,6 +145,14 @@ class MarketView:
     @property
     def instruments(self):
         return self.tape.instruments
+
+    @property
+    def fidelity(self):
+        return self.tape.fidelity
+
+    @property
+    def assumptions(self):
+        return self.tape.assumptions
 
     @property
     def fingerprint(self):

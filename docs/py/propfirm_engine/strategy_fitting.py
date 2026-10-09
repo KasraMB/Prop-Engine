@@ -1,5 +1,6 @@
 """Chronological search over external causal strategies and shared market tapes."""
 from dataclasses import dataclass, replace
+from datetime import date
 from functools import cached_property
 from fractions import Fraction
 from hashlib import sha256
@@ -12,8 +13,9 @@ import numpy as np
 
 from .market_data import MarketTape, MarketView
 from .optimizer import CMAES
-from .risk import RiskConfig, cash_risk_path, distribution, risk_report
+from .risk import CashRiskPath, RiskConfig, cash_risk_path, distribution, risk_report
 from .rolling import RollingConfig
+from .ruin import CashCycle, _settled_cycles, ultimate_cycle_ruin
 from .strategy import ReplayCancelled, replay_strategy
 
 
@@ -71,15 +73,17 @@ class InfeasiblePolicy(ValueError):
 
 @dataclass(frozen=True)
 class StrategyPath:
-    first_session: object
-    last_session: object
+    first_session: date
+    last_session: date
     seed: int
-    cash: object
+    cash: CashRiskPath
     balance: float | None
     equity: float | None
     fills: int
     rejected_orders: int
     passed_stages: int
+    cycles: tuple[CashCycle, ...] = ()
+    excluded_cycles: int = 0
 
 
 @dataclass(frozen=True)
@@ -102,6 +106,18 @@ class StrategyEvaluation:
     @property
     def mean_cash_per_day(self):
         return fsum(p.cash.net_cash_per_day for p in self.paths)/len(self.paths)
+
+    def ultimate_ruin(self, *, bankroll, **kwargs):
+        cycles = tuple(c for p in self.paths for c in p.cycles)
+        excluded = sum(p.excluded_cycles for p in self.paths)
+        if not cycles:
+            return {"status": "not_identified", "reason": "no settled complete account cycles",
+                    "excluded_cycles": excluded}
+        options = dict(target=self.risk.target_ruin_probability, confidence=self.risk.confidence) | kwargs
+        report = ultimate_cycle_ruin(cycles, bankroll=bankroll, **options)
+        report.update(excluded_cycles=excluded, calibration="complete unrestricted-wallet account cycles",
+            warning="IID cycle approximation, not full-engine ultimate ruin; censored-cycle selection and estimated-law error excluded")
+        return report
 
     @cached_property
     def metrics(self):
@@ -190,11 +206,12 @@ def evaluate_strategy(spec, tape, config, factory, *, params, setup, seeds=(0,),
             if any(e.kind == "wallet_wait" for e in replay.events):
                 unrestricted = run(replace(config, initial_wallet=None)).result.replay
             cash = cash_risk_path(replay, unrestricted=unrestricted)
+            cycles, excluded = _settled_cycles(replay if unrestricted is None else unrestricted)
             book = result.result.book
             paths.append(StrategyPath(window.sessions[0], window.sessions[-1], seed, cash,
                 float(book.balance) if book else None, float(book.equity) if book else None,
                 result.result.fills, dict(result.order_counts).get("rejected", 0),
-                dict(result.result.event_counts).get("evaluation_pass", 0)))
+                dict(result.result.event_counts).get("evaluation_pass", 0), tuple(cycles), excluded))
             digest.update(replay.history_fingerprint.encode())
     evaluation = StrategyEvaluation(parameters, tuple(paths), risk, digest.hexdigest())
     score = evaluation.mean_cash_per_day if objective is None else objective(evaluation)
@@ -232,7 +249,7 @@ class StrategyFit:
     validation: StrategyEvaluation | None
     trials: tuple[StrategyTrial, ...]
     checkpoint: StrategyCheckpoint
-    split_session: object
+    split_session: date
     work: dict
 
     @property
