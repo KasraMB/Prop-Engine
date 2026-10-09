@@ -86,7 +86,7 @@ result = Engine().replay_strategy(
     fidelity="observed_marks", models={"ES": QuoteModel(fee=2)},
     max_mark_age=timedelta(minutes=2), liquidation_fee=2,
 )
-print(f"Account balance: {result.result.book.balance:.2f}")
+print(f"Account balance: {float(result.result.book.balance):.2f}")
 print(f"External net cash: {result.result.replay.net_cash:.2f}")
 ```
 
