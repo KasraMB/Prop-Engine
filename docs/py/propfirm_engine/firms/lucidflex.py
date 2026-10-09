@@ -166,4 +166,29 @@ def replay_50k(*, eval_fee, reset_fee, contract_type, elapsed_inactivity=False):
     )
 
 
-__all__ = ["SPECS", "RULE_VERSION", "SOURCES", "build_account", "firm", "replay_50k"]
+def info(spec=None, config=None, *, print_output=True):
+    """Describe the 50K DLL-off reference, or an explicitly supplied configuration.
+
+    No-argument preview uses mini units and leaves checkout/reset fees unspecified.
+    Pass the actual replay spec and config to include your fees and lifecycle choices.
+    """
+    from ..info import _emit, _report
+
+    preview = spec is None
+    if preview:
+        spec = replay_50k(eval_fee=0, reset_fee=0, contract_type="mini")
+    notes = [
+        "Reference values are versioned configuration, not current checkout prices or live-verified terms.",
+        "Unknown agreements, discretionary reviews, microscalping review and earlier live transfer are not simulated.",
+    ]
+    if preview:
+        micro = replay_50k(eval_fee=0, reset_fee=0, contract_type="micro")
+        notes.append(f"Preview limits use mini units. Micro reference: eval {micro.eval_contract_limit}; funded tiers {micro.funded_tiers}.")
+    else:
+        notes.append("Supplied configuration may override the LucidFlex reference; limits use its configured contract units.")
+    return _emit(_report(spec, config,
+        title="LucidFlex 50K DLL-off reference (mini units)" if preview else "LucidFlex - supplied configuration",
+        sources=SOURCES, unknown_fees=("eval_fee", "reset_fee") if preview else (), notes=notes), print_output)
+
+
+__all__ = ["SPECS", "RULE_VERSION", "SOURCES", "build_account", "firm", "replay_50k", "info"]

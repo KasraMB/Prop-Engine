@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.2 - 2026-10-09
+
+- Printable configured-rule reports through `firms.lucidflex.info`, `Engine.info`
+  and `account_info`, including all phases, payout schemas and lifecycle settings.
+- Explicit unspecified-fee labels in the reference preview; custom configuration,
+  runtime scenarios, profile assumptions and source references remain separate.
+- Tested quickstart examples and clean-install coverage for the reporting API.
+
 ## 0.2.1 - 2026-10-09
 
 - Exact decimal IS/OOS boundaries, including 63/27 sessions for a 90-session history.

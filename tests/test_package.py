@@ -16,7 +16,9 @@ ROOT = Path(__file__).resolve().parents[1]
 def _quickstart():
     text = (ROOT / "README.md").read_text(encoding="utf-8")
     section = text.split("## Getting started\n", 1)[1].split("## Status\n", 1)[0]
-    example, = re.findall(r"```python\n(.*?)\n```", section, re.DOTALL)
+    examples = re.findall(r"```python\n(.*?)\n```", section, re.DOTALL)
+    assert examples
+    example = "\n".join(examples)
     return example + (
         "\nassert result.result.book.balance == 50096\n"
         "assert result.result.replay.net_cash == -105.20\n")

@@ -1,5 +1,5 @@
 {
-  "bundle_sha256": "624d7f5da569c3c5e5c95591ba3ca7f78e61aedebbc620168c0b15fe02d4b32d",
+  "bundle_sha256": "fd7993ac46899b4f775c18237bb71684bd243d941354772d81b05b97379df014",
   "files": [
     {
       "path": "numba.py",
@@ -7,7 +7,7 @@
     },
     {
       "path": "propfirm_engine/__init__.py",
-      "sha256": "b37b6fb921c89ac6ca7086e7229b597a61a82d524a6aa703d0c9d687b9b163e1"
+      "sha256": "eb60c438435f2ca5b03841c1dd10e9596c64eb47de24114884f8d91a5b8cba36"
     },
     {
       "path": "propfirm_engine/analytical.py",
@@ -47,7 +47,7 @@
     },
     {
       "path": "propfirm_engine/engine.py",
-      "sha256": "78b55002fb932e64bef6a98f63982f7bdba8a0a668ede82075a69a455b58687e"
+      "sha256": "40fabe967be544aeb95da0c17c9f5917ff5a524257f213b48b994b6bbc1c4e36"
     },
     {
       "path": "propfirm_engine/enums.py",
@@ -83,11 +83,15 @@
     },
     {
       "path": "propfirm_engine/firms/lucidflex.py",
-      "sha256": "f3c15e43a0bcab24a71485872eaf51ed4f0911b7633d814f026becfe48ac7a2b"
+      "sha256": "f91db0f79132990ffb8eebe1973bd4d29b62f30dc0651af309b494304ea4a264"
     },
     {
       "path": "propfirm_engine/fitting.py",
       "sha256": "f57a243953e366e2374d7bd2e518701585932154ffa646d0a47e21a20a201164"
+    },
+    {
+      "path": "propfirm_engine/info.py",
+      "sha256": "2b52eb7694c1e8844fd0f6c1e4d50b6f70f8ce6e2ad4f75b36d055f77d7fb153"
     },
     {
       "path": "propfirm_engine/instruments.py",

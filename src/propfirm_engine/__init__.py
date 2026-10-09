@@ -1,6 +1,6 @@
 """Research simulator for futures prop-firm strategies and attempt economics."""
 
-__version__ = "0.2.1"
+__version__ = "0.2.2"
 
 from . import firms, statistics
 from .execution import (
@@ -71,6 +71,7 @@ from .data import (
 )
 from .engine import Engine, Outcomes, RunConfig, UnsupportedInputCapabilityError
 from .capabilities import ReplaySupport, check_replay
+from .info import account_info
 from .model import Account, Firm, Phase, Program, Variant
 from .objectives import (
     annualized_return_on_fee,
@@ -140,6 +141,7 @@ from .rules import (
 )
 
 __all__ = [
+    "account_info",
     "SearchRun", "estimate_strategy_work",
     "ReplaySupport", "check_replay",
     "Basket",

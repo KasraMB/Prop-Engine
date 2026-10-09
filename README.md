@@ -103,6 +103,33 @@ negative because the evaluation cost $105.20 and no payout was received. Account
 balance and spendable cash are different. Inspect `result.orders` for execution
 feedback and `result.result.replay.events` for the account/cash ledger.
 
+### Inspect the firm's rules
+
+Print evaluation, funded, payout, scaling, hours and inactivity settings:
+
+```python
+from propfirm_engine import firms as api
+
+api.lucidflex.info()
+```
+
+The no-argument preview is the 50K DLL-off reference in mini units; it also lists
+micro limits. Checkout/reset fees stay explicitly unspecified. To see exactly
+what you are testing, pass your configured profile and runtime settings:
+
+```python
+api.lucidflex.info(spec, config)
+rules_text = Engine().info(spec, config, print_output=False)
+```
+
+Every call returns the report as text; `print_output=False` suppresses printing.
+`Engine.info` (also exported as `account_info`) works with any `LifecycleSpec` or
+`Account`, including custom multi-stage profiles. An `Account` alone lacks dated
+lifecycle settings. Reports read configured values, not a separate rule table.
+Assumptions and source links are labelled; this is not a live website lookup or
+an executor-support check. Fill models and callback/calendar overrides remain
+separate inputs and are not inferred from `spec` or `config`.
+
 ### Optimize and read the results
 
 Continue with the complete runnable [strategy fitting example](docs/STRATEGY_FITTING.md#example).
@@ -124,7 +151,7 @@ interpreting results, and the [API map](#api-map) for other entry points.
 
 ## Status
 
-Version 0.2.1 provides general order and portfolio research execution under the
+Version 0.2.2 provides general order and portfolio research execution under the
 [research engine plan](docs/RESEARCH_ENGINE_PLAN.md). Recorded fills and ordered
 portfolio marks now support arbitrary exits, partials and concurrent instruments
 through `Engine.replay_events`. See the [event replay API](docs/EVENT_REPLAY.md)
@@ -409,6 +436,7 @@ remains unidentified by finite simulations. See the
 
 | Task | Entry point |
 | --- | --- |
+| Print configured firm rules and research assumptions | `firms.lucidflex.info(...)`, `Engine.info(...)`, `account_info(...)` |
 | Check account/input support before running | `Engine.check_replay(...)` |
 | Replay arbitrary recorded fills and portfolio marks | `Engine.replay_events(...)` |
 | Run causal strategies with orders and execution models | `Engine.replay_strategy(...)` |

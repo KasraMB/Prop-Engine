@@ -165,6 +165,11 @@ class Engine:
     def __init__(self, caches: Caches | None = None):
         self.caches = caches if caches is not None else Caches()
 
+    def info(self, spec, config=None, *, print_output=True):
+        """Print and return the rules of the exact configuration being tested."""
+        from .info import account_info
+        return account_info(spec, config, print_output=print_output)
+
     def backtest(self, spec, history, policy, config):
         """Chronological bracket replay; distinct from resampled summary runs."""
         from .backtest import backtest
