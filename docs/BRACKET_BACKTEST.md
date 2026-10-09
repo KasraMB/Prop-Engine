@@ -80,9 +80,11 @@ search-selected value. Choose regimes and bounds before opening OOS results.
   the configured reset-expiry period ends requires a new purchase.
 - The Lucid profile expires inactive accounts after 30 elapsed days. A trade
   with absolute net P&L of at least $1 resets that clock. This per-trade activity
-  interpretation and exact time boundary are explicit scenarios. Inactivity
-  during an open trade or a pending payout is rejected as unsupported, rather
-  than guessing liquidation or approval outcomes.
+  interpretation and exact time boundary are explicit scenarios. A qualifying
+  close takes priority over an inactivity deadline at the identical timestamp
+  (user-selected tie ordering, not specified by the public rule). A deadline
+  strictly before the close, or during a pending payout, remains unsupported
+  rather than guessing liquidation or approval outcomes.
 - Evaluation passing occurs at a realized close with every pass gate satisfied.
   Funding waits for the caller's elapsed activation delay.
 - Request the maximum eligible payout at session close. The supplied policy

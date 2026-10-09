@@ -1,5 +1,5 @@
 {
-  "bundle_sha256": "630c990336ff6a2fb61bd2551f907ea73bf3b50c8e2d023be99dc5e0599bb26a",
+  "bundle_sha256": "348714b4dac46599f2ada2f66d372422d261b98a78f3dec76b98521453aa4cc7",
   "files": [
     {
       "path": "numba.py",
@@ -7,7 +7,7 @@
     },
     {
       "path": "propfirm_engine/__init__.py",
-      "sha256": "1ea5e42fafae19146a3c3dd9c1069a470f60283b55e782af978d427649f68939"
+      "sha256": "3f6daeaacf0036f909271cdee8e0f3ec8f2971feaca3dff643edffdf1745b69a"
     },
     {
       "path": "propfirm_engine/analytical.py",
@@ -15,7 +15,7 @@
     },
     {
       "path": "propfirm_engine/backtest.py",
-      "sha256": "59af6d70e723b62cda255cae5db078231ef52220a0bd43f53f786ac3fdd54330"
+      "sha256": "9ee5217f1cae0c5bfdc8eec9c7c819da7e3264ed60cd9bda8faa3e4107d9fe9d"
     },
     {
       "path": "propfirm_engine/cache.py",
@@ -39,7 +39,7 @@
     },
     {
       "path": "propfirm_engine/engine.py",
-      "sha256": "01878846affca0db8f59d0d26c5b7b6a0a16e1fcab69759380cd53607fcd6d80"
+      "sha256": "383e1212dd2169bb470fc42180b42328aeab9d2c4cec1a0d38e7f886cb2286b8"
     },
     {
       "path": "propfirm_engine/enums.py",
@@ -78,6 +78,10 @@
       "sha256": "23257741133d9fb65f90fcf84b21a242c1b06ebc731dba4e35365d16142453cd"
     },
     {
+      "path": "propfirm_engine/market_replay.py",
+      "sha256": "f997a3753d975bedfa39fb8b5094208770e4521d8464339496b14ef5755b7385"
+    },
+    {
       "path": "propfirm_engine/model.py",
       "sha256": "eb525110af0f3a4f7c958aae1411fccfe3bb7dae6ac1fa7b1f7bc14cef17f3ca"
     },
@@ -92,6 +96,10 @@
     {
       "path": "propfirm_engine/payouts.py",
       "sha256": "73086069ad98926b8c6d1cd505c3b311aa4bc2b40f0d087b20ea6e11e89d8383"
+    },
+    {
+      "path": "propfirm_engine/price_fitting.py",
+      "sha256": "c3858e045a2590ae5a9b77cce90f016b1864ea18106fdce71ca337f9b7975f4f"
     },
     {
       "path": "propfirm_engine/reference.py",
@@ -132,6 +140,10 @@
     {
       "path": "propfirm_engine/simulate.py",
       "sha256": "b3af77cdb8fe09d11942e56eef3509b040023441948ad87b8f5b321a673b3d04"
+    },
+    {
+      "path": "propfirm_engine/slippage.py",
+      "sha256": "b8433fa6c8c4715d5541bfb12b1705648a5ebf55eb7cdffd70afb4a9e2dc6f97"
     },
     {
       "path": "propfirm_engine/statistics.py",

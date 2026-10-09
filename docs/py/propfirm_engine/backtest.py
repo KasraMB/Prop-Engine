@@ -43,6 +43,21 @@ class BacktestEvent:
 
 
 @dataclass(frozen=True)
+class _ResolvedExecution:
+    """Internal price-adapter result; dollar values are gross per contract.
+
+    Zero quantity denotes a buffer too small for the requested fixed position.
+    The adapter must stop its price scan at the first exit, never use later lows.
+    """
+
+    exit_at: datetime
+    quantity: int
+    stop_loss: float
+    pnl: float
+    low: float
+
+
+@dataclass(frozen=True)
 class BacktestResult:
     """Observed cash economics, NOT an unbiased population-EV estimate."""
 
@@ -108,7 +123,8 @@ def _check_support(spec):
 class _Replay:
     """Coordinates existing rules, feasibility projection and dated payout accounting."""
 
-    def __init__(self, spec, history, policy, config, *, bracket_factory=None):
+    def __init__(self, spec, history, policy, config, *, bracket_factory=None,
+                 execution_factory=None, session_closes=None):
         self.spec, self.history, self.policy, self.config = spec, history, policy, config
         self.fixed_cost = Fraction(str(config.cost_per_trade))
         self.contract_cost = Fraction(str(config.cost_per_contract))
@@ -116,6 +132,10 @@ class _Replay:
         self.activity_threshold = Fraction(str(spec.activity_threshold))
         # Internal research hook; the public historical API never retargets trades.
         self.bracket_factory = bracket_factory
+        if bracket_factory is not None and execution_factory is not None:
+            raise ValueError("choose either bracket or resolved-price execution")
+        self.execution_factory = execution_factory
+        self.session_closes = dict(session_closes or {})
         compiled = _check_support(spec)
         self.phases = {p.role: p for p in compiled.phases}
         self.source = {p.role: p for p in spec.account.phases}
@@ -148,7 +168,11 @@ class _Replay:
                 raise ValueError("trade lies outside its declared firm's trading session")
 
     def close_at(self, session):
-        return datetime.combine(session, self.spec.session_close, self.tz).astimezone(timezone.utc)
+        normal = datetime.combine(session, self.spec.session_close, self.tz).astimezone(timezone.utc)
+        actual = self.session_closes.get(session, normal)
+        if actual.tzinfo is None or actual > normal:
+            raise ValueError("session close must be aware and no later than the firm cutoff")
+        return actual
 
     def emit(self, at, kind, *, quantity=0, cash=0.0, regime=None, code=None,
              gross_payout=0.0):
@@ -178,15 +202,22 @@ class _Replay:
         self.serial += 1
         heappush(self.queue, (at, self.serial, kind, ledger, attempt, request))
 
-    def advance(self, until):
+    def advance(self, until, *, qualifying_close=False):
+        deferred = []
         while self.queue and self.queue[0][0] <= until:
-            at, _, kind, ledger, attempt, request = heappop(self.queue)
+            event = heappop(self.queue)
+            at, _, kind, ledger, attempt, request = event
             if kind == "inactivity":
                 if (self.sim is None or self.handoff or self.next_role is not None
                         or attempt != self.attempts or request != self.activity_epoch):
                     continue
                 if self.ledger is not None and self.ledger.pending is not None:
                     raise ValueError("inactivity during a pending payout needs an explicit firm decision")
+                if qualifying_close and at == until:
+                    # An eligible close wins an exact timestamp tie, not a
+                    # deadline crossed strictly before that close.
+                    deferred.append(event)
+                    continue
                 self.fail(at, "FAIL_INACTIVITY")
                 continue
             if kind == "approval":
@@ -224,6 +255,8 @@ class _Replay:
                 ))
                 if self.wallet is not None:
                     self.wallet += Fraction(str(amount))
+        for event in deferred:
+            heappush(self.queue, event)
 
     def start_phase(self, at):
         role = self.next_role
@@ -313,6 +346,28 @@ class _Replay:
         if regime.risk_dollars == 0:
             self.emit(trade.entry_at, "policy_skip", regime=regime.name)
             return
+        if self.execution_factory is not None:
+            fill = self.execution_factory(trade, regime, self, day_index)
+            if fill is None:
+                self.emit(trade.entry_at, "execution_skip", regime=regime.name)
+                return
+            if not isinstance(fill, _ResolvedExecution):
+                raise TypeError("execution factory must return a resolved execution")
+            if type(fill.quantity) is not int or fill.quantity < 0:
+                raise ValueError("resolved quantity must be a nonnegative integer")
+            if fill.quantity == 0:
+                self.fail(trade.entry_at, "CAPPED_OUT", regime=regime.name)
+                return
+            if (fill.exit_at.tzinfo is None or not trade.entry_at < fill.exit_at <= self.close_at(trade.session)
+                    or fill.quantity > self.limit or fill.stop_loss <= 0
+                    or not all(isfinite(x) for x in (fill.stop_loss, fill.pnl, fill.low))
+                    or fill.low > min(0, fill.pnl)):
+                raise ValueError("invalid resolved execution")
+            planned_loss = (Fraction(str(fill.stop_loss)) + self.contract_cost) * fill.quantity + self.fixed_cost
+            if planned_loss > min(self.risk_budgets[regime.name], sim.equity - sim.dd_floor):
+                raise ValueError("resolved execution exceeds the pre-trade risk budget")
+            self.settle_trade(trade, day_index, regime, fill.quantity, fill.pnl, fill.low, fill.exit_at)
+            return
         if self.bracket_factory is not None:
             trade = self.bracket_factory(trade, regime, self, day_index)
         fixed, cost = self.fixed_cost, self.contract_cost
@@ -334,29 +389,39 @@ class _Replay:
             self.emit(trade.entry_at, "policy_skip", regime=regime.name)
             return
         quantity = min(int(quantity), self.limit)
-        sim.policy = np.array([float(quantity)])
-        sim.trade_cost = fixed + quantity * cost
         pnl_per_unit = trade.take_profit if trade.won else -trade.stop_loss
-        self.advance(trade.exit_at)
+        self.settle_trade(trade, day_index, regime, quantity, pnl_per_unit,
+                          min(0.0, pnl_per_unit), trade.exit_at)
+
+    def settle_trade(self, trade, day_index, regime, quantity, pnl_per_unit, low, exit_at):
+        """One settlement path shared by fixed brackets and historical fills."""
+        sim = self.sim
+        sim.policy = np.array([float(quantity)])
+        sim.trade_cost = self.fixed_cost + quantity * self.contract_cost
+        net = Fraction(str(pnl_per_unit)) * quantity - sim.trade_cost
+        self.advance(exit_at, qualifying_close=abs(net) >= self.activity_threshold)
         if self.sim is not sim:
             raise ValueError("inactivity expired during an open trade; that execution is unsupported")
         before = sim.equity
         result = sim.run(np.array([pnl_per_unit]), np.array([day_index]),
-                         np.array([min(0.0, pnl_per_unit)]), finalize=False)
+                         np.array([low]), finalize=False)
         if self.ledger:
-            self.ledger.record_trade(trade.exit_at, sim.equity - before)
+            self.ledger.record_trade(exit_at, sim.equity - before)
         if abs(sim.equity - before) >= self.activity_threshold:
-            self.activity(trade.exit_at)
-        self.emit(trade.exit_at, "trade", quantity=quantity, regime=regime.name)
+            self.activity(exit_at)
+        self.emit(exit_at, "trade", quantity=quantity, regime=regime.name)
         if result.code == ExitCode.PASSED:
-            self.emit(trade.exit_at, "evaluation_pass", code="PASSED")
+            self.emit(exit_at, "evaluation_pass", code="PASSED")
             self.next_role = "funded" if "funded" in self.phases else None
-            self.available_at = trade.exit_at + self.config.activation_delay
+            self.available_at = exit_at + self.config.activation_delay
             if self.next_role is None:
                 self.handoff = True
                 self.status = "EVALUATION_PASSED"
         elif result.code != ExitCode.ALIVE:
-            self.fail(trade.exit_at, ExitCode(result.code).name)
+            self.fail(exit_at, ExitCode(result.code).name)
+        # The qualifying close renewed activity (or ended the account), making
+        # the deferred deadline stale. Consume it without suppressing others.
+        self.advance(exit_at)
 
     def close(self, session):
         at = self.close_at(session)
@@ -403,6 +468,7 @@ class _Replay:
             tuple(self.events), self.start, self.end, self.attempts, self.failures,
             self.status, float(self.sim.equity) if self.sim else None, outstanding,
             self.spec.assumptions + (
+                "qualifying trade close precedes inactivity at the identical timestamp; strictly earlier expiry remains unsupported",
                 "sequential ideal stop/target fills; no gaps or slippage",
                 "gross per-contract historical stop/target outcomes are held fixed",
                 "maximum eligible payout requested at session close; all requests approved on scenario clock",

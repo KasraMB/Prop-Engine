@@ -430,6 +430,54 @@ def test_expired_reset_uses_new_purchase_fee():
     assert result.attempts == 2 and result.fees == pytest.approx(210.40)
 
 
+@pytest.mark.parametrize("won", [True, False])
+def test_qualifying_close_renews_activity_at_exact_deadline(won):
+    h = history(trade(date(2026, 9, 1)), trade(date(2026, 10, 1), won=won),
+                trade(date(2026, 10, 2)))
+    result = Engine().backtest(spec(), h, DollarPolicy.constant(100), config())
+    assert result.attempts == 1 and result.failed_attempts == 0
+    assert len([e for e in result.events if e.kind == "trade"]) == 3
+    assert result.fees == pytest.approx(105.20)
+
+
+def test_inactivity_tie_qualification_uses_net_pnl_after_costs():
+    first = trade(date(2026, 9, 1), stop=1, target=2)
+    last = trade(date(2026, 10, 1), stop=1, target=1)
+    with pytest.raises(ValueError, match="inactivity expired during an open trade"):
+        Engine().backtest(spec(), history(first, last), DollarPolicy.constant(1.5),
+                          config(cost_per_contract=.5))
+
+
+@pytest.mark.parametrize("won", [True, False])
+@pytest.mark.parametrize("cost_key", ["cost_per_contract", "cost_per_trade"])
+def test_exact_one_dollar_net_close_qualifies_at_inactivity_tie(won, cost_key):
+    first = trade(date(2026, 9, 1), stop=.5, target=2)
+    last = trade(date(2026, 10, 1), stop=.5, target=1.5, won=won)
+    result = Engine().backtest(spec(), history(first, last), DollarPolicy.constant(1),
+                              config(**{cost_key:.5}))
+    assert result.attempts == 1 and result.failed_attempts == 0
+    fills = [e for e in result.events if e.kind == "trade"]
+    assert fills[-1].balance-fills[0].balance == (1 if won else -1)
+
+
+def test_inactivity_strictly_before_close_is_still_unsupported():
+    last = trade(date(2026, 10, 1))
+    last = replace(last, exit_at=last.exit_at+timedelta(microseconds=1))
+    with pytest.raises(ValueError, match="inactivity expired during an open trade"):
+        Engine().backtest(spec(), history(trade(date(2026, 9, 1)), last),
+                          DollarPolicy.constant(100), config())
+
+
+def test_inactivity_at_entry_still_expires_before_new_trade():
+    last = trade(date(2026, 10, 1))
+    last = replace(last, entry_at=last.entry_at+timedelta(minutes=5),
+                   exit_at=last.exit_at+timedelta(minutes=5))
+    result = Engine().backtest(spec(), history(trade(date(2026, 9, 1)), last),
+                              DollarPolicy.constant(100), config())
+    assert any(e.code == "FAIL_INACTIVITY" for e in result.events)
+    assert len([e for e in result.events if e.kind == "trade"]) == 1
+
+
 def test_payment_fee_reduces_receipt_not_account_withdrawal():
     result = Engine().backtest(spec(), funded_history(), DollarPolicy.constant(100),
                               config(payment_fee=10))

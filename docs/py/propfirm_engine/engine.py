@@ -170,10 +170,20 @@ class Engine:
         from .backtest import backtest
         return backtest(spec, history, policy, config)
 
+    def backtest_prices(self, spec, sessions, policy, targets, instrument, config, **kwargs):
+        """Fixed-position price replay; explicitly select an OHLC collision policy."""
+        from .market_replay import replay_prices
+        return replay_prices(spec, sessions, policy, targets, instrument, config, **kwargs)
+
     def ruin(self, spec, history, policy, config, **kwargs):
         """Fixed-policy bootstrap funding risk and labelled ultimate cycle approximation."""
         from .ruin import bootstrap_ruin
         return bootstrap_ruin(spec, history, policy, config, **kwargs)
+
+    def fit_prices(self, spec, sessions, instrument, config, **kwargs):
+        """IS-only joint risk/target optimization on replayable prices."""
+        from .price_fitting import fit_prices
+        return fit_prices(spec, sessions, instrument, config, **kwargs)
 
     def fit(self, spec, history, config, **kwargs):
         """Fit named dollar regimes on IS; headline results come only from OOS."""

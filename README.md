@@ -19,6 +19,15 @@ are explicit scenarios. Live-account valuation, discretionary reviews, holidays
 and platform-specific agreements need additional treatment.
 Read the [execution contract](docs/BRACKET_BACKTEST.md) before relying on results.
 
+An explicit minute-OHLC approximation also supports state-dependent dollar
+brackets at fixed contract count, gap fills and timed session exits. See the
+[historical price replay guide](docs/PRICE_REPLAY.md) for the API and the
+DuckDB-backed 09:30 versus 18:00 long-only experiment.
+
+Price replay also supports explicit state-dependent slippage scenarios,
+slippage-aware brackets, and joint dollar risk/target fitting through
+`Engine.fit_prices`. See [execution scenarios and fitting](docs/PRICE_REPLAY.md#execution-scenarios-and-price-policy-fitting).
+
 ## Install
 
 Requires Python 3.11+.
@@ -62,7 +71,8 @@ engine handles consistency, winning days, drawdown, payouts, fees and restarts.
 The assumed clock is one completed bracket per available session, **not simulated
 market passage time**. The 70/30 split here is independent model paths, not
 historical IS/OOS. Read [assumptions and verification](docs/ANALYTICAL_MODEL.md#joint-risk-and-target-research)
-before interpreting the cash/day result. Real-price validation is not implemented.
+before interpreting the cash/day result. For a separate historical minute-bar
+test with explicit execution assumptions, see [price replay](docs/PRICE_REPLAY.md).
 
 To search from a flat $500/$500 policy without supplying the example as a seed:
 
