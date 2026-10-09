@@ -4,6 +4,9 @@ The package separates strategy inputs, account mechanics, execution assumptions,
 cashflows and policy optimization. Strategies are external input producers.
 The initial operating scope is one active account with repeated attempts.
 
+The [research engine plan](RESEARCH_ENGINE_PLAN.md) tracks the migration to
+general event replay, portfolio execution and measured performance budgets.
+
 ## Components
 
 | Component | Responsibility |
