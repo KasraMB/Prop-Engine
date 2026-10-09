@@ -25,6 +25,7 @@ gates pass, not that all possible strategies or future firm rules are certified.
 | A11 | Preflight | Unsupported funded floor recomputation and absent winning-day rules pass preflight and fail only after evaluation succeeds. | Reject unsupported dated-ledger profiles before replay/search. |
 | A12 | Counterfactual identity | Capital validation omits input identity; target research also hashes realized decisions into its input fingerprint, which changes with wallet truncation. | Hash model/policy/tape inputs independently of outcomes; reject counterparts from another history or tape. |
 | A13 | Stochastic holdout | General fitting reuses execution seeds across partitions; a reset stochastic strategy can repeat training noise in OOS. | Disjoint default streams, explicit seed overrides, holdout-seed mutation cannot affect selection. |
+| A14 | Clean research install | Clean CI exposed a missing pytz dependency in DuckDB timestamp conversion that the local environment supplied transitively. | Declare it in research extras and require a clean research job. |
 
 ## Review coverage
 
@@ -54,7 +55,7 @@ The Lucid inactivity cutoff is the approved scenario, not verified contract text
 
 ## Repair log
 
-A1-A13 are implemented, with focused regressions in test_research_audit.py and
+A1-A14 are implemented, with focused regressions in test_research_audit.py and
 the existing suites. The search tests inject deterministic candidate proposals
 but run real account replays; both score ordering and the selected policy are
 asserted. Always-maximize and mean-instead-of-tail mutations are performed only
@@ -81,7 +82,9 @@ covers execution/withdrawal callbacks and cannot detect hidden external state.
   Quote search used 185,370 peak Python bytes versus 313,934 for research recording;
   median fitting time was 0.573 seconds against the 0.70-second budget.
   Native/process memory is reported separately, not hidden in Python allocations.
-- Final clean-install and remote CI evidence will be recorded after completion.
+- Final local clean wheel/source installation and research-layer checks: 13 passed.
+  Both artifacts ran the documented fitting example outside the repository.
+- Clean remote research CI caught A14; its corrected rerun remains a release gate.
 
 ## Research use checklist
 

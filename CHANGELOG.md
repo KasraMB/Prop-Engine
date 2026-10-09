@@ -16,6 +16,7 @@
 - Source assumptions retained through feed wrapping and merging; capital
   counterparts must match input fingerprints; unsupported profiles fail preflight.
 - Independent economic fixtures, targeted in-memory mutation tests and research CI.
+- Explicit timezone conversion dependency for clean research-extra installations.
 
 Rerun affected prior studies. The buffer change can alter custom funded profiles;
 LucidFlex's zero buffer is unaffected. The wallet declaration covers strategy,
