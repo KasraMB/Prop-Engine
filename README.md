@@ -7,6 +7,121 @@ accounts and optimizing account-state-dependent position sizing.
 out-of-sample reporting.** LucidFlex 50K DLL-off is the first reference profile;
 firm rules and lifecycle settings remain separate from execution and optimization.
 
+## Getting started
+
+Use this as a Python library, not a broker/platform plugin. Import it into your
+research project; keep your strategy and market-data loader outside the engine.
+The [dashboard](#dashboard) is a separate interface for bracket experiments, not
+the full general strategy API.
+
+### Install
+
+Requires Python 3.11+ and Git. From a terminal:
+
+```sh
+git clone https://github.com/KasraMB/Prop-Engine.git
+cd Prop-Engine
+python -m venv .venv
+```
+
+Activate the environment with `.venv\Scripts\Activate.ps1` in PowerShell, or
+`source .venv/bin/activate` on macOS/Linux. Then install the engine:
+
+```sh
+python -m pip install .
+```
+
+For engine development, use `python -m pip install -e ".[dev]"` instead, then
+`python -m pytest -q`. Optional DuckDB/calendar experiments need
+`python -m pip install ".[research]"`. Neither the engine nor the example below
+needs private market data. Record the Git revision with your research results.
+
+### Choose your input
+
+| What you have or want | Use | Guide |
+| --- | --- | --- |
+| Strategy code that places orders on market observations | `Engine.replay_strategy` | [Strategies and orders](docs/STRATEGY_REPLAY.md) |
+| Optimize that strategy's sizing, targets or other declared parameters | `Engine.fit_strategy` | [Fitting and OOS results](docs/STRATEGY_FITTING.md) |
+| Already-executed fills, arbitrary exits and ordered portfolio marks | `Engine.replay_events` | [Recorded events](docs/EVENT_REPLAY.md) |
+| External signals, quote/trade/bar adapters or multi-asset orders | `Engine.replay_opportunities`, market adapters | [Market inputs](docs/MARKET_INPUTS.md) |
+| Sequential trades that ended exactly at their stop or target | `Engine.backtest`, `Engine.fit` | [Bracket replay](docs/BRACKET_BACKTEST.md) |
+| Minute bars with fixed-size, adjustable dollar brackets | `Engine.backtest_prices`, `Engine.fit_prices` | [Price replay](docs/PRICE_REPLAY.md) |
+
+For new strategy development, start with the first two rows. Recorded fills
+cannot regenerate alternative exits; closed-trade P&L alone cannot establish
+intraday breach behavior. Declare the data fidelity and execution assumptions.
+
+### Run your first strategy
+
+Save this as `example.py` and run `python example.py`. It uses three synthetic
+observations, one mini contract and a signal-based exit. No stop/target is required.
+Fees and zero processing delays are illustrative scenarios, not current quotes.
+
+```python
+from datetime import date, datetime, timedelta, timezone
+from propfirm_engine import (
+    BacktestConfig, Engine, Instrument, Market, Order, Quote, QuoteModel,
+)
+from propfirm_engine.firms.lucidflex import replay_50k
+
+class Example:
+    def __init__(self):
+        self.step = 0
+
+    def on_market(self, context, market):
+        self.step += 1
+        if self.step == 1:
+            return [Order("entry", "ES", 1)]
+        if self.step == 2:
+            return [Order("exit", "ES", -1, reduce_only=True)]
+
+at = datetime(2026, 9, 1, 14, tzinfo=timezone.utc)
+markets = [Market(at + timedelta(minutes=i), (Quote("ES", p, p, p),))
+           for i, p in enumerate((6000, 6001, 6003))]
+spec = replay_50k(eval_fee=105.20, reset_fee=105, contract_type="mini")
+config = BacktestConfig(0, timedelta(0), timedelta(0), timedelta(0))
+result = Engine().replay_strategy(
+    spec, markets, [Instrument("ES", point_value=50, tick_size=.25)],
+    config, Example(), sessions=(date(2026, 9, 1),),
+    fidelity="observed_marks", models={"ES": QuoteModel(fee=2)},
+    max_mark_age=timedelta(minutes=2), liquidation_fee=2,
+)
+print(f"Account balance: {result.result.book.balance:.2f}")
+print(f"External net cash: {result.result.replay.net_cash:.2f}")
+```
+
+Expected output:
+
+```text
+Account balance: 50096.00
+External net cash: -105.20
+```
+
+The entry fills on the second observation at 6001 and the exit on the third at
+6003. Gross trading profit is $100, less $4 in fill fees. External cash is still
+negative because the evaluation cost $105.20 and no payout was received. Account
+balance and spendable cash are different. Inspect `result.orders` for execution
+feedback and `result.result.replay.events` for the account/cash ledger.
+
+### Optimize and read the results
+
+Continue with the complete runnable [strategy fitting example](docs/STRATEGY_FITTING.md#example).
+It prepares a shared `MarketTape`, declares parameter bounds, creates fresh
+strategy/execution state per run, fits on IS and reports the frozen policy on OOS.
+
+- `fit.params`: selected parameters; `fit.score` and `fit.metrics`: OOS results.
+- `fit.baseline`: the initial parameters on the same OOS observations.
+- `fit.training` and `fit.validation`: selection diagnostics, not OOS claims.
+- `fit.metrics["distributions"]`: cash/day, total cash and other performance
+  distributions, regardless of the chosen optimization objective.
+- Capital and counterfactual ruin estimates require `wallet_invariant=True` only
+  when your strategy and execution decisions truly satisfy that contract.
+
+Use inner validation for model selection and reserve an untouched final holdout.
+One short replay proves API wiring, not profitability or a reliable ruin estimate.
+See the [research checklist](docs/RESEARCH_AUDIT.md#research-use-checklist) before
+interpreting results, and the [API map](#api-map) for other entry points.
+
 ## Status
 
 Version 0.2.1 provides general order and portfolio research execution under the
@@ -43,15 +158,6 @@ DuckDB-backed 09:30 versus 18:00 long-only experiment.
 Price replay also supports explicit state-dependent slippage scenarios,
 slippage-aware brackets, and joint dollar risk/target fitting through
 `Engine.fit_prices`. See [execution scenarios and fitting](docs/PRICE_REPLAY.md#execution-scenarios-and-price-policy-fitting).
-
-## Install
-
-Requires Python 3.11+.
-
-```sh
-python -m pip install -e ".[dev]"
-python -m pytest -q
-```
 
 ## Research state-dependent risk and targets
 
@@ -303,6 +409,15 @@ remains unidentified by finite simulations. See the
 
 | Task | Entry point |
 | --- | --- |
+| Check account/input support before running | `Engine.check_replay(...)` |
+| Replay arbitrary recorded fills and portfolio marks | `Engine.replay_events(...)` |
+| Run causal strategies with orders and execution models | `Engine.replay_strategy(...)` |
+| Replay external opportunities through an order policy | `Engine.replay_opportunities(...)` |
+| Prepare shared market inputs for repeated research | `MarketTape(...)` |
+| Fit general strategy parameters with chronological OOS | `Engine.fit_strategy(...)` |
+| Refit across chronological walk-forward folds | `Engine.walk_strategy(...)` |
+| Evaluate frozen strategies and complete market scenarios | `evaluate_strategy(...)`, `evaluate_scenarios(...)` |
+| Replay and fit fixed-size dollar brackets on price bars | `Engine.backtest_prices(...)`, `Engine.fit_prices(...)` |
 | Import sequential stop/target records | `BracketHistory.from_records(...)` |
 | Replay dated account attempts | `Engine.backtest(...)` |
 | Evaluate ordered historical starting windows | `Engine.rolling_backtest(...)` |

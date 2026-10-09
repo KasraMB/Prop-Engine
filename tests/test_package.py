@@ -13,6 +13,19 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def _quickstart():
+    text = (ROOT / "README.md").read_text(encoding="utf-8")
+    section = text.split("## Getting started\n", 1)[1].split("## Status\n", 1)[0]
+    example, = re.findall(r"```python\n(.*?)\n```", section, re.DOTALL)
+    return example + (
+        "\nassert result.result.book.balance == 50096\n"
+        "assert result.result.replay.net_cash == -105.20\n")
+
+
+def test_readme_quickstart():
+    exec(compile(_quickstart(), "README.md", "exec"), {})
+
+
 def test_public_exports_are_distinct_and_resolve():
     import propfirm_engine as engine
     from propfirm_engine import optimizer, rolling
@@ -52,7 +65,8 @@ def test_clean_wheel_and_sdist_install_without_repository_data(tmp_path):
         target = tmp_path / artifact.name.replace(".", "_")
         subprocess.run([sys.executable, "-m", "pip", "install", "--no-deps", "--target", str(target), str(artifact)], check=True)
         examples = re.findall(r"```python\n(.*?)\n```", (ROOT / "docs/STRATEGY_FITTING.md").read_text(encoding="utf-8"), re.DOTALL)
-        code = ("import sys\nfrom pathlib import Path\nsys.path.insert(0, sys.argv[1])\n"
-                "import propfirm_engine\nassert Path(propfirm_engine.__file__).resolve().is_relative_to(Path(sys.argv[1]).resolve())\n"
-                + "\n".join(examples) + "\nassert fit.score == fit.selected.score\n")
-        subprocess.run([sys.executable, "-I", "-c", code, str(target)], check=True, cwd=tmp_path)
+        for example in (_quickstart(), "\n".join(examples) + "\nassert fit.score == fit.selected.score\n"):
+            code = ("import sys\nfrom pathlib import Path\nsys.path.insert(0, sys.argv[1])\n"
+                    "import propfirm_engine\nassert Path(propfirm_engine.__file__).resolve().is_relative_to(Path(sys.argv[1]).resolve())\n"
+                    + example)
+            subprocess.run([sys.executable, "-I", "-c", code, str(target)], check=True, cwd=tmp_path)
