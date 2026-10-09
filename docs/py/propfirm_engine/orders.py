@@ -96,6 +96,17 @@ class Amend:
 
 
 @dataclass(frozen=True, slots=True)
+class Abandon:
+    reason: str = "policy"
+    retry: bool = True
+
+    def __post_init__(self):
+        _symbol(self.reason)
+        if type(self.retry) is not bool:
+            raise ValueError("retry must be bool")
+
+
+@dataclass(frozen=True, slots=True)
 class OrderState:
     order: Order
     remaining: int

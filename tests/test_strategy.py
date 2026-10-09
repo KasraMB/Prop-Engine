@@ -222,6 +222,26 @@ def test_daily_suspension_cancels_working_orders_without_failing_account():
     assert any(e.id == "stop" and e.reason == "daily_suspend" for e in result.orders)
 
 
+def test_research_abandonment_is_not_counted_as_a_firm_failure():
+    from propfirm_engine import Abandon
+    strategy = Script({0: [Order("a", "X", 1)], 1: [Abandon("untradeable", retry=False)]})
+    result = run([market(0), market(1), market(2, 15_000)], strategy)
+    assert result.result.replay.status == "ABANDONED"
+    assert result.result.replay.failed_attempts == 0 and result.result.replay.attempts == 1
+    assert any(e.kind == "abandonment" and e.code == "untradeable" for e in result.result.replay.events)
+
+
+def test_gtc_exit_survives_cutoff_only_when_profile_allows_holding():
+    from dataclasses import replace
+    profile = replace(replay_50k(eval_fee=105.2, reset_fee=105, contract_type="mini"), flatten_at_close=False)
+    strategy = Script({0: [Order("entry", "X", 1)],
+                       1: [Order("target", "X", -1, "limit", limit=10_100, tif="gtc", reduce_only=True)]})
+    result = run([market(0), market(1), market(405), market(1440, 10_100)], strategy,
+                 spec=profile, sessions=(DAY, DAY+timedelta(days=1)))
+    assert result.result.book.balance == 50_100
+    assert fills(result)[-1].at == market(1440).at
+
+
 @pytest.mark.parametrize("kwargs", [dict(quantity=0), dict(kind="bad"), dict(kind="limit"),
     dict(kind="market", stop=1), dict(kind="trailing", trail=0), dict(parent="a"),
     dict(reduce_only=1), dict(tif="bad"), dict(expires=AT.replace(tzinfo=None))])

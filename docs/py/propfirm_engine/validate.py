@@ -56,7 +56,7 @@ class InvalidAccountError(Exception):
     """Raised for an invalid account or an unsupported execution structure."""
 
 
-def validate(account) -> None:
+def validate(account, *, sequence=False) -> None:
     """Assert the sanity invariants of §9 on an assembled account; raise on any.
 
     Accepts supported irregularity (including direct-funded and eval-only
@@ -69,7 +69,7 @@ def validate(account) -> None:
     for name in ("eval_fee", "activation_fee"):
         _number(getattr(account, name), f"{account.name}.{name}")
 
-    _assert_supported_lifecycle(account)
+    _assert_supported_lifecycle(account, sequence=sequence)
 
     for ph in account.phases:
         opening = ph.start_equity
@@ -132,7 +132,7 @@ def validate(account) -> None:
         _assert_terminable(account, ph)
 
 
-def _assert_supported_lifecycle(account) -> None:
+def _assert_supported_lifecycle(account, *, sequence=False) -> None:
     """Engine.prepare selects one phase per role and always runs eval first."""
     roles = tuple(ph.role for ph in account.phases)
     for ph in account.phases:
@@ -141,6 +141,13 @@ def _assert_supported_lifecycle(account) -> None:
                 f"{account.name}/{ph.name}: unsupported phase role {ph.role!r}; "
                 "the current engine supports only 'eval' and 'funded'"
             )
+    if sequence:
+        names = tuple(ph.name for ph in account.phases)
+        if len(set(names)) != len(names):
+            raise InvalidAccountError("phase names must be unique in a sequence")
+        if roles.count("funded") > 1 or ("funded" in roles and roles[-1] != "funded"):
+            raise InvalidAccountError("a phase sequence may end with one funded phase")
+        return
     for role in ("eval", "funded"):
         if roles.count(role) > 1:
             raise InvalidAccountError(

@@ -48,7 +48,9 @@ class PayoutContext:
 class _EventReplay(_Replay):
     def __init__(self, spec, events, instruments, config, *, sessions, fidelity,
                  mark_fills, max_mark_age, liquidation_fee, trace=False, units=None,
-                 session_closes=None, withdrawal=None, decision=None, processing=None):
+                 session_closes=None, withdrawal=None, decision=None, processing=None,
+                 phase_limits=None, transition_delays=None, retry_on_failure=True,
+                 restart_on_handoff=True, drawdown_basis="rule", daily_loss_basis="balance"):
         if not isinstance(spec, LifecycleSpec) or not isinstance(config, BacktestConfig):
             raise TypeError("event replay requires LifecycleSpec and BacktestConfig")
         if fidelity != "observed_marks":
@@ -64,6 +66,20 @@ class _EventReplay(_Replay):
         if processing is not None and not isinstance(processing, ProcessingCalendar):
             raise TypeError("processing must be a ProcessingCalendar or None")
         self.withdrawal, self.decision, self.processing = withdrawal, decision, processing
+        if type(retry_on_failure) is not bool or type(restart_on_handoff) is not bool:
+            raise ValueError("restart policies must be bool")
+        self.retry_on_failure, self.restart_on_handoff = retry_on_failure, restart_on_handoff
+        if drawdown_basis not in ("rule", "balance", "equity") or daily_loss_basis not in ("balance", "equity"):
+            raise ValueError("invalid drawdown or daily loss basis")
+        self.drawdown_basis, self.daily_loss_basis = drawdown_basis, daily_loss_basis
+        self.phase_limits, self.transition_delays = dict(phase_limits or {}), dict(transition_delays or {})
+        names = {p.name for p in spec.account.phases}
+        if (set(self.phase_limits) | set(self.transition_delays)) - names:
+            raise ValueError("phase configuration names must belong to the account")
+        if any(type(n) is not int or n < 1 for n in self.phase_limits.values()):
+            raise ValueError("phase limits must be positive integers")
+        if any(not isinstance(d, timedelta) or d < timedelta(0) for d in self.transition_delays.values()):
+            raise ValueError("transition delays must be nonnegative timedeltas")
         self.liquidation_fee = money(liquidation_fee)
         if self.liquidation_fee < 0:
             raise ValueError("liquidation_fee must be nonnegative")
@@ -86,6 +102,7 @@ class _EventReplay(_Replay):
         self.book = None
         self.following = False
         self.suspended_session = None
+        self.current_day = 0
         self.fill_count = self.skip_count = self.mark_count = 0
         self.stream = iter(ordered(events))
         self.digest = sha256()
@@ -110,6 +127,33 @@ class _EventReplay(_Replay):
     def ledger_options(self):
         return {"floor_checks": "executor"}
 
+    def phase_limit(self, index):
+        baseline = super().phase_limit(index)
+        limit = self.phase_limits.get(self.spec.account.phases[index].name, baseline)
+        return min(limit, baseline) if self.phase_list[index].role == "funded" else limit
+
+    def abandon(self, at, *, retry, reason):
+        if self.book is None or self.next_role is not None or (self.ledger and self.ledger.pending is not None):
+            raise ValueError("abandonment requires an active account without a pending payout")
+        self.book.check_marks(at, self.max_mark_age)
+        for fill in tuple(self.book.liquidation(at, self.liquidation_fee)):
+            if self.book is None:
+                return
+            self.settle(fill, self.current_day, kind="abandon_close")
+        self.emit(at, "abandonment", code=reason)
+        self.book = None
+        self.following = False
+        self.failed_at = None
+        _Replay.restart(self, at, self.spec.account.eval_fee)
+        self.handoff = not retry
+        self.status = "RESTART_PENDING" if retry else "ABANDONED"
+
+    def funded_limit(self, profit):
+        return min(super().funded_limit(profit), self.phase_limits.get(self.phase_name(), float("inf")))
+
+    def transition_delay(self, index):
+        return self.transition_delays.get(self.spec.account.phases[index].name, self.config.activation_delay)
+
     def payout_amount(self, at, maximum):
         if self.withdrawal is None:
             return maximum
@@ -128,10 +172,16 @@ class _EventReplay(_Replay):
         return at + delay if self.processing is None else self.processing.after(at, delay)
 
     def winning_allowed(self, session):
-        return session != self.suspended_session
+        return session != self.suspended_session and self.sim.cur_day != -1
+
+    def needs_day_close(self):
+        return super().needs_day_close() or (self.book is not None and not self.book.flat)
+
+    def closing_equity(self):
+        return self.book.equity
 
     def payout_allowed(self):
-        return all(self.sim._consistency_gate_ok(i) for i in self.sim.cp.payout_idx
+        return self.book.flat and all(self.sim._consistency_gate_ok(i) for i in self.sim.cp.payout_idx
                    if self.sim.cp.kind[i] == RuleKind.CONSISTENCY_GATE)
 
     def handle_result(self, at, code, regime=None):
@@ -150,7 +200,7 @@ class _EventReplay(_Replay):
             self.book.apply(fill)
             if self.ledger is not None:
                 self.ledger.record_trade(at, self.book.balance - before)
-            code = self.sim.observe(self.book.balance, self.book.equity, self.sim.cur_day, traded=True)
+            code = self.sim.observe(self.book.balance, self.book.equity, self.current_day, traded=True)
             self.emit(at, "liquidation", quantity=fill.quantity)
             if code != ExitCode.ALIVE and not self.sim.observation_soft:
                 self.fail(at, ExitCode(code).name)
@@ -165,7 +215,11 @@ class _EventReplay(_Replay):
 
     def emit(self, at, kind, **kwargs):
         if kind == "approval" and self.book is not None:
-            self.book.adjust(at, self.sim.equity - self.book.balance)
+            delta = self.sim.equity - self.book.balance
+            self.book.adjust(at, delta)
+            for name in ("day_base", "close_equity"):
+                if hasattr(self.sim, name):
+                    setattr(self.sim, name, getattr(self.sim, name) + delta)
             self.record(at, kind)
         super().emit(at, kind, **kwargs)
 
@@ -173,13 +227,19 @@ class _EventReplay(_Replay):
         if not super().start_phase(at):
             return False
         self.book = Book(self.instruments, balance=self.sim.equity, mark_fills=self.mark_fills)
+        self.sim.drawdown_basis = self.drawdown_basis
+        self.sim.daily_loss_basis = self.daily_loss_basis
         self.book.copy_marks(self.source_book)
         return True
 
     def restart(self, at, fee):
+        stop = not (self.retry_on_failure if self.failed_at is not None else self.restart_on_handoff)
         self.book = None
         self.following = False
         super().restart(at, fee)
+        if stop:
+            self.handoff = True
+            self.status = "ACCOUNT_FAILED" if self.failed_at is not None else "LIVE_HANDOFF"
 
     def fail(self, at, code, regime=None):
         if self.book is not None:
@@ -221,6 +281,7 @@ class _EventReplay(_Replay):
             self.following = False
 
     def consume(self, event, day):
+        self.current_day = day
         self.digest.update(repr(event).encode())
         qualifies = False
         if isinstance(event, Fill) and self.following and self.book is not None:
@@ -259,17 +320,21 @@ class _EventReplay(_Replay):
         self.advance(event.at)
 
     def finish_session(self, session, day):
+        self.current_day = day
         at = self.close_at(session)
         self.advance(at)
         if self.book is not None and not self.book.flat:
             self.book.check_marks(at, self.max_mark_age)
-            closing = tuple(self.book.liquidation(at, self.liquidation_fee))
+            closing = tuple(self.book.liquidation(at, self.liquidation_fee)) if self.spec.flatten_at_close else ()
             for fill in closing:
                 if self.book is None:
                     break
                 self.settle(fill, day, kind="liquidation")
-            self.following = False
+            if self.spec.flatten_at_close:
+                self.following = False
         super().close(session)
+        if self.book is not None:
+            self.sim.close_equity = self.book.equity
         self.record(at, "session_close")
 
     def run(self):
@@ -294,7 +359,7 @@ class _EventReplay(_Replay):
             "observed marks only; no claim about unobserved intrabar equity",
             f"fill prices update marks: {self.mark_fills}; maximum mark age: {self.max_mark_age}",
             f"forced closes use last fresh marks plus {self.liquidation_fee} fee per contract",
-            "session cutoff forces flat; a breached account cannot recover on later fills",
+            "a breached account cannot recover on later fills",
             "skipped source portfolios are quarantined until flat; dependent signals are not regenerated",
             "account-wide absolute exposure uses explicit contract units; excess recorded exposure is rejected",
             "qualifying FIFO closes use realized profit net of allocated entry and exit fees",
@@ -304,6 +369,9 @@ class _EventReplay(_Replay):
             "retry and live handoff start fresh paid attempts no earlier than the next observed session",
             "live value and receipts after the horizon are excluded",
         )) + (
+            f"flatten at session cutoff: {self.spec.flatten_at_close}; open horizon positions remain marked, not counted as cash",
+            f"drawdown peak basis: {self.drawdown_basis}; daily loss reset basis: {self.daily_loss_basis}",
+            f"retry after failure: {self.retry_on_failure}; restart after handoff: {self.restart_on_handoff}",
             "maximum eligible withdrawal" if self.withdrawal is None else "custom causal withdrawal callback",
             "all payout requests approved" if self.decision is None else "custom payout approval/denial scenario",
             "elapsed processing delays" if self.processing is None else f"elapsed delays rolled through {self.processing!r}",

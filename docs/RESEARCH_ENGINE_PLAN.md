@@ -91,11 +91,11 @@ reproduce it. Compiled execution and the broader performance gates remain open.
   apply explicit liquidation, and ignore later hypothetical recovery.
 - [x] Track closed balance separately from open equity and peak/floor state.
 - [x] Support partial exits, overlapping positions and multi-instrument exposure.
-- [ ] Define account transitions while positions or orders remain open.
-- [ ] Make skip, order rejection and research abandonment explicit policies.
+- [x] Define account transitions while positions or orders remain open.
+- [x] Make skip, order rejection and research abandonment explicit policies.
 - [x] Correct inactivity clocks with separate session/expiry cutoffs, timezone,
   non-trading days and exact-time ordering.
-- [ ] Route the bracket adapter through the shared semantics with parity tests.
+- [x] Route the bracket adapter through the shared semantics with parity tests.
 
 Acceptance: early-exit import through fees and retries, unrealized breach before a
 profitable exit, simultaneous portfolio moves, and trace/summary metric parity.
@@ -144,7 +144,7 @@ This is not a compiled, multi-asset, native-memory or optimization benchmark.
 - [x] External causal strategy callbacks, warm-up and fill feedback.
 - [x] Instrument-specific costs, ticks, multipliers and mini/micro equivalence.
 - [ ] Replaceable bar, trade and quote execution models and slippage models.
-- [ ] Overnight positions and forced exits governed by the selected profile.
+- [x] Overnight positions and forced exits governed by the selected profile.
 
 Acceptance: the same strategy can enter and exit without changing account code;
 changed exits regenerate dependent signals; ambiguous bars are labeled. No order
@@ -184,9 +184,9 @@ callback snapshots, and does not measure many-order storage or native memory.
 - [x] Daily loss failure versus daily suspension.
 - [x] Evaluation and funded consistency, profit and day-count gates.
 - [x] Account-wide order/exposure limits and contract scaling.
-- [ ] Multiple evaluation stages and configurable phase transitions.
+- [x] Multiple evaluation stages and configurable phase transitions.
 - [x] Payout request, approval/denial, deduction, receipt and processing calendars.
-- [ ] Configurable withdrawal policy, retained buffer and restart policy.
+- [x] Configurable withdrawal policy, retained buffer and restart policy.
 - [ ] Versioned official-source evidence and per-profile acceptance fixtures.
 
 Start with LucidFlex 50K DLL off. Do not equate a registered rule with executor
@@ -210,6 +210,29 @@ Observed-rule verification: 1,577 tests passed, with 10 optional browser tests
 skipped and two known deprecation warnings. Nine additional static floor-lock
 and processing-calendar boundary cases passed in a subsequent focused run.
 The browser bundle contains 49 verified Python modules.
+
+Phase/holding extension: observation replay accepts named evaluation sequences
+followed by at most one funded phase. Each stage starts its declared balance and
+rule state; activation is charged only at funding. Named phase caps and transition
+delays are explicit. Failures restart at the first stage unless retry is disabled.
+Handoff can restart or stop. Strategy Abandon is a research action, not a firm
+breach, and declares whether another paid attempt should follow.
+
+`LifecycleSpec.flatten_at_close` defaults to True, including LucidFlex. Profiles
+that explicitly permit holding can retain positions and GTC orders overnight.
+Daily loss can reset from closed balance or prior closing open equity; drawdown
+peaks can use a declared balance/equity basis. Open horizon positions remain
+marked, not external cash. Tests cover overnight DLL, EOD ratchets, GTC, stage
+failures, fees, activation delays and eval-only sequences.
+
+Bracket settlement now calls the same incremental rule observation method as
+portfolio replay. Its declared execution assumptions and capability guards remain;
+three per-trade NumPy allocations were removed. Focused parity checks cover 138
+bracket, price, event and dashboard cases after this consolidation.
+
+Lifecycle milestone verification: the complete suite passed 1,600 tests after
+settlement consolidation, with 10 optional browser tests skipped and two known
+deprecation warnings. The browser bundle remains synchronized at 49 modules.
 
 ### 5. Policy search and validation
 

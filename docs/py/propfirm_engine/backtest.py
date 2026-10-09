@@ -13,8 +13,6 @@ from hashlib import sha256
 from math import isfinite
 from zoneinfo import ZoneInfo
 
-import numpy as np
-
 from .compiler import compile_account
 from .enums import ExitCode, Severity, StateField, Timing
 from .execution import BacktestConfig, BracketHistory, DollarPolicy, LifecycleSpec
@@ -40,6 +38,7 @@ class BacktestEvent:
     qualifying_days: int = 0
     cycle_profit: float = 0.0
     gross_payout: float = 0.0
+    phase_name: str | None = None
 
 
 @dataclass(frozen=True)
@@ -98,7 +97,9 @@ class BacktestResult:
 
 
 def _check_support(spec, *, observations=False):
-    validate(spec.account)
+    if not observations and not spec.flatten_at_close:
+        raise ValueError("overnight positions require observation replay")
+    validate(spec.account, sequence=observations)
     compiled = compile_account(spec.account)
     allowed = {RuleKind.TRAILING_DD, RuleKind.PROFIT_TARGET,
                RuleKind.CONSISTENCY_GATE, RuleKind.MIN_WINNING_DAYS, RuleKind.MIN_DAYS}
@@ -144,6 +145,10 @@ class _Replay:
         self.execution_factory = execution_factory
         self.session_closes = dict(session_closes or {})
         compiled = self.check_support(spec)
+        self.phase_list = compiled.phases
+        self.named_phases = sum(p.role == "eval" for p in self.phase_list) > 1
+        self.phase_index = self.next_index = 0
+        self.ledger_names = {}
         self.phases = {p.role: p for p in compiled.phases}
         self.source = {p.role: p for p in spec.account.phases}
         self.tz = ZoneInfo(spec.session_timezone)
@@ -188,6 +193,12 @@ class _Replay:
     def winning_allowed(self, session):
         return True
 
+    def needs_day_close(self):
+        return self.sim.cur_day != -1
+
+    def closing_equity(self):
+        return self.sim.equity
+
     def payout_allowed(self):
         return True
 
@@ -203,6 +214,19 @@ class _Replay:
     def processing_at(self, at, delay):
         return at + delay
 
+    def phase_limit(self, index):
+        return (self.spec.eval_contract_limit if self.phase_list[index].role == "eval"
+                else self.spec.funded_limit(0))
+
+    def funded_limit(self, profit):
+        return self.spec.funded_limit(profit)
+
+    def transition_delay(self, index):
+        return self.config.activation_delay
+
+    def phase_name(self):
+        return self.spec.account.phases[self.phase_index].name
+
     def emit(self, at, kind, *, quantity=0, cash=0.0, regime=None, code=None,
              gross_payout=0.0):
         self.events.append(BacktestEvent(
@@ -213,6 +237,7 @@ class _Replay:
             self.ledger.qualifying_days if self.ledger else 0,
             float(self.ledger.cycle_profit) if self.ledger else 0.0,
             gross_payout,
+            self.phase_name() if self.named_phases else None,
         ))
         if self.wallet is not None and cash:
             self.wallet += Fraction(str(cash))
@@ -269,7 +294,7 @@ class _Replay:
                     # The public scaling page does not define intraday withdrawal
                     # timing. Conservatively apply downward payout changes now;
                     # trading-profit increases still wait for session close.
-                    self.limit = min(self.limit, self.spec.funded_limit(
+                    self.limit = min(self.limit, self.funded_limit(
                         self.sim.equity - self.sim.start_equity))
                     self.emit(at, "approval", gross_payout=float(ledger.requests[request - 1].gross))
                     if ledger.breached or (ledger.floor is not None and self.sim.equity <= ledger.floor):
@@ -290,6 +315,7 @@ class _Replay:
                     qualifying_days=ledger.qualifying_days,
                     cycle_profit=float(ledger.cycle_profit),
                     gross_payout=float(ledger.requests[request - 1].gross),
+                    phase_name=self.ledger_names[ledger] if self.named_phases else None,
                 ))
                 if self.wallet is not None:
                     self.wallet += Fraction(str(amount))
@@ -315,12 +341,13 @@ class _Replay:
         if role == "funded" and not self.charge(at, self.spec.account.activation_fee):
             return False
         self.role = role
-        cp = self.phases[role]
+        self.phase_index = self.next_index
+        cp = self.phase_list[self.phase_index]
         opening = cp.start_equity if cp.start_equity is not None else self.spec.account.size
         self.sim = _ReferenceSim(cp, 1.0, [1.0], opening, False,
                                  external_payouts=True, exact_money=True)
         self.ledger = None
-        self.limit = self.spec.eval_contract_limit
+        self.limit = self.phase_limit(self.phase_index)
         if role == "funded":
             p = self.source[role]
             required = [float(cp.p0[i]) for i in cp.payout_idx
@@ -335,7 +362,8 @@ class _Replay:
                 **self.ledger_options(),
             )
             self.ledgers.append(self.ledger)
-            self.limit = self.spec.funded_limit(0)
+            self.ledger_names[self.ledger] = self.phase_name()
+            self.limit = self.funded_limit(0)
         self.emit(at, "phase_start")
         self.next_role = None
         self.activity(at)
@@ -366,6 +394,7 @@ class _Replay:
         self.last_ended_session = (local.date() + timedelta(days=1)
                                   if local.time() >= self.spec.session_open else local.date())
         self.next_fee = fee
+        self.next_index = 0
         self.next_role = "eval" if "eval" in self.phases else "funded"
         self.available_at = at + self.config.retry_delay
         self.sim = self.ledger = None
@@ -440,28 +469,29 @@ class _Replay:
     def settle_trade(self, trade, day_index, regime, quantity, pnl_per_unit, low, exit_at):
         """One settlement path shared by fixed brackets and historical fills."""
         sim = self.sim
-        sim.policy = np.array([float(quantity)])
         sim.trade_cost = self.fixed_cost + quantity * self.contract_cost
         net = Fraction(str(pnl_per_unit)) * quantity - sim.trade_cost
         self.advance(exit_at, qualifying_close=abs(net) >= self.activity_threshold)
         if self.sim is not sim:
             raise ValueError("inactivity expired during an open trade; that execution is unsupported")
         before = sim.equity
-        result = sim.run(np.array([pnl_per_unit]), np.array([day_index]),
-                         np.array([low]), finalize=False)
+        balance = before + net
+        observed = min(before + quantity * Fraction(str(low)), balance)
+        code = sim.observe(balance, observed, day_index, traded=True, allow_pass=True)
         if self.ledger:
             self.ledger.record_trade(exit_at, sim.equity - before)
         if abs(sim.equity - before) >= self.activity_threshold:
             self.activity(exit_at)
         self.emit(exit_at, "trade", quantity=quantity, regime=regime.name)
-        self.handle_result(exit_at, result.code, regime.name)
+        self.handle_result(exit_at, code, regime.name)
         self.advance(exit_at)
 
     def handle_result(self, at, code, regime=None):
         if code == ExitCode.PASSED:
             self.emit(at, "evaluation_pass", code="PASSED")
-            self.next_role = "funded" if "funded" in self.phases else None
-            self.available_at = at + self.config.activation_delay
+            self.next_index = self.phase_index + 1
+            self.next_role = self.phase_list[self.next_index].role if self.next_index < len(self.phase_list) else None
+            self.available_at = at + (self.transition_delay(self.next_index) if self.next_role else timedelta(0))
             if self.next_role is None:
                 self.handoff = True
                 self.status = "EVALUATION_PASSED"
@@ -474,15 +504,16 @@ class _Replay:
         sim = self.sim
         if sim is None or self.handoff or self.next_role is not None:
             return
-        if sim.cur_day != -1:
-            code = sim._close_day(sim.equity, winning_allowed=self.winning_allowed(session))
+        winning = self.winning_allowed(session)
+        if self.needs_day_close():
+            code = sim._close_day(sim.equity, winning_allowed=winning, test_equity=self.closing_equity())
             sim.cur_day = -1  # the adapter has consumed this session-close event
             if code not in (ExitCode.ALIVE, ExitCode.PASSED):
                 self.fail(at, ExitCode(code).name)
                 return
         if self.ledger:
             ledger = self.ledger
-            ledger.close_session(at, session, winning_allowed=self.winning_allowed(session))
+            ledger.close_session(at, session, winning_allowed=winning)
             ledger.advance_floor(at, sim.dd_floor)
             self.emit(at, "session_close")
             maximum = ledger.maximum_request() if self.payout_allowed() else 0
@@ -497,7 +528,7 @@ class _Replay:
                               ledger, self.attempts)
                 self.advance(at)
             if self.sim is not None:
-                self.limit = self.spec.funded_limit(self.sim.equity - self.sim.start_equity)
+                self.limit = self.funded_limit(self.sim.equity - self.sim.start_equity)
         else:
             self.emit(at, "session_close")
 

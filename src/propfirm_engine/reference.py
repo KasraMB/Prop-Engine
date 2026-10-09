@@ -274,7 +274,7 @@ class _ReferenceSim:
         self.cycle_start_equity = self.equity
         return self.payouts_taken >= schema.max_payouts
 
-    def _close_day(self, closing_equity, winning_allowed) -> int:
+    def _close_day(self, closing_equity, winning_allowed, *, test_equity=None) -> int:
         """One day-end (§C9): fold first, then EOD fail→adjust→(floor)→pass→payout.
         Returns a terminal ExitCode or ALIVE."""
         cp = self.cp
@@ -285,7 +285,8 @@ class _ReferenceSim:
             self.n_qual_days += 1
 
         # (2a) EOD FAIL against the established floor / closing equity
-        hit, severity, fail_code = self._first_fail(_EOD, closing_equity)
+        observed = closing_equity if test_equity is None else test_equity
+        hit, severity, fail_code = self._first_fail(_EOD, observed)
         if hit and severity == _HARD:
             return fail_code
 
@@ -294,8 +295,9 @@ class _ReferenceSim:
 
         # (2c) EOD floor ratchet (advance off closing equity, then lock)
         if (not self.dd_locked) and cp.dd_update_timing == _EOD and self._has_trailing():
-            if closing_equity > self.peak:
-                self.peak = closing_equity
+            basis = observed if getattr(self, "drawdown_basis", "rule") == "equity" else closing_equity
+            if basis > self.peak:
+                self.peak = basis
             self.dd_floor = self.peak - self._cash(cp.dd_amount)
             if self.dd_floor >= cp.lock_at:
                 self.dd_floor = self._cash(cp.lock_at)
@@ -315,6 +317,8 @@ class _ReferenceSim:
         """Apply an ordered portfolio observation, keeping balance and equity distinct."""
         if getattr(self, "_observation_day", None) != day:
             self._observation_day = day
+            self.day_base = (getattr(self, "close_equity", self.equity)
+                             if getattr(self, "daily_loss_basis", "balance") == "equity" else self.equity)
             self.day_pnl = self._cash(0)
             self.day_low = equity
         if traded and day != self.cur_day:
@@ -331,13 +335,14 @@ class _ReferenceSim:
         self.total_pnl += delta
         self.day_low = min(self.day_low, equity)
         self.observation_soft = False
-        daily_pnl = self.day_pnl + equity - balance
+        daily_pnl = equity - self.day_base
         hit, severity, code = self._first_fail(_CONTINUOUS, equity, daily_pnl=daily_pnl)
         if hit:
             self.observation_soft = severity != _HARD
             return code
         if not self.dd_locked and self.cp.dd_update_timing == _CONTINUOUS and self._has_trailing():
-            self.peak = max(self.peak, equity)
+            basis = balance if getattr(self, "drawdown_basis", "rule") == "balance" else equity
+            self.peak = max(self.peak, basis)
             self.dd_floor = self.peak - self._cash(self.cp.dd_amount)
             if self.dd_floor >= self.cp.lock_at:
                 self.dd_floor = self._cash(self.cp.lock_at)

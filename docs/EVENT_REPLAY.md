@@ -75,9 +75,10 @@ Evaluation, reset, activation and payment fees retain their existing meanings.
 ## Account behavior
 
 Closed balance feeds profit targets, consistency and winning-day calculations.
-Balance plus unrealized portfolio P&L feeds continuous MLL checks. The floor
-ratchets at EOD for the currently supported profiles. Evaluation transitions
-wait until the portfolio is flat. Every session cutoff forces flat.
+Balance plus unrealized portfolio P&L feeds continuous MLL checks. Evaluation
+transitions wait until the portfolio is flat. The default session policy forces
+flat, including LucidFlex. A profile can explicitly allow overnight holding with
+`flatten_at_close=False`; fresh closing marks are still required.
 
 Forced closes use the last fresh marks and the explicit `liquidation_fee` per
 contract. These are scenario prices, not guaranteed executable quotes. A hard
@@ -165,7 +166,27 @@ Optional replay arguments apply to both recorded events and strategy replay:
   then roll forward into an open processing interval. Closing time is exclusive.
   This is not a business-duration counter or a built-in holiday service.
 
-Unsupported rule combinations are still rejected. Multiple evaluation stages,
-overnight holding and broader execution adapters remain on the roadmap. The
+Unsupported rule combinations are still rejected. Broader execution adapters
+remain on the roadmap. The
 legacy bracket API retains its narrower guards rather than treating a closed
 summary as an observed intraday path.
+
+An account may declare multiple uniquely named evaluation phases followed by at
+most one funded phase. Observation replay executes them in that order, resetting
+balances and rule state at each transition. No additional evaluation fee is
+charged for promotion; activation is charged when entering funding. Optional
+`phase_limits={name: contracts}` and `transition_delays={name: timedelta}` control
+per-stage caps and delays before entering each named stage. A funded override
+can lower, but cannot exceed, the scaling tier. Failure restarts from stage one.
+Legacy summary/bracket validation still rejects multi-stage accounts.
+
+`retry_on_failure=False` stops after failure; `restart_on_handoff=False` stops at
+live handoff. Delayed approved receipts remain processed within the horizon.
+These choices do not change whether the account failed its firm rules.
+
+`drawdown_basis="rule"` uses open equity for continuous peaks and closed balance
+for EOD peaks. Explicit `"balance"` or `"equity"` selects one basis for both.
+`daily_loss_basis="balance"` resets daily loss from prior closed balance;
+`"equity"` uses prior closing marked equity. Payout deductions adjust the daily
+baseline rather than counting as trading loss. Declare these choices for profiles
+that allow overnight exposure; they are not inferred from a firm's name.

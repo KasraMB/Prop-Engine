@@ -117,6 +117,10 @@ Use the same `units` mapping as [event replay](EVENT_REPLAY.md).
 Orders are rejected while the account is unavailable. Failure, evaluation
 transition and session cutoff cancel working orders. The current flat-at-cutoff
 profile cancels GTC too: GTC does not override the firm's close requirement.
+When `flatten_at_close=False`, open positions and GTC orders can carry into the
+next declared session, while DAY orders still expire. LucidFlex remains flat at
+cutoff. `Context.phase_name` and `next_phase_name` identify stages in a multi-step
+evaluation; `phase` continues to distinguish eval from funded.
 Session callbacks cannot reopen the just-closed session. The source-history
 quarantine used for recorded fills is unnecessary because strategy decisions
 are regenerated from actual account outcomes.
@@ -125,6 +129,12 @@ are regenerated from actual account outcomes.
 acceptance, rejection, cancellation and fill events. Cash/risk reporting uses
 `result.result.replay`. Tracing is optional and does not change economics.
 
+Return `Abandon(reason="...", retry=True)` to liquidate and abandon an active
+account for a research reason. It is recorded separately and does not increment
+firm failures. Retry buys a new account no earlier than the next session; False
+stops this path. Actual breaches during liquidation remain actual failures.
+Returning no order is a voluntary skip, not abandonment or a breach.
+
 The order interface does not yet imply support for every firm profile, atomic
-spread fills, overnight positions, bar-path assumptions or general strategy
-optimization. Those remain separately tracked acceptance items.
+spread fills, bar-path assumptions or general strategy optimization. Those remain
+separately tracked acceptance items.

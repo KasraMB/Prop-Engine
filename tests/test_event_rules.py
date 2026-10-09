@@ -16,9 +16,9 @@ DAY = date(2026, 9, 1)
 X, Y = Instrument("X", 1, 1), Instrument("Y", 1, 1)
 
 
-def run(events, rules, *, sessions=(DAY,), **kwargs):
+def run(events, rules, *, sessions=(DAY,), flatten=True, **kwargs):
     spec = LifecycleSpec(Account("test", 50_000, (Phase("eval", "eval", tuple(rules)),)),
-                         4, ((float("-inf"), 4),), 0)
+                         4, ((float("-inf"), 4),), 0, flatten_at_close=flatten)
     return Engine().replay_events(spec, events, [X, Y],
         BacktestConfig(0, timedelta(0), timedelta(0), timedelta(0)),
         sessions=sessions, fidelity="observed_marks", mark_fills=True,
@@ -129,3 +129,36 @@ def test_static_profile_honors_explicit_request_time_floor_lock():
     assert result.replay.receipts == 450 and result.replay.failed_attempts == 1
     failure, = [e for e in result.replay.events if e.kind == "failure"]
     assert failure.floor == 50_100 and failure.code == "FAIL_STATIC_DD"
+
+
+@pytest.mark.parametrize("basis,failures", [("rule", 0), ("equity", 1)])
+def test_overnight_eod_floor_has_an_explicit_balance_or_equity_basis(basis, failures):
+    close = AT.replace(hour=20, minute=45)
+    events = [Fill(AT, "X", 1, 10_000), Marks(close, (("X", 11_000),)),
+              Marks(AT+timedelta(days=1), (("X", 9000),)),
+              Fill(AT+timedelta(days=1, minutes=1), "X", -1, 9000)]
+    result = run(events, [TrailingDrawdownRule(2000, update_timing=Timing.EOD), ProfitTargetRule(10_000)],
+                 sessions=(DAY, DAY+timedelta(days=1)), flatten=False, drawdown_basis=basis)
+    assert result.replay.failed_attempts == failures
+    if not failures:
+        assert result.book.balance == 49_000
+
+
+@pytest.mark.parametrize("basis,suspended", [("balance", False), ("equity", True)])
+def test_overnight_daily_loss_can_reset_from_prior_closed_balance_or_open_equity(basis, suspended):
+    close = AT.replace(hour=20, minute=45)
+    events = [Fill(AT, "X", 1, 10_000), Marks(close, (("X", 11_000),)),
+              Marks(AT+timedelta(days=1), (("X", 10_300),)),
+              Fill(AT+timedelta(days=1, minutes=1), "X", -1, 10_300)]
+    result = run(events, [StaticDrawdownRule(2000), DailyLossRule(500), ProfitTargetRule(10_000)],
+                 sessions=(DAY, DAY+timedelta(days=1)), flatten=False, daily_loss_basis=basis)
+    assert any(e.kind == "daily_suspend" for e in result.replay.events) == suspended
+    assert result.book.balance == 50_300 and result.replay.failed_attempts == 0
+
+
+def test_open_horizon_profit_is_marked_but_not_counted_as_external_cash():
+    close = AT.replace(hour=20, minute=45)
+    result = run([Fill(AT, "X", 1, 10_000), Marks(close, (("X", 11_000),))],
+                 [StaticDrawdownRule(2000), ProfitTargetRule(10_000)], flatten=False)
+    assert result.book.balance == 50_000 and result.book.equity == 51_000
+    assert result.replay.net_cash == 0 and len(result.book.positions) == 1

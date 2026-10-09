@@ -6,7 +6,7 @@ from fractions import Fraction
 from .enums import ExitCode
 from .event_replay import EventReplay, _EventReplay
 from .events import Fill, Marks, event_key
-from .orders import Broker, Market, OrderEvent, OrderState
+from .orders import Abandon, Broker, Market, OrderEvent, OrderState
 from .portfolio import BookState
 
 
@@ -25,6 +25,8 @@ class Context:
     available: bool
     warmup: bool
     orders: tuple[OrderState, ...]
+    phase_name: str
+    next_phase_name: str | None
 
 
 @dataclass(frozen=True)
@@ -56,7 +58,7 @@ class _StrategyReplay(_EventReplay):
 
     def cap(self):
         if self.next_role is not None:
-            return self.spec.eval_contract_limit if self.next_role == "eval" else self.spec.funded_limit(0)
+            return self.phase_limit(self.next_index)
         return self.limit
 
     def context(self, *, warmup=False):
@@ -66,12 +68,19 @@ class _StrategyReplay(_EventReplay):
                        self.sim.dd_floor if self.sim else None, self.wallet, self.cap(),
                        remaining, self.sim.payouts_taken if self.sim else 0,
                        not warmup and self.eligible(self.clock), warmup,
-                       tuple(self.broker.pending.values()))
+                       tuple(self.broker.pending.values()), self.phase_name(),
+                       self.spec.account.phases[self.next_index].name if self.next_role else None)
 
     def actions(self, actions, *, enabled=True):
         if actions is None:
             return
         for action in actions:
+            if isinstance(action, Abandon):
+                if not enabled or not self.eligible(self.clock):
+                    raise ValueError("abandonment is disabled outside an active trading session")
+                self.broker.cancel_all(self.clock, "abandonment")
+                self.abandon(self.clock, retry=action.retry, reason=action.reason)
+                continue
             accepted = self.broker.submit(action, self.clock, self.quantities(), self.cap(),
                                            enabled=enabled and self.eligible(self.clock))
             if accepted and self.next_role is not None:
@@ -117,6 +126,7 @@ class _StrategyReplay(_EventReplay):
         self.digest.update(repr(market).encode())
 
     def mark(self, market):
+        self.current_day = self.day
         self.broker.observe(market)
         self.seq += 1
         event = Marks(market.at, tuple((q.symbol, q.mark) for q in market.quotes), self.seq)
@@ -146,7 +156,7 @@ class _StrategyReplay(_EventReplay):
 
     def finish_session(self, session, day):
         self.clock = self.close_at(session)
-        self.broker.cancel_all(self.clock, "session_close")
+        self.broker.cancel_all(self.clock, "session_close", day_only=not self.spec.flatten_at_close)
         super().finish_session(session, day)
         self.notifications(enabled=False)
         callback = getattr(self.strategy, "on_session", None)
@@ -189,7 +199,7 @@ class _StrategyReplay(_EventReplay):
             "quote sizes bound shared per-side liquidity; omitted sizes mean unlimited scenario liquidity",
             "stop triggers use supplied marks; market and stop gaps execute at supplied bid/ask plus the execution model",
             "OCO cancels siblings on any fill; linked reduce-only exits cannot reverse the portfolio",
-            "session cutoff closes positions and cancels all orders, including GTC",
+            "session cutoff follows the profile; DAY orders expire, GTC survives only when holding is allowed",
             f"forced closes use fresh last marks and {self.liquidation_fee} fee per contract",
             "configured withdrawal, approval/denial and processing scenarios; no trading while pending",
             "retry and live handoff use the shared next-session, fee and wallet rules",

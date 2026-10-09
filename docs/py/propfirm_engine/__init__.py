@@ -11,7 +11,7 @@ from .events import Fill, Marks, merge_events
 from .portfolio import Book, BookState, Position
 from .event_replay import EventReplay, EventState, PayoutContext
 from .calendars import ProcessingCalendar
-from .orders import Quote, Market, Order, Cancel, Amend, OrderState, OrderEvent, QuoteModel
+from .orders import Quote, Market, Order, Cancel, Amend, Abandon, OrderState, OrderEvent, QuoteModel
 from .strategy import Context, StrategyReplay
 from .slippage import TickDistribution, SlippageModel
 from .price_fitting import PriceEvaluation, PriceFit, evaluate_prices
@@ -129,7 +129,7 @@ from .rules import (
 
 __all__ = [
     "PayoutContext", "ProcessingCalendar",
-    "Quote", "Market", "Order", "Cancel", "Amend", "OrderState", "OrderEvent",
+    "Quote", "Market", "Order", "Cancel", "Amend", "Abandon", "OrderState", "OrderEvent",
     "QuoteModel", "Context", "StrategyReplay",
     "EventReplay", "EventState",
     "Fill", "Marks", "merge_events", "Book", "BookState", "Position",
