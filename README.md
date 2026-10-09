@@ -9,7 +9,7 @@ firm rules and lifecycle settings remain separate from execution and optimizatio
 
 ## Status
 
-General order and portfolio execution is being developed under the
+Version 0.2.0 provides general order and portfolio research execution under the
 [research engine plan](docs/RESEARCH_ENGINE_PLAN.md). Recorded fills and ordered
 portfolio marks now support arbitrary exits, partials and concurrent instruments
 through `Engine.replay_events`. See the [event replay API](docs/EVENT_REPLAY.md)
@@ -20,7 +20,7 @@ market tapes, declared parameter search, chronological OOS, rolling windows and
 walk-forward refits. See [strategy fitting](docs/STRATEGY_FITTING.md). Additional
 input adapters include external opportunities, explicit bar/trade scenarios and
 atomic or legged multi-instrument orders. See [market inputs](docs/MARKET_INPUTS.md).
-The remaining release gates are tracked in the roadmap.
+See the [changelog](CHANGELOG.md) and measured [performance gates](docs/PERFORMANCE.md).
 
 The bracket API implements the agreed **sequential stop-or-target model**.
 It reuses the existing rule interpreter, feasibility projection, payout ledger,
@@ -285,7 +285,7 @@ print(ruin["cycle_approximation"])       # ultimate, conditional on a separate m
 The **ultimate** calculation is a separately labelled approximation: it resamples
 complete, settled account cash cycles independently, with full payout retention.
 It reports a Monte Carlo range, a confidence range including unresolved paths,
-and a **sufficient** bankroll bound for the requested ultimate risk—not a claimed
+and a **sufficient** bankroll bound for the requested ultimate risk, not a claimed
 minimum. Positive-drift simulations stop only with a bounded remaining tail;
 reaching the computational limit does not make survivors safe.
 

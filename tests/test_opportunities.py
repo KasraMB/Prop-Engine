@@ -22,6 +22,11 @@ class Policy:
         self.updates.append(event)
 
 
+def test_none_opportunity_is_not_silent_end_of_data():
+    with pytest.raises(TypeError, match="expected Opportunity"):
+        OpportunityStrategy([None], Policy()).take()
+
+
 def test_opportunities_are_released_causally_and_sizing_is_a_policy_choice():
     signals = [Opportunity(AT, "X", 1, tag="entry"),
                Opportunity(AT+timedelta(minutes=1), "X", -1, tag="exit")]

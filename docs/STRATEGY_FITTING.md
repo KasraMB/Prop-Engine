@@ -87,6 +87,10 @@ poor candidate scores. The baseline must be feasible.
   account, wallet and strategy in each complete window of each partition.
 - `seeds=(1,2,3)` repeats the same declared execution/strategy seeds for every
   candidate. The factory and setup must actually use those seeds where random.
+- `search_seeds=(7,8,9)` repeats optimizer starts on IS. `fit.search_runs` retains
+  each training winner; `fit.stability` reports parameter ranges and selection
+  frequency. This is search sensitivity, not independent market evidence. Small
+  exhaustive grids naturally return the same winner for every search seed.
 - `warmup_sessions=10` supplies preceding observations, including the IS prefix
   before OOS, with trading disabled. No account or open position crosses folds.
 - Permitted horizon positions remain marked. Unrealized balance is not a payout
@@ -151,9 +155,15 @@ Persist dataclasses with an application-owned safe format; do not load untrusted
 pickles. Replaying cached optimizer steps reconstructs search state, so resume
 cost grows with completed trial count but does not repeat their simulations.
 
-`fit.work` reports shared tape bytes and a search observation upper bound. It
-excludes final reporting, inner validation and unrestricted-wallet counterparts;
-it is not a measured runtime or process memory budget. Search recording is used
-unless setup explicitly selects another recording mode. Detailed logs from
+Call `estimate_strategy_work(tape, ...)` before fitting with the same split,
+rolling, seed, warmup and search settings. `fit.work` contains the same estimates:
+shared tape bytes, maximum candidate/cache counts and observation upper bounds.
+The total includes inner validation, final reporting, warmup and possible
+unrestricted-wallet counterparts. It is not a measured runtime or total process
+memory budget: arbitrary callbacks and order counts cannot be bounded from input
+size alone. Search recording is used unless setup explicitly selects another
+recording mode. Detailed logs from
 completed candidates are not cached. Cash ledgers, active state and compact
 order identities still require memory; this is not a constant-memory promise.
+
+See [performance](PERFORMANCE.md) for measured workloads and regression gates.

@@ -6,6 +6,9 @@ from .events import _header, _symbol, event_key, money
 from .strategy import StrategyReplay, replay_strategy
 
 
+_END = object()
+
+
 @dataclass(frozen=True, slots=True)
 class Opportunity:
     at: datetime
@@ -51,8 +54,8 @@ class OpportunityStrategy:
     def take(self):
         if self.done or self.pending is not None:
             return
-        opportunity = next(self.stream, None)
-        if opportunity is None:
+        opportunity = next(self.stream, _END)
+        if opportunity is _END:
             self.done = True
             return
         if not isinstance(opportunity, Opportunity):

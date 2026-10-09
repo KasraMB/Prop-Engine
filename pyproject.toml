@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "propfirm_engine"
-version = "0.1.0"
+version = "0.2.0"
 description = "A research simulator for futures prop-firm strategies, sizing policies and repeated-attempt economics."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -24,10 +24,14 @@ research = [
 ]
 dev = [
     "pytest>=8.0",
+    "build>=1.2",
 ]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/propfirm_engine"]
+
+[tool.hatch.build.targets.sdist]
+only-include = ["src/propfirm_engine", "README.md", "LICENSE", "pyproject.toml"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

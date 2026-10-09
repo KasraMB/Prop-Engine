@@ -192,7 +192,7 @@ def evaluate_strategy(spec, tape, config, factory, *, params, setup, seeds=(0,),
                 if cancel is not None and cancel():
                     raise ReplayCancelled("strategy evaluation cancelled")
                 options = dict(setup(seed))
-                if "trace" not in options:
+                if not options.get("trace", False):
                     options.setdefault("recording", "search")
                 if {"sessions", "warmup", "cancel"} & options.keys():
                     raise ValueError("setup cannot override sessions, warmup or cancellation")
@@ -215,7 +215,7 @@ def evaluate_strategy(spec, tape, config, factory, *, params, setup, seeds=(0,),
             digest.update(replay.history_fingerprint.encode())
     evaluation = StrategyEvaluation(parameters, tuple(paths), risk, digest.hexdigest())
     score = evaluation.mean_cash_per_day if objective is None else objective(evaluation)
-    if isinstance(score, bool) or not np.isscalar(score) or not isfinite(float(score)):
+    if isinstance(score, (bool, np.bool_)) or not np.isscalar(score) or not isfinite(float(score)):
         raise ValueError("objective must return a finite scalar")
     return replace(evaluation, score=float(score))
 
@@ -242,6 +242,13 @@ class SearchCancelled(ReplayCancelled):
 
 
 @dataclass(frozen=True)
+class SearchRun:
+    seed: int
+    parameters: tuple
+    score: float
+
+
+@dataclass(frozen=True)
 class StrategyFit:
     selected: StrategyEvaluation
     baseline: StrategyEvaluation
@@ -251,6 +258,7 @@ class StrategyFit:
     checkpoint: StrategyCheckpoint
     split_session: date
     work: dict
+    search_runs: tuple[SearchRun, ...] = ()
 
     @property
     def params(self):
@@ -267,20 +275,77 @@ class StrategyFit:
     @property
     def stability(self):
         feasible = [t for t in self.trials if t.feasible]
+        ranges = {}
+        if self.search_runs:
+            for name, _ in self.search_runs[0].parameters:
+                values = [dict(run.parameters)[name] for run in self.search_runs]
+                ranges[name] = (dict(minimum=min(values), maximum=max(values))
+                    if all(type(v) in (int, float) for v in values) else
+                    {repr(v): values.count(v) for v in dict.fromkeys(values)})
         return {"trials": len(self.trials), "infeasible": len(self.trials)-len(feasible),
                 "selected_parameters": self.params,
                 "training_score": self.training.score,
                 "validation_score": None if self.validation is None else self.validation.score,
                 "oos_score": self.score,
                 "baseline_oos_score": self.baseline.score,
+                "search_runs": [{"seed": run.seed, "parameters": dict(run.parameters), "score": run.score}
+                                for run in self.search_runs],
+                "parameter_ranges": ranges,
+                "selected_frequency": (sum(run.parameters == self.selected.parameters for run in self.search_runs)
+                                       /len(self.search_runs) if self.search_runs else None),
                 "note": "diagnostics only; OOS must not select settings or stopping"}
+
+
+def _partitions(view, train_fraction, validation_fraction):
+    if (isinstance(train_fraction, bool) or not isinstance(train_fraction, Real) or not 0 < train_fraction < 1
+            or isinstance(validation_fraction, bool) or not isinstance(validation_fraction, Real)
+            or not 0 <= validation_fraction < 1):
+        raise ValueError("train_fraction must be in (0,1); validation_fraction in [0,1)")
+    split = floor(len(view.sessions)*Fraction(str(train_fraction)))
+    if not 0 < split < len(view.sessions):
+        raise ValueError("split must leave complete sessions in IS and OOS")
+    end = floor(split*(1-Fraction(str(validation_fraction))))
+    if not 0 < end <= split or validation_fraction and end == split:
+        raise ValueError("inner validation must leave complete training and validation sessions")
+    parts = {"training": view.view(0, end), "oos": view.view(split)}
+    if end < split:
+        parts["validation"] = view.view(end, split)
+    return parts
+
+
+def estimate_strategy_work(tape, *, generations=20, population=8, seeds=(0,), search_seeds=(0,),
+                           train_fraction=.7, validation_fraction=0, finalists=3, rolling=None,
+                           warmup_sessions=0):
+    view, seeds, search_seeds = _view(tape), _seeds(seeds), _seeds(search_seeds)
+    for name, value, low in (("generations", generations, 0), ("population", population, 4),
+                             ("finalists", finalists, 1), ("warmup_sessions", warmup_sessions, 0)):
+        if type(value) is not int or value < low:
+            raise ValueError(f"{name} must be an integer >= {low}")
+    costs = {}
+    for name, part in _partitions(view, train_fraction, validation_fraction).items():
+        total = 0
+        for window in _windows(part, rolling):
+            total += len(window)
+            if warmup_sessions and window.first:
+                total += len(window.tape.view(max(0, window.first-warmup_sessions), window.first))
+        costs[name] = total*len(seeds)
+    candidates = (2+generations*population)*len(search_seeds)
+    training, validation, oos = costs["training"], costs.get("validation", 0), costs["oos"]
+    return {"max_search_candidates": candidates,
+            "training_observations_per_candidate": training,
+            "search_observation_upper_bound": 2*candidates*training,
+            "total_observation_upper_bound": 2*((candidates+1)*training+(finalists+2)*validation+2*oos),
+            "cache_entries_upper_bound": candidates+(finalists+1 if validation else 0),
+            "tape_bytes": view.tape.nbytes,
+            "retention": "shared input arrays; compact trial scores and final path summaries",
+            "caveat": "includes warmup and possible wallet counterparts; callback/order counts and process memory cannot be bounded from input size"}
 
 
 def fit_strategy(spec, tape, config, factory, *, baseline, space, setup, train_fraction=.7,
                  validation_fraction=0, finalists=3, generations=20, population=8, seed=0,
                  seeds=(0,), rolling=None, warmup_sessions=0, risk=RiskConfig(), objective=None,
                  direction="maximize", constraint=None, study_id=None, resume=None,
-                 checkpoint=None, progress=None, cancel=None):
+                 checkpoint=None, progress=None, cancel=None, search_seeds=None):
     """Search IS only; report selected and baseline performance on untouched OOS."""
     view, base, seeds = _view(tape), _params(baseline), _seeds(seeds)
     space = dict(sorted(dict(space).items()))
@@ -290,31 +355,19 @@ def fit_strategy(spec, tape, config, factory, *, baseline, space, setup, train_f
                              ("finalists", finalists, 1), ("seed", seed, 0)):
         if type(value) is not int or value < low:
             raise ValueError(f"{name} must be an integer >= {low}")
-    if (isinstance(train_fraction, bool) or not isinstance(train_fraction, Real) or not 0 < train_fraction < 1
-            or isinstance(validation_fraction, bool) or not isinstance(validation_fraction, Real)
-            or not 0 <= validation_fraction < 1):
-        raise ValueError("train_fraction must be in (0,1); validation_fraction in [0,1)")
+    search_seeds = _seeds((seed,) if search_seeds is None else search_seeds)
     if direction not in ("maximize", "minimize"):
         raise ValueError("direction must be maximize or minimize")
     if (resume is not None or checkpoint is not None) and (not isinstance(study_id, str) or not study_id):
         raise ValueError("checkpoint/resume requires a study_id identifying code and execution settings")
-    split = floor(len(view.sessions)*Fraction(str(train_fraction)))
-    if not 0 < split < len(view.sessions):
-        raise ValueError("split must leave complete sessions in IS and OOS")
-    training_end = floor(split*(1-Fraction(str(validation_fraction))))
-    if not 0 < training_end <= split or validation_fraction and training_end == split:
-        raise ValueError("inner validation must leave complete training and validation sessions")
-    training, oos = view.view(0, training_end), view.view(split)
-    validation = view.view(training_end, split) if training_end < split else None
-    partitions = {"training": training, "oos": oos}
-    if validation is not None:
-        partitions["validation"] = validation
+    partitions = _partitions(view, train_fraction, validation_fraction)
+    training, oos, validation = partitions["training"], partitions["oos"], partitions.get("validation")
     for part in partitions.values():
         _windows(part, rolling)
     x0 = [domain.encode(dict(base)[name]) for name, domain in space.items()]
     key = sha256(repr(("strategy-fit-v1", view.fingerprint, spec, config, base, tuple(space.items()),
         train_fraction, validation_fraction, finalists, generations, population, seed, seeds,
-        rolling, warmup_sessions, risk, direction, study_id)).encode()).hexdigest()
+        rolling, warmup_sessions, risk, direction, study_id, search_seeds)).encode()).hexdigest()
     trials, cache = [], {}
     if resume is not None:
         if not isinstance(resume, StrategyCheckpoint) or resume.fingerprint != key:
@@ -371,8 +424,10 @@ def fit_strategy(spec, tape, config, factory, *, baseline, space, setup, train_f
         params.update((name, domain.decode(value)) for (name, domain), value in zip(space.items(), values))
         return _params(params)
 
-    if not isfinite(trial(base)):
+    base_score = trial(base)
+    if not isfinite(base_score):
         raise ValueError("baseline must be feasible")
+    search_runs = []
     grid, count = [], 1
     for domain in space.values():
         if domain.kind == "continuous":
@@ -384,9 +439,14 @@ def fit_strategy(spec, tape, config, factory, *, baseline, space, setup, train_f
     if generations and count <= 2+generations*population:
         for values in product(*grid):
             trial(_params(dict(base) | dict(zip(space, values))))
+        best = max((t for t in trials if t.partition == "training" and t.feasible), key=lambda t: sign*t.score)
+        search_runs = [SearchRun(run_seed, best.parameters, best.score) for run_seed in search_seeds]
     else:
-        CMAES(x0, .3, popsize=population, bounds=(0, 1), seed=seed, max_gen=generations).optimize(
-            lambda values: trial(decode(values)))
+        for run_seed in search_seeds:
+            result = CMAES(x0, .3, popsize=population, bounds=(0, 1), seed=run_seed, max_gen=generations).optimize(
+                lambda values: trial(decode(values)))
+            params = base if base_score >= result.score else decode(result.x)
+            search_runs.append(SearchRun(run_seed, params, cache["training", params].score))
     ranked = sorted((t for t in trials if t.partition == "training" and t.feasible),
                     key=lambda t: -sign*t.score)
     if validation is None:
@@ -401,15 +461,11 @@ def fit_strategy(spec, tape, config, factory, *, baseline, space, setup, train_f
         original = selected if chosen == base else evaluate(base, "oos")
     except ReplayCancelled:
         raise SearchCancelled(state()) from None
-    training_events = sum(len(w) for w in _windows(training, rolling))*len(seeds)
-    work = {"max_search_candidates": 2+generations*population,
-            "training_observations_per_candidate": training_events,
-            "search_observation_upper_bound": (2+generations*population)*training_events,
-            "tape_bytes": view.tape.nbytes,
-            "retention": "shared input arrays; compact trial scores and final path summaries",
-            "caveat": "excludes validation, reporting, callbacks and unrestricted-wallet reruns"}
+    work = estimate_strategy_work(view, generations=generations, population=population, seeds=seeds,
+        search_seeds=search_seeds, train_fraction=train_fraction, validation_fraction=validation_fraction,
+        finalists=finalists, rolling=rolling, warmup_sessions=warmup_sessions)
     return StrategyFit(selected, original, trained, validated, tuple(trials), state(),
-                       oos.sessions[0], work)
+                       oos.sessions[0], work, tuple(search_runs))
 
 
 @dataclass(frozen=True)

@@ -250,3 +250,36 @@ def test_complete_cycle_approximation_is_separate_from_finite_horizon_metrics():
     assert ultimate["status"] == "certain_ruin"
     assert "IID cycle approximation" in ultimate["warning"]
     assert result.metrics["ruin_probability"] is None
+
+
+def test_multiple_search_seeds_use_is_only_and_expose_parameter_stability():
+    kwargs = dict(search_seeds=(2, 3, 4), space={"quantity": Parameter("integer", 1, 3), "risk": Parameter()},
+                  baseline={"quantity": 1, "risk": .5}, generations=2)
+    first = fit(**kwargs)
+    changed = fit(**kwargs, tape=tape(oos_move=-20))
+    assert first.search_runs == changed.search_runs
+    assert len(first.stability["search_runs"]) == 3
+    assert "risk" in first.stability["parameter_ranges"]
+    assert first.params == changed.params
+
+
+def test_work_estimate_is_available_before_search_and_covers_rolling_warmup():
+    from propfirm_engine import estimate_strategy_work
+    data = tape()
+    work = estimate_strategy_work(data, generations=2, population=4, seeds=(1, 2),
+        search_seeds=(7, 8), rolling=RollingConfig(2), warmup_sessions=1)
+    assert work["max_search_candidates"] == 20
+    assert work["tape_bytes"] == data.nbytes
+    assert work["total_observation_upper_bound"] > work["search_observation_upper_bound"]
+    assert work["training_observations_per_candidate"] == 2*(6*6+5*3)
+
+
+def test_multi_search_resume_reconstructs_stability_and_scores():
+    kwargs = dict(search_seeds=(7, 8), space={"quantity": Parameter("integer", 1, 3), "risk": Parameter()},
+                  baseline={"quantity": 1, "risk": .5}, generations=2, study_id="multi-seed-v1")
+    saved = []
+    with pytest.raises(SearchCancelled) as error:
+        fit(**kwargs, checkpoint=saved.append, cancel=lambda: len(saved) >= 5)
+    resumed, full = fit(**kwargs, resume=error.value.checkpoint), fit(**kwargs)
+    assert resumed.search_runs == full.search_runs
+    assert resumed.stability == full.stability

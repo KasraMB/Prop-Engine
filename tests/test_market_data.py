@@ -18,6 +18,15 @@ def markets():
             for i in (0, 2)]
 
 
+def test_preparation_retains_assumptions_from_every_source():
+    from dataclasses import replace
+    from propfirm_engine import MarketSource
+    stream = [replace(m, source=MarketSource(assumptions=(str(i),))) for i, m in enumerate(markets())]
+    tape = MarketTape(stream, [ES], sessions=DAYS)
+    assert tape.assumptions == ("0", "1")
+    assert all(m.source.assumptions == tape.assumptions for m in tape)
+
+
 def test_round_trip_preserves_negative_ticks_missing_sessions_liquidity_and_microseconds():
     tape = MarketTape(markets(), [ES], sessions=DAYS)
     assert list(tape) == markets()

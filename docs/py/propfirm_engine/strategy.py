@@ -11,6 +11,9 @@ from .portfolio import BookState
 from .market_data import MarketTape, MarketView
 
 
+_END = object()
+
+
 @dataclass(frozen=True, slots=True)
 class Context:
     at: datetime
@@ -153,8 +156,8 @@ class _StrategyReplay(_EventReplay):
         fidelity = market.source.fidelity if market.source is not None else "observed_marks"
         if fidelity != self.input_fidelity:
             raise ValueError(f"explicit fidelity='{fidelity}' is required for the market observations")
-        if market.source is not None and not self.input_assumptions:
-            self.input_assumptions = market.source.assumptions
+        if market.source is not None:
+            self.input_assumptions = tuple(dict.fromkeys((*self.input_assumptions, *market.source.assumptions)))
         if self.last_market is not None and event_key(market) <= self.last_market:
             raise ValueError("market keys must strictly increase")
         self.last_market = event_key(market)
@@ -299,8 +302,10 @@ class _StrategyReplay(_EventReplay):
         self.polls += 1
         if self.polls % 1024 == 0:
             self.check_cancel()
-        market = next(self.markets, None)
-        if market is not None and not isinstance(market, Market):
+        market = next(self.markets, _END)
+        if market is _END:
+            return None
+        if not isinstance(market, Market):
             raise TypeError("strategy replay requires Market observations")
         return market
 

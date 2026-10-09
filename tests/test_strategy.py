@@ -46,6 +46,19 @@ def fills(result):
     return [e.fill for e in result.orders if e.fill is not None]
 
 
+def test_none_in_market_stream_is_not_silent_end_of_data():
+    with pytest.raises(TypeError, match="Market observations"):
+        run([market(0), None, market(1)], Script({}))
+
+
+def test_stream_retains_assumptions_from_later_observations():
+    from dataclasses import replace
+    from propfirm_engine import MarketSource
+    stream = [replace(market(i), source=MarketSource(assumptions=(str(i),))) for i in range(2)]
+    result = run(stream, Script({}))
+    assert {"0", "1"}.issubset(result.result.replay.assumptions)
+
+
 @pytest.mark.parametrize("profit,failures", [(10, 0), (0, 1)])
 def test_strategy_inactivity_cutoff_waits_only_for_a_qualifying_close(profit, failures):
     from dataclasses import replace

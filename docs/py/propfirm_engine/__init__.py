@@ -1,5 +1,7 @@
 """Research simulator for futures prop-firm strategies and attempt economics."""
 
+__version__ = "0.2.0"
+
 from . import firms, statistics
 from .execution import (
     BracketTrade, BracketHistory, RiskRegime, DollarPolicy, LifecycleSpec, BacktestConfig,
@@ -20,12 +22,12 @@ from .randomness import RandomStream
 from .strategy_fitting import (
     Parameter, InfeasiblePolicy, StrategyPath, StrategyEvaluation, StrategyFit,
     StrategyTrial, StrategyCheckpoint, SearchCancelled, evaluate_strategy,
-    StrategyWalkForward, evaluate_scenarios,
+    StrategyWalkForward, evaluate_scenarios, SearchRun, estimate_strategy_work,
 )
 from .slippage import TickDistribution, SlippageModel
 from .price_fitting import PriceEvaluation, PriceFit, evaluate_prices
 from .fitting import HoldoutFit
-from .rolling import RollingConfig, RollingWindow, RollingResult
+from .rolling import RollingConfig, RollingWindow, RollingResult as RollingReplayResult
 from .risk import RiskConfig, CashRiskPath, cash_risk_path, risk_report
 from .ruin import RuinConfig, CashCycle, bootstrap_ruin, ultimate_cycle_ruin
 from .payouts import PayoutEvent, PayoutRequest, PayoutLedger
@@ -138,6 +140,7 @@ from .rules import (
 )
 
 __all__ = [
+    "SearchRun", "estimate_strategy_work",
     "ReplaySupport", "check_replay",
     "Basket",
     "Opportunity", "OpportunityStrategy", "OpportunityReplay",
@@ -158,7 +161,7 @@ __all__ = [
     "RiskConfig", "CashRiskPath", "cash_risk_path", "risk_report",
     "BracketTrade", "BracketHistory", "RiskRegime", "DollarPolicy",
     "LifecycleSpec", "BacktestConfig", "BacktestEvent", "BacktestResult", "HoldoutFit",
-    "RollingConfig", "RollingWindow", "RollingResult",
+    "RollingConfig", "RollingWindow", "RollingReplayResult",
     # enums
     "FAILURE_THRESHOLD",
     "ExitCode",
@@ -261,18 +264,18 @@ __all__ = [
     "simulate_wallet_sequences",
     "prob_profitable_sequence",
     "fee_bankroll_efficiency",
-    # feasibility (§16.4b)
+    # feasibility
     "FeasibilitySpec",
     "FeasibilityDiag",
     "FeasibilityAgg",
     "project_position",
-    # generator ladder (§G1 / Step 13)
+    # generators
     "Band",
     "Rung",
     "LadderResult",
     "default_ladder",
     "run_ladder",
-    # optimizer (§16 / Step 14)
+    # optimizer
     "PolicySpace",
     "PolicyEvaluation",
     "RenewalObjective",

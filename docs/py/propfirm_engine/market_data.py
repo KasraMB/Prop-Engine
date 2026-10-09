@@ -68,6 +68,7 @@ class MarketTape:
                 fidelity, assumptions = origin.fidelity, origin.assumptions
             if origin.fidelity != fidelity:
                 raise ValueError("mixed input fidelities require an explicit merged market feed")
+            assumptions = tuple(dict.fromkeys((*assumptions, *origin.assumptions)))
             key = event_key(market)
             if previous is not None and key <= previous:
                 raise ValueError("market keys must strictly increase")

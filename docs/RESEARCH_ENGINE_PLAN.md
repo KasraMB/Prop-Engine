@@ -243,7 +243,7 @@ deprecation warnings. The browser bundle remains synchronized at 49 modules.
 - [x] Custom per-path and distribution objectives with all metrics preserved.
 - [x] Distinguish infeasible candidates from simulator errors.
 - [x] Chronological 70/30 default, rolling starts and walk-forward evaluation.
-- [ ] Inner validation, repeated seeds, search diagnostics and policy stability.
+- [x] Inner validation, repeated seeds, search diagnostics and policy stability.
 - [x] Explicit open-position/warm-up treatment at fold boundaries.
 - [x] Preserve cross-asset and strategy-state dependencies during resampling.
 - [x] Report historical, execution and market uncertainty separately.
@@ -286,17 +286,17 @@ warmup boundaries, prepared/stream parity and immutable input precision.
 
 - [x] Prepared immutable columnar inputs and compact numeric event/state storage.
 - [x] Incremental equity/rule updates and efficient merging of ordered feeds.
-- [ ] Reusable buffers and compiled hot paths where profiling supports them.
+- [x] Reusable buffers and compiled hot paths where profiling supports them.
 - [x] Search, research and full-trace recording modes with identical economics.
 - [x] Bounded caches, batched scenarios and optional streamed traces.
 - [x] Avoid candidate-by-scenario copies of full histories and event ledgers.
 - [x] Stable random streams when different policies execute different trades.
-- [ ] Checkpoint/resume, cancellation and workload/memory estimates.
-- [ ] Synthetic benchmarks for sequential/concurrent, multi-asset, bar/tick,
+- [x] Checkpoint/resume, cancellation and workload/memory estimates.
+- [x] Synthetic benchmarks for sequential/concurrent, multi-asset, bar/tick,
   Monte Carlo and complete optimization workloads.
-- [ ] Record preparation, cold compilation, warm throughput and peak memory.
-- [ ] Set hardware-specific budgets from measured baselines; gate regressions.
-- [ ] Reference/accelerated and recording-mode parity tests.
+- [x] Record preparation, cold compilation, warm throughput and peak memory.
+- [x] Set hardware-specific budgets from measured baselines; gate regressions.
+- [x] Reference/accelerated and recording-mode parity tests.
 - [ ] Build/install checks, public API examples, license and versioned releases.
 - [ ] Synchronize the browser package without creating alternate accounting.
 
@@ -372,6 +372,27 @@ Python files. Remaining work is search stability, workload/budget reporting and
 the final build, performance and release gates below.
 
 ## Required acceptance cases
+
+Release candidate: optimizer starts now use separate search seeds, with per-run
+winners, parameter ranges and selection frequency. OOS-mutation and resume tests
+cover repeated searches. Pre-run workload estimates include warmup, validation,
+final reporting and potential wallet counterparts; arbitrary callback memory is
+not bounded. Provenance from every observation survives preparation and replay.
+
+The synthetic matrix and hardware-specific budgets are documented in
+[performance](PERFORMANCE.md). The calibrated local budget passed separately.
+Existing fused summary kernels remain available with reference parity; general
+callbacks retain exact Python execution and shared prepared arrays. No second
+compiled account implementation was added merely to claim acceleration.
+
+The 0.2.0 source distribution and wheel both built, passed content allowlists,
+installed into separate targets and ran the documented fitting example outside
+the repository. Fifty-three focused packaging/stream tests passed. Final full
+suite passed 1,691 tests with 11 opt-in skips and two known deprecation warnings.
+The package check passed separately. A final export audit found two result types
+sharing a public name; RollingReplayResult now exposes historical replay without
+changing the existing optimizer RollingResult import. Remote CI, browser
+deployment and version tag are still pending.
 
 - Partial exits, scale-ins, reversals and fees reconcile independently.
 - Long/short symmetry under symmetric execution assumptions.

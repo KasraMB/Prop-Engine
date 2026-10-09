@@ -38,3 +38,20 @@ choose policies, regime definitions, hyperparameters or stopping criteria.
 
 Make small, tested commits. Do not rewrite existing history, delete user inputs,
 or push remote changes as a side effect of local implementation.
+
+## Release checks
+
+Run the complete suite and `python dashboard/build_pages.py`; generated browser
+sources must match the canonical package. Run the performance matrix and applicable
+hardware budget in [performance](docs/PERFORMANCE.md). CI also checks Python
+3.11/3.12/3.13, minimum NumPy/Numba dependencies and the real browser runtime.
+
+Set `RUN_PACKAGE_TESTS=1` and run `python -m pytest tests/test_package.py -q` to
+build a source distribution and wheel, inspect their contents, install each into
+an isolated target, and run the documented fitting example outside the repository.
+The source archive includes only engine sources and required build metadata;
+Hatch also always includes `.gitignore`. No private data is needed for installation.
+
+Keep package versions and CHANGELOG synchronized. Tag only a tested commit with
+green CI and a verified Pages deployment. A Git tag is not authorization to upload
+to a package registry.
