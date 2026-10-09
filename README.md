@@ -151,7 +151,7 @@ interpreting results, and the [API map](#api-map) for other entry points.
 
 ## Status
 
-Version 0.2.2 provides general order and portfolio research execution under the
+Version 0.2.3 provides general order and portfolio research execution under the
 [research engine plan](docs/RESEARCH_ENGINE_PLAN.md). Recorded fills and ordered
 portfolio marks now support arbitrary exits, partials and concurrent instruments
 through `Engine.replay_events`. See the [event replay API](docs/EVENT_REPLAY.md)
@@ -460,6 +460,22 @@ The legacy Monte Carlo path remains a separate research mode.
 Its strict capability guard is unchanged: arbitrary closed summaries cannot
 certify intraday compliance. Choosing bracket replay explicitly asserts the
 ideal sequential stop/target contract; it does not relabel arbitrary MAE data.
+
+## Uncertainty
+
+Results distinguish outcome dispersion from uncertainty in an estimated mean.
+Use `result.uncertainty` for chronological, rolling, strategy and price results;
+cash risk reports include it under `report["uncertainty"]`. Independent model
+paths receive conditional mean standard errors. Overlapping historical windows
+and selected training samples do not receive naive confidence intervals.
+
+`Engine().uncertainty(samples, sample_kind=..., options=UncertaintyConfig(...))`
+adds opt-in IID or circular block bootstrap intervals for supplied scalar means.
+Paired policy comparisons and explicitly non-probabilistic scenario sensitivity
+are also available. Model misspecification, parameter error and selection bias
+remain labelled unmeasured, not silently treated as zero. See the
+[uncertainty guide](docs/UNCERTAINTY.md) for runnable examples, assumptions and
+result-specific access paths.
 
 ## Dashboard
 

@@ -1,5 +1,5 @@
 {
-  "bundle_sha256": "fd7993ac46899b4f775c18237bb71684bd243d941354772d81b05b97379df014",
+  "bundle_sha256": "202e55e9c3f39c6ab4d9175c18a0bca0656cb11505db10468f8776dabc750d07",
   "files": [
     {
       "path": "numba.py",
@@ -7,7 +7,7 @@
     },
     {
       "path": "propfirm_engine/__init__.py",
-      "sha256": "eb60c438435f2ca5b03841c1dd10e9596c64eb47de24114884f8d91a5b8cba36"
+      "sha256": "d6b2b78e98df7e64f2a1d2d1784db7e3a65f85d17abbd6a52ff5f65ccef34233"
     },
     {
       "path": "propfirm_engine/analytical.py",
@@ -15,7 +15,7 @@
     },
     {
       "path": "propfirm_engine/backtest.py",
-      "sha256": "23c0c718895b0841418f2fcfa743160e58478b55a31a7f7a1f879cedac37eff1"
+      "sha256": "b188b768bcde596040229b638765e00fe67df4a8c04e35f66f490f1203cea81a"
     },
     {
       "path": "propfirm_engine/cache.py",
@@ -47,7 +47,7 @@
     },
     {
       "path": "propfirm_engine/engine.py",
-      "sha256": "40fabe967be544aeb95da0c17c9f5917ff5a524257f213b48b994b6bbc1c4e36"
+      "sha256": "4b8875bba33aef416dad2f200a50f7da1840ae722a63ca0cc17bc9204c5f690b"
     },
     {
       "path": "propfirm_engine/enums.py",
@@ -55,7 +55,7 @@
     },
     {
       "path": "propfirm_engine/event_replay.py",
-      "sha256": "caf17ba901f649aa534b42c625ffe8a6f3da0f5a73b82585cd89fd4a1ca6bc32"
+      "sha256": "2dce8cbcf07c67f919438bdd85664518b928ced0f743b4394b9d38871646d51d"
     },
     {
       "path": "propfirm_engine/events.py",
@@ -87,7 +87,7 @@
     },
     {
       "path": "propfirm_engine/fitting.py",
-      "sha256": "f57a243953e366e2374d7bd2e518701585932154ffa646d0a47e21a20a201164"
+      "sha256": "965cb5114c581636d109e9d164bfa2ab9e4d90b61cfc8ee0b5caa02a4e1109b1"
     },
     {
       "path": "propfirm_engine/info.py",
@@ -111,7 +111,7 @@
     },
     {
       "path": "propfirm_engine/market_replay.py",
-      "sha256": "f6f677b63662f92f01426a7298ae72ee8f68f67846534d8f3fd41a7b4c7f349b"
+      "sha256": "0e1af66b40cdb604e400609b022d33b267edbec2b633e2a885e94e44af952ec4"
     },
     {
       "path": "propfirm_engine/model.py",
@@ -143,7 +143,7 @@
     },
     {
       "path": "propfirm_engine/price_fitting.py",
-      "sha256": "3ae5bee406e7baa1cec805d3acc4c11a17163a0c33c2ebcc89f067ef3e073be0"
+      "sha256": "b1b5add0569bf17c3597801034faad99a38e1412703635802b623c8b72069bf0"
     },
     {
       "path": "propfirm_engine/randomness.py",
@@ -163,15 +163,15 @@
     },
     {
       "path": "propfirm_engine/results.py",
-      "sha256": "873ef3bd64b5b3a55e7284d878516025419b7ab7b98327139355c0ff3092f3ee"
+      "sha256": "fe01aea58b771c2274a65bf7bc005291b3432cc71f068d565128f5422e83028b"
     },
     {
       "path": "propfirm_engine/risk.py",
-      "sha256": "ae508cc518dc8831bf766306d6c72809a4d7287da9816feda4902e56ac8b8f95"
+      "sha256": "0badc446d2df028360643030cfb4844b06daee505e0d6e738c150535d303369c"
     },
     {
       "path": "propfirm_engine/rolling.py",
-      "sha256": "91a58c99e57bb8c2cf8c2091af8154b32911411d28b08233aef62b6c6b698a3a"
+      "sha256": "707d1d28771d7a7b4c7bd02bfd0a78bcb2d1446922ade09c09c63c2ebb889df4"
     },
     {
       "path": "propfirm_engine/ruin.py",
@@ -199,11 +199,11 @@
     },
     {
       "path": "propfirm_engine/strategy.py",
-      "sha256": "1b6f13b50c5dfefa3aa849d2dfaf1f77e890cc35a2a483c6cbd6e8c86ea536be"
+      "sha256": "bb9fa9cde89bd9a0853ccb5b27bd7a72dd05c3b4d67ac5c7d1bf76b696e2522c"
     },
     {
       "path": "propfirm_engine/strategy_fitting.py",
-      "sha256": "ee6c5dd4651eadfa5a495b7ed39ce3edbad2813f74311d0cf6c9f113d45b6d41"
+      "sha256": "9d6dae44e1525e85964fe027f237bda89ab4f2c6a1c1ccab5e7949eda3a1e82e"
     },
     {
       "path": "propfirm_engine/synthetic.py",
@@ -211,7 +211,11 @@
     },
     {
       "path": "propfirm_engine/target_research.py",
-      "sha256": "3add5c814b90510d6d368d07912c2500c2fd98764b928b211cc505fa13a719b5"
+      "sha256": "22fc5c82124a16503bfec757782f0dbe74bd594ded9c34bebeca121137707ed2"
+    },
+    {
+      "path": "propfirm_engine/uncertainty.py",
+      "sha256": "e60182abfde2f9cd1fd54a36fd7bfdb4a7f1c387be55c32e404919e2f14a2089"
     },
     {
       "path": "propfirm_engine/validate.py",
@@ -219,11 +223,11 @@
     },
     {
       "path": "replay.py",
-      "sha256": "ce9f3e9a45eab9f52393491cb6ae26ca82ec9bdba0e45b90c98bb8d93db69dc3"
+      "sha256": "3471fe71218055754bc7164373bb3ac5e36f2e86b19a8069a341cbb0685c299e"
     },
     {
       "path": "research.py",
-      "sha256": "2ae878cc08093cac6079a6d1fb0d4483afadb08f3373d5defd2f106bf5faefa4"
+      "sha256": "bddbf23a79b3b327075afb1386ef16b9ba94c293517e68c0cbaf47f05aaff057"
     }
   ]
 }

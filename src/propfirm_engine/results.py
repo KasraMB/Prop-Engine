@@ -87,5 +87,12 @@ class Results:
         """Evaluate any objective ``fn(outcomes, **kw)`` over this batch (§14.5)."""
         return fn(self._o, **kw)
 
+    def uncertainty(self, *, sample_kind, **kwargs):
+        """Classify the sampling design explicitly; resampled attempts are not history."""
+        from .uncertainty import uncertainty_report
+        return uncertainty_report({"net_payoff": self._o.net_payout-stats.attributable_fee(self._o),
+            "net_payout": self._o.net_payout, "trading_days": self._o.total_trading_days},
+            sample_kind=sample_kind, **kwargs)
+
 
 __all__ = ["Results"]

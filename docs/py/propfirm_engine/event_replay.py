@@ -36,6 +36,10 @@ class EventReplay:
     event_counts: tuple[tuple[str, int], ...] = ()
     recording: str = "research"
 
+    @property
+    def uncertainty(self):
+        return self.replay.uncertainty
+
 
 @dataclass(frozen=True, slots=True)
 class PayoutContext:

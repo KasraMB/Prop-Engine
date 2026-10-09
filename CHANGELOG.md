@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.3 - 2026-10-09
+
+- Consistent mean-uncertainty reports across replay, fitting and cash-risk APIs.
+- Explicit sampling contracts, conditional mean standard errors, opt-in IID and
+  circular block bootstrap intervals, paired comparisons and scenario sensitivity.
+- Training selection and dependent historical windows withhold inference;
+  parameter, model, selection and numerical uncertainty remain explicitly unmeasured.
+- Bounded bootstrap batches, reused summary moments and executable documentation.
+
 ## 0.2.2 - 2026-10-09
 
 - Printable configured-rule reports through `firms.lucidflex.info`, `Engine.info`

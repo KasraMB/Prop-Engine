@@ -19,6 +19,7 @@ from .backtest import BacktestResult, _Replay
 from .execution import BacktestConfig, BracketHistory, BracketTrade, DollarPolicy, RiskRegime
 from .optimizer import CMAES
 from .risk import RiskConfig, cash_risk_path, distribution, risk_report
+from .uncertainty import _from_distributions, paired_uncertainty
 
 
 def bracket_probability(stop, target, *, mu=0.0, sigma=1000.0):
@@ -174,6 +175,12 @@ class ResearchSummary:
     scope: str = "independent model paths; uncertainty is sampling error only, not model risk"
     distributions: dict | None = None
     risk: dict | None = None
+    selected_on_sample: bool = False
+
+    @property
+    def uncertainty(self):
+        return _from_distributions(self.distributions or {"objective": distribution(self.objective_values)},
+            sample_kind="independent_model", count=self.paths, selected_on_sample=self.selected_on_sample)
 
 
 def evaluate_targets(spec, model, policy, config, tapes, *, objective=None, risk=RiskConfig()):
@@ -228,6 +235,16 @@ class TargetFit:
     paired_holdout_gain: float
     paired_gain_standard_error: float
     scope: str = "70/30 split of independent model paths; NOT historical IS/OOS validation"
+
+    @property
+    def uncertainty(self):
+        sign = 1 if self.direction == "maximize" else -1
+        paired = paired_uncertainty(
+            {"objective_gain": [sign*v for v in self.holdout.objective_values]},
+            {"objective_gain": [sign*v for v in self.baseline_holdout.objective_values]},
+            sample_kind="independent_model")
+        return {"holdout": self.holdout.uncertainty, "paired_gain": paired,
+                "selection": "frozen IS-selected policy; no correction for repeated holdout reuse"}
 
 
 def fit_targets(spec, model, config, *, policy, risk_bounds, target_bounds,
@@ -313,7 +330,8 @@ def fit_targets(spec, model, config, *, policy, risk_bounds, target_bounds,
     selected = TargetPolicy(DollarPolicy(tuple(fitted if fitted.name in visited else original
         for fitted, original in zip(selected.sizing.regimes, policy.sizing.regimes))),
         tuple(t if n in visited else old for n, t, old in zip(names, selected.targets, policy.targets)))
-    training = evaluate_targets(spec, model, selected, config, train, objective=objective, risk=None)
+    training = replace(evaluate_targets(spec, model, selected, config, train, objective=objective, risk=None),
+                       selected_on_sample=True)
     test = np.random.default_rng(np.random.SeedSequence([holdout_seed, 1])).random((paths - train_count, model.sessions))
     held = evaluate_targets(spec, model, selected, config, test, objective=objective, risk=risk)
     baseline = evaluate_targets(spec, model, policy, config, test, objective=objective, risk=risk)

@@ -45,6 +45,9 @@ def test_search_without_history_uses_flat_start_and_no_example_seed(monkeypatch)
     assert output["fit"]["holdout"]["paths"] == output["risk"]["paths"] == 3
     assert output["fit"]["evaluations"] > 1
     assert output["scope"].endswith("not historical strategy IS/OOS")
+    assert output["training_uncertainty"]["selected_on_sample"]
+    assert output["uncertainty"]["holdout"]["sample_kind"] == "independent_model"
+    assert "objective_gain" in output["uncertainty"]["paired_gain"]["metrics"]
     json.dumps(output, allow_nan=False)
 
 

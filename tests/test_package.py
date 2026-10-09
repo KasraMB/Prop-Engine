@@ -57,6 +57,7 @@ def test_clean_wheel_and_sdist_install_without_repository_data(tmp_path):
         assert all(name.startswith("propfirm_engine/") or name.split("/", 1)[0].endswith(".dist-info") for name in names)
         assert any(name.endswith("/LICENSE") for name in names)
         assert "propfirm_engine/strategy_fitting.py" in names
+        assert "propfirm_engine/uncertainty.py" in names
         assert all(name.endswith(".py") for name in names if name.startswith("propfirm_engine/"))
     with tarfile.open(source) as archive:
         names = [Path(name).parts[1:] for name in archive.getnames()]
@@ -67,7 +68,9 @@ def test_clean_wheel_and_sdist_install_without_repository_data(tmp_path):
         target = tmp_path / artifact.name.replace(".", "_")
         subprocess.run([sys.executable, "-m", "pip", "install", "--no-deps", "--target", str(target), str(artifact)], check=True)
         examples = re.findall(r"```python\n(.*?)\n```", (ROOT / "docs/STRATEGY_FITTING.md").read_text(encoding="utf-8"), re.DOTALL)
-        for example in (_quickstart(), "\n".join(examples) + "\nassert fit.score == fit.selected.score\n"):
+        uncertainty = re.findall(r"```python\n(.*?)\n```", (ROOT / "docs/UNCERTAINTY.md").read_text(encoding="utf-8"), re.DOTALL)
+        for example in (_quickstart(), "\n".join(examples) + "\nassert fit.score == fit.selected.score\n",
+                        "\n".join(uncertainty)):
             code = ("import sys\nfrom pathlib import Path\nsys.path.insert(0, sys.argv[1])\n"
                     "import propfirm_engine\nassert Path(propfirm_engine.__file__).resolve().is_relative_to(Path(sys.argv[1]).resolve())\n"
                     + example)

@@ -8,6 +8,7 @@ from statistics import NormalDist
 import numpy as np
 
 from .statistics import wilson_ci
+from .uncertainty import _from_distributions
 
 
 def _finite(value, name, low=0, high=float("inf")):
@@ -217,6 +218,8 @@ def risk_report(paths, *, options=RiskConfig(), sample_kind="historical_windows"
         intervals = {"confidence": options.confidence, "method": "two-sided marginal Wilson intervals",
                      "bounds": {name: wilson_ci(count, n, z=z) for name, count in counts.items()}}
     return {"sample_kind": sample_kind, "paths": n, "options": asdict(options),
+        "uncertainty": _from_distributions(distributions, sample_kind=sample_kind,
+                                           count=n, confidence=options.confidence),
         "performance_wallets": sorted(set(p.performance_initial_wallet for p in paths), key=lambda x: -1 if x is None else x),
         "distributions": distributions,
         "probability_profitable": sum(p.net_cash > 0 for p in paths)/n,

@@ -85,6 +85,13 @@ class RollingResult:
     risk: dict | None = None
 
     @property
+    def uncertainty(self):
+        from .uncertainty import uncertainty_report
+        return uncertainty_report({name: [getattr(w, name) for w in self.windows]
+            for name in ("objective_score", "net_cash", "net_cash_per_day")},
+            sample_kind="historical_windows")
+
+    @property
     def score(self):
         """Equal-weight mean of the supplied per-window objective, not summed profit."""
         return fsum(w.objective_score / len(self.windows) for w in self.windows)

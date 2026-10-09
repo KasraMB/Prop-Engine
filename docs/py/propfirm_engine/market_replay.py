@@ -94,6 +94,10 @@ class PriceReplay:
     replay: BacktestResult
     decisions: tuple[PriceDecision, ...]
 
+    @property
+    def uncertainty(self):
+        return self.replay.uncertainty
+
 
 def _resolve(session, instrument, quantity, risk, target, costs, *, slippage=None,
              tape=None, compensate_slippage=True, diagnostics=None):

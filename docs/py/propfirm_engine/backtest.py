@@ -76,6 +76,12 @@ class BacktestResult:
     history_fingerprint: str
 
     @cached_property
+    def uncertainty(self):
+        from .uncertainty import uncertainty_report
+        return uncertainty_report({"net_cash": [self.net_cash],
+            "net_cash_per_day": [self.net_cash_per_day]}, sample_kind="single_history")
+
+    @cached_property
     def net_cash(self):
         # The frozen ledger never changes; most rule events carry no cash.
         return float(sum((Fraction(str(e.cash)) for e in self.events if e.cash), Fraction(0)))

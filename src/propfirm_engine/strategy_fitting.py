@@ -17,6 +17,7 @@ from .risk import CashRiskPath, RiskConfig, cash_risk_path, distribution, risk_r
 from .rolling import RollingConfig
 from .ruin import CashCycle, _settled_cycles, ultimate_cycle_ruin
 from .strategy import ReplayCancelled, replay_strategy
+from .uncertainty import _from_distributions
 
 
 def _scalar(value):
@@ -128,7 +129,9 @@ class StrategyEvaluation:
         for name in ("balance", "equity", "fills", "rejected_orders", "passed_stages"):
             report["distributions"][name] = distribution(
                 (getattr(p, name) for p in self.paths if getattr(p, name) is not None), self.risk.percentiles)
-        report["uncertainty"] = {
+        report["uncertainty"] = _from_distributions(report["distributions"],
+            sample_kind=report["sample_kind"], count=len(self.paths), confidence=self.risk.confidence)
+        report["uncertainty"].update({
             "historical": "chronological windows; overlapping windows are dependent",
             "execution": "conditional on setup(seed); repeated seeds are not independent market histories",
             "market": ("conditional on the declared independent scenario generator"
@@ -136,8 +139,12 @@ class StrategyEvaluation:
             "horizon": "fresh account and wallet per window; warmup is observation-only",
             "open_positions": "marked at the horizon, not credited as external cash",
             "ultimate_ruin": "not inferred; use the separately labelled complete-cycle approximation",
-        }
+        })
         return report
+
+    @property
+    def uncertainty(self):
+        return self.metrics["uncertainty"]
 
 
 def _windows(view, rolling):
@@ -276,6 +283,10 @@ class StrategyFit:
     split_session: date
     work: dict
     search_runs: tuple[SearchRun, ...] = ()
+
+    @property
+    def uncertainty(self):
+        return self.selected.uncertainty
 
     @property
     def params(self):
@@ -476,8 +487,8 @@ def fit_strategy(spec, tape, config, factory, *, baseline, space, setup, train_f
         candidates = [base] + [t.parameters for t in ranked[:finalists] if t.parameters != base]
         chosen = max(candidates, key=lambda p: trial(p, "validation"))
     try:
-        trained = evaluate(chosen, "training")
-        validated = evaluate(chosen, "validation") if validation is not None else None
+        trained = replace(evaluate(chosen, "training"), sample_kind="training_model")
+        validated = replace(evaluate(chosen, "validation"), sample_kind="training_model") if validation is not None else None
         selected = evaluate(chosen, "oos")
         original = selected if chosen == base else evaluate(base, "oos")
     except ReplayCancelled:

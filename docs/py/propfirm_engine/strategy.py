@@ -40,6 +40,10 @@ class StrategyReplay:
     orders: tuple[OrderEvent, ...]
     order_counts: tuple[tuple[str, int], ...] = ()
 
+    @property
+    def uncertainty(self):
+        return self.result.uncertainty
+
 
 class ReplayCancelled(RuntimeError):
     """Execution stopped without returning partial performance."""

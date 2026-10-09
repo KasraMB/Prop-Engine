@@ -173,6 +173,7 @@ def parse_history(text):
 
 def _summary(result):
     return {**_jsonable(result), "net_cash": result.net_cash,
+            "uncertainty": result.uncertainty,
             "net_cash_per_day": result.net_cash_per_day, "receipts": result.receipts,
             "fees": result.fees, "calendar_days": result.calendar_days,
             "executed_trades": sum(e.kind == "trade" for e in result.events)}
@@ -185,7 +186,7 @@ def _partition(history):
 
 
 def _rolling_summary(result):
-    return {**_jsonable(result), "summary": result.summary}
+    return {**_jsonable(result), "summary": result.summary, "uncertainty": result.uncertainty}
 
 
 def _rolling_work(history, rolling):

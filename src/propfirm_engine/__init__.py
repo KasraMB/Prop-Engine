@@ -1,6 +1,6 @@
 """Research simulator for futures prop-firm strategies and attempt economics."""
 
-__version__ = "0.2.2"
+__version__ = "0.2.3"
 
 from . import firms, statistics
 from .execution import (
@@ -29,6 +29,7 @@ from .price_fitting import PriceEvaluation, PriceFit, evaluate_prices
 from .fitting import HoldoutFit
 from .rolling import RollingConfig, RollingWindow, RollingResult as RollingReplayResult
 from .risk import RiskConfig, CashRiskPath, cash_risk_path, risk_report
+from .uncertainty import UncertaintyConfig, uncertainty_report, paired_uncertainty, scenario_sensitivity
 from .ruin import RuinConfig, CashCycle, bootstrap_ruin, ultimate_cycle_ruin
 from .payouts import PayoutEvent, PayoutRequest, PayoutLedger
 from .analytical import (
@@ -141,6 +142,7 @@ from .rules import (
 )
 
 __all__ = [
+    "UncertaintyConfig", "uncertainty_report", "paired_uncertainty", "scenario_sensitivity",
     "account_info",
     "SearchRun", "estimate_strategy_work",
     "ReplaySupport", "check_replay",

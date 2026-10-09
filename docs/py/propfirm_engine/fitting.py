@@ -28,6 +28,11 @@ class HoldoutFit:
     out_of_sample_rolling: RollingResult | None = None
 
     @property
+    def uncertainty(self):
+        result = self.out_of_sample_rolling or self.out_of_sample
+        return result.uncertainty
+
+    @property
     def score(self):
         """The headline score is ALWAYS the untouched OOS score."""
         return self.out_of_sample_score

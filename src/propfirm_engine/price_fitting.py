@@ -16,6 +16,7 @@ from .optimizer import CMAES
 from .risk import cash_risk_path, distribution
 from .slippage import prepare_execution
 from .target_research import TargetPolicy
+from .uncertainty import _from_distributions, paired_uncertainty
 
 
 @dataclass(frozen=True)
@@ -25,6 +26,14 @@ class PriceEvaluation:
     distributions: dict
     objective_values: tuple[float, ...]
     scope: str = "execution uncertainty conditional on one historical price tape; not independent market histories"
+    selected_on_sample: bool = False
+
+    @property
+    def uncertainty(self):
+        stats = {name: row["distribution"] for name, row in self.distributions.items()}
+        stats["objective"] = distribution(self.objective_values)
+        return _from_distributions(stats, sample_kind="execution_model", count=len(self.paths),
+                                   selected_on_sample=self.selected_on_sample)
 
 
 @dataclass(frozen=True)
@@ -38,6 +47,16 @@ class PriceFit:
     test_sessions: tuple
     direction: str
     boundary_policy: str = "fresh account and wallet at the chronological OOS boundary"
+
+    @property
+    def uncertainty(self):
+        sign = 1 if self.direction == "maximize" else -1
+        paired = paired_uncertainty(
+            {"objective_gain": [sign*v for v in self.out_of_sample.objective_values]},
+            {"objective_gain": [sign*v for v in self.baseline_out_of_sample.objective_values]},
+            sample_kind="execution_model")
+        return {"holdout": self.out_of_sample.uncertainty, "paired_gain": paired,
+                "selection": "frozen IS-selected policy; execution error only, not historical market uncertainty"}
 
     @property
     def score(self):
@@ -174,7 +193,8 @@ def fit_prices(spec, sessions, instrument, config, *, policy, risk_bounds, targe
         tuple(new if name in visited else old for name, old, new in zip(names, policy.targets, selected.targets)))
     common = dict(slippage=slippage, quantity=quantity, paths=paths, execution_seed=execution_seed,
                   compensate_slippage=compensate_slippage, collision_policy=collision_policy, objective=objective)
-    training = evaluate_prices(spec, train, selected, instrument, config, **common)
+    training = replace(evaluate_prices(spec, train, selected, instrument, config, **common),
+                       selected_on_sample=True)
     # Distinct stream identifiers, even when IS and OOS share the supplied seed.
     held = evaluate_prices(spec, test, selected, instrument, config, path_offset=paths, **common)
     baseline = evaluate_prices(spec, test, policy, instrument, config, path_offset=paths, **common)

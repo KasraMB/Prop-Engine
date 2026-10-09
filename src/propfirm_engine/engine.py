@@ -170,6 +170,11 @@ class Engine:
         from .info import account_info
         return account_info(spec, config, print_output=print_output)
 
+    def uncertainty(self, samples, *, sample_kind, **kwargs):
+        """Report conditional mean uncertainty for explicitly classified samples."""
+        from .uncertainty import uncertainty_report
+        return uncertainty_report(samples, sample_kind=sample_kind, **kwargs)
+
     def backtest(self, spec, history, policy, config):
         """Chronological bracket replay; distinct from resampled summary runs."""
         from .backtest import backtest

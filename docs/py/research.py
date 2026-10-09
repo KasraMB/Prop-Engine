@@ -90,6 +90,7 @@ def run_research(request, progress=None):
         "model":model, "spec":spec, "config":config, "objective":objective, "fit":fitted,
         "initial_policy":policy, "reference_policy":lucidflex_example(), "reference_holdout":reference,
         "reference_used_for_selection":False, "risk":fitted.holdout.risk,
+        "uncertainty":fitted.uncertainty, "training_uncertainty":fitted.training.uncertainty,
         "cycle_approximation":ultimate, "cycle_records":cycles,
         "excluded_unsettled_or_open_accounts":excluded, "representative_path":trace,
         "representative_path_selection":"First holdout tape, not best path",

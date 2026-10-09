@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "propfirm_engine"
-version = "0.2.2"
+version = "0.2.3"
 description = "A research simulator for futures prop-firm strategies, sizing policies and repeated-attempt economics."
 readme = "README.md"
 requires-python = ">=3.11"
