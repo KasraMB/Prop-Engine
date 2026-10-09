@@ -2,6 +2,10 @@
 
 Updated: 2026-10-09
 
+Status: all six implementation phases and the baseline phase are complete for
+the 0.2.0 research release. Historical milestone notes below retain the evidence
+and limitations at each checkpoint. Current usage is in the API guides.
+
 ## Goal
 
 Publish a reusable futures prop-firm research engine. Strategies and market data
@@ -297,8 +301,8 @@ warmup boundaries, prepared/stream parity and immutable input precision.
 - [x] Record preparation, cold compilation, warm throughput and peak memory.
 - [x] Set hardware-specific budgets from measured baselines; gate regressions.
 - [x] Reference/accelerated and recording-mode parity tests.
-- [ ] Build/install checks, public API examples, license and versioned releases.
-- [ ] Synchronize the browser package without creating alternate accounting.
+- [x] Build/install checks, public API examples, license and versioned releases.
+- [x] Synchronize the browser package without creating alternate accounting.
 
 Performance is a gate in every phase, not a final rewrite. Improve single-core
 time and memory first. Arbitrary Python callbacks remain supported even when
@@ -391,8 +395,11 @@ the repository. Fifty-three focused packaging/stream tests passed. Final full
 suite passed 1,691 tests with 11 opt-in skips and two known deprecation warnings.
 The package check passed separately. A final export audit found two result types
 sharing a public name; RollingReplayResult now exposes historical replay without
-changing the existing optimizer RollingResult import. Remote CI, browser
-deployment and version tag are still pending.
+changing the existing optimizer RollingResult import. Thirty package/rolling
+checks passed after that fix. Commit 207f8b6 passed all seven remote jobs:
+Python 3.11/3.12/3.13, minimum dependencies, real browser, artifact installation
+and performance. Pages deployed the same SHA, verified through version.json.
+The release is versioned as v0.2.0; no package-registry publication is included.
 
 - Partial exits, scale-ins, reversals and fees reconcile independently.
 - Long/short symmetry under symmetric execution assumptions.
@@ -428,3 +435,9 @@ without changing account code. Supported profiles, input fidelity, tests and
 performance budgets are visible. Required data and unsupported features are
 reported before execution. Publish the engine and synthetic fixtures only, not
 market data or a hosted multi-user service.
+
+The roadmap is complete within these contracts, not a claim that arbitrary
+missing data or every firm's discretionary decisions can be reproduced. Lucid's
+inactivity cutoff remains the explicitly selected scenario. General callbacks
+remain Python; the accelerated summary adapter retains its narrower model.
+Market data, private notes and papers are excluded from release artifacts.
