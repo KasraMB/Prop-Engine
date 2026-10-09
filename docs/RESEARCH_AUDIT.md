@@ -7,7 +7,7 @@ Passing tests or agreement between two implementations is not an independent
 economic oracle. Completion means the findings below are resolved and release
 gates pass, not that all possible strategies or future firm rules are certified.
 
-## Findings before repairs
+## Findings
 
 | ID | Area | Finding | Required evidence |
 | --- | --- | --- | --- |
@@ -84,7 +84,21 @@ covers execution/withdrawal callbacks and cannot detect hidden external state.
   Native/process memory is reported separately, not hidden in Python allocations.
 - Final local clean wheel/source installation and research-layer checks: 13 passed.
   Both artifacts ran the documented fitting example outside the repository.
-- Clean remote research CI caught A14; its corrected rerun remains a release gate.
+- Clean remote research CI caught A14. The corrected run passed all eight jobs:
+  Python 3.11/3.12/3.13, minimum dependencies, browser, package, performance and
+  research. [CI evidence for e418b96](https://github.com/KasraMB/Prop-Engine/actions/runs/37891223628).
+
+## Conclusion
+
+The identified defects and test gaps are resolved. The engine is ready for
+research within its declared profile, input and execution contracts. Unsupported
+features must fail explicitly; hypothetical execution paths remain scenarios.
+This is not proof of all possible implementations, data quality or real-world
+profitability. Rerun studies affected by the changes listed in the changelog.
+
+The final documentation commit is subject to the same CI and gated Pages
+deployment. Future revisions must retain those gates and the independent
+accounting, selection, tail-risk and causality assertions.
 
 ## Research use checklist
 
