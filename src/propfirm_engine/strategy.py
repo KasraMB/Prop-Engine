@@ -98,6 +98,10 @@ class _StrategyReplay(_EventReplay):
             self.broker.cancel_all(at, "phase_ended")
         super().handle_result(at, code, regime)
 
+    def suspend(self, at):
+        self.broker.cancel_all(at, "daily_suspend")
+        super().suspend(at)
+
     def validate_market(self, market):
         if not isinstance(market, Market):
             raise TypeError("strategy replay requires Market observations")
@@ -187,7 +191,7 @@ class _StrategyReplay(_EventReplay):
             "OCO cancels siblings on any fill; linked reduce-only exits cannot reverse the portfolio",
             "session cutoff closes positions and cancels all orders, including GTC",
             f"forced closes use fresh last marks and {self.liquidation_fee} fee per contract",
-            "maximum eligible payout at close; scenario approval and receipt delays; no trading while pending",
+            "configured withdrawal, approval/denial and processing scenarios; no trading while pending",
             "retry and live handoff use the shared next-session, fee and wallet rules",
         ))
         return StrategyReplay(result, tuple(self.broker.events))

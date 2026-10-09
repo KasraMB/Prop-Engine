@@ -180,17 +180,36 @@ callback snapshots, and does not measure many-order storage or native memory.
 
 ### 4. General firm profiles
 
-- [ ] Static, EOD trailing and intraday trailing drawdown on explicit bases.
-- [ ] Daily loss failure versus daily suspension.
-- [ ] Evaluation and funded consistency, profit and day-count gates.
-- [ ] Account-wide order/exposure limits and contract scaling.
+- [x] Static, EOD trailing and intraday trailing drawdown on explicit bases.
+- [x] Daily loss failure versus daily suspension.
+- [x] Evaluation and funded consistency, profit and day-count gates.
+- [x] Account-wide order/exposure limits and contract scaling.
 - [ ] Multiple evaluation stages and configurable phase transitions.
-- [ ] Payout request, approval/denial, deduction, receipt and processing calendars.
+- [x] Payout request, approval/denial, deduction, receipt and processing calendars.
 - [ ] Configurable withdrawal policy, retained buffer and restart policy.
 - [ ] Versioned official-source evidence and per-profile acceptance fixtures.
 
 Start with LucidFlex 50K DLL off. Do not equate a registered rule with executor
 support. Unknown discretionary decisions remain explicit scenarios.
+
+Observed-rule extension: static and EOD/intraday trailing rules use the existing
+reference predicates with observed equity. Continuous peaks ratchet before later
+losses; EOD floors do not ratchet on open intraday profits. Daily loss can fail
+or suspend, with hard breach preceding soft suspension. Funded consistency gates
+and declared largest-day cycle resets reuse the compiled rules. The executor owns
+portfolio breach decisions: a closed loss offset by open profit must not cause
+the payout ledger to invent a breach. Independent fixtures cover these cases.
+
+Payout callbacks can retain cash, skip requests or return approve/deny decisions.
+An explicit ProcessingCalendar rolls elapsed delays through selected processing
+hours, weekdays and supplied holidays. These are scenario policies. No holiday
+list, discretionary approval probability or account agreement is invented.
+The bracket and summary APIs keep their existing narrower capability checks.
+
+Observed-rule verification: 1,577 tests passed, with 10 optional browser tests
+skipped and two known deprecation warnings. Nine additional static floor-lock
+and processing-calendar boundary cases passed in a subsequent focused run.
+The browser bundle contains 49 verified Python modules.
 
 ### 5. Policy search and validation
 

@@ -4,11 +4,13 @@ from datetime import date, datetime, timedelta, timezone
 from fractions import Fraction
 from hashlib import sha256
 
-from .backtest import BacktestResult, _Replay
+from .backtest import BacktestResult, _Replay, _check_support
+from .calendars import ProcessingCalendar
 from .enums import ExitCode
 from .events import Fill, Marks, money, ordered
 from .execution import BacktestConfig, LifecycleSpec
 from .portfolio import Book, BookState
+from .rules import RuleKind
 
 
 @dataclass(frozen=True, slots=True)
@@ -32,10 +34,21 @@ class EventReplay:
     marks: int
 
 
+@dataclass(frozen=True, slots=True)
+class PayoutContext:
+    at: datetime
+    balance: Fraction
+    floor: Fraction
+    maximum: Fraction
+    cycle_profit: Fraction
+    qualifying_days: int
+    payouts: int
+
+
 class _EventReplay(_Replay):
     def __init__(self, spec, events, instruments, config, *, sessions, fidelity,
                  mark_fills, max_mark_age, liquidation_fee, trace=False, units=None,
-                 session_closes=None):
+                 session_closes=None, withdrawal=None, decision=None, processing=None):
         if not isinstance(spec, LifecycleSpec) or not isinstance(config, BacktestConfig):
             raise TypeError("event replay requires LifecycleSpec and BacktestConfig")
         if fidelity != "observed_marks":
@@ -46,6 +59,11 @@ class _EventReplay(_Replay):
             raise ValueError("max_mark_age must be a nonnegative timedelta")
         if type(trace) is not bool:
             raise ValueError("trace must be bool")
+        if any(callback is not None and not callable(callback) for callback in (withdrawal, decision)):
+            raise TypeError("withdrawal and decision must be callbacks or None")
+        if processing is not None and not isinstance(processing, ProcessingCalendar):
+            raise TypeError("processing must be a ProcessingCalendar or None")
+        self.withdrawal, self.decision, self.processing = withdrawal, decision, processing
         self.liquidation_fee = money(liquidation_fee)
         if self.liquidation_fee < 0:
             raise ValueError("liquidation_fee must be nonnegative")
@@ -67,6 +85,7 @@ class _EventReplay(_Replay):
         self.keep_trace, self.trace = trace, []
         self.book = None
         self.following = False
+        self.suspended_session = None
         self.fill_count = self.skip_count = self.mark_count = 0
         self.stream = iter(ordered(events))
         self.digest = sha256()
@@ -84,6 +103,60 @@ class _EventReplay(_Replay):
     def open_at(self, session):
         return datetime.combine(session - timedelta(days=1), self.spec.session_open,
                                 self.tz).astimezone(timezone.utc)
+
+    def check_support(self, spec):
+        return _check_support(spec, observations=True)
+
+    def ledger_options(self):
+        return {"floor_checks": "executor"}
+
+    def payout_amount(self, at, maximum):
+        if self.withdrawal is None:
+            return maximum
+        view = PayoutContext(at, self.ledger.balance, self.ledger.floor, maximum,
+                             self.ledger.cycle_profit, self.ledger.qualifying_days,
+                             self.sim.payouts_taken)
+        amount = money(self.withdrawal(view))
+        if not 0 <= amount <= maximum:
+            raise ValueError("withdrawal must be between zero and the maximum eligible amount")
+        return amount
+
+    def payout_decision(self, at, request):
+        return "approve" if self.decision is None else self.decision(at, request)
+
+    def processing_at(self, at, delay):
+        return at + delay if self.processing is None else self.processing.after(at, delay)
+
+    def winning_allowed(self, session):
+        return session != self.suspended_session
+
+    def payout_allowed(self):
+        return all(self.sim._consistency_gate_ok(i) for i in self.sim.cp.payout_idx
+                   if self.sim.cp.kind[i] == RuleKind.CONSISTENCY_GATE)
+
+    def handle_result(self, at, code, regime=None):
+        if code != ExitCode.ALIVE and self.sim is not None and getattr(self.sim, "observation_soft", False):
+            if self.suspended_session != self.current_session:
+                self.suspend(at)
+            return
+        super().handle_result(at, code, regime)
+
+    def suspend(self, at):
+        self.suspended_session = self.current_session
+        self.following = False
+        self.book.check_marks(at, self.max_mark_age)
+        for fill in self.book.liquidation(at, self.liquidation_fee):
+            before = self.book.balance
+            self.book.apply(fill)
+            if self.ledger is not None:
+                self.ledger.record_trade(at, self.book.balance - before)
+            code = self.sim.observe(self.book.balance, self.book.equity, self.sim.cur_day, traded=True)
+            self.emit(at, "liquidation", quantity=fill.quantity)
+            if code != ExitCode.ALIVE and not self.sim.observation_soft:
+                self.fail(at, ExitCode(code).name)
+                return
+        self.emit(at, "daily_suspend", code="FAIL_DAILY_LOSS")
+        self.record(at, "daily_suspend")
 
     def record(self, at, kind):
         if self.keep_trace and self.book is not None:
@@ -127,6 +200,7 @@ class _EventReplay(_Replay):
 
     def eligible(self, at):
         return (not self.handoff and self.current_session != self.last_ended_session
+                and self.current_session != self.suspended_session
                 and at >= self.available_at
                 and (self.ledger is None or self.ledger.pending is None))
 
@@ -215,7 +289,7 @@ class _EventReplay(_Replay):
         return self.finish_result()
 
     def finish_result(self, assumptions=None):
-        result = self.result(fingerprint=self.digest.hexdigest(), assumptions=assumptions or (
+        result = self.result(fingerprint=self.digest.hexdigest(), assumptions=(assumptions or (
             "recorded quantities and arbitrary exits; no sizing or target optimization",
             "observed marks only; no claim about unobserved intrabar equity",
             f"fill prices update marks: {self.mark_fills}; maximum mark age: {self.max_mark_age}",
@@ -225,10 +299,14 @@ class _EventReplay(_Replay):
             "account-wide absolute exposure uses explicit contract units; excess recorded exposure is rejected",
             "qualifying FIFO closes use realized profit net of allocated entry and exit fees",
             "qualifying close precedes inactivity at the identical timestamp",
-            "maximum eligible payout at session close; requests approved on the scenario clock",
+            "payout requests at session close use the configured withdrawal and decision policies",
             "approval deducts gross; no trading while pending; downward scaling applies at approval",
             "retry and live handoff start fresh paid attempts no earlier than the next observed session",
             "live value and receipts after the horizon are excluded",
+        )) + (
+            "maximum eligible withdrawal" if self.withdrawal is None else "custom causal withdrawal callback",
+            "all payout requests approved" if self.decision is None else "custom payout approval/denial scenario",
+            "elapsed processing delays" if self.processing is None else f"elapsed delays rolled through {self.processing!r}",
         ))
         return EventReplay(result, self.book.snapshot() if self.book is not None else None,
                            tuple(self.trace), self.fill_count, self.skip_count, self.mark_count)

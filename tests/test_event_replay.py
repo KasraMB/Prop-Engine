@@ -301,3 +301,35 @@ def test_calendar_inactivity_exact_cutoff_qualifying_close_wins():
                                    Fill(at(last, 16, 15), "X", -1, 10_001)]
     result = run(events, sessions=(FIRST, last), spec=profile)
     assert result.replay.failed_attempts == 0
+
+
+def test_custom_withdrawal_can_retain_profit_or_skip_request():
+    skipped = run(winning_path(), sessions=dates(7), withdrawal=lambda view: 0)
+    assert skipped.replay.receipts == 0 and skipped.book.balance == 51_000
+    events = [e for i, day in enumerate(dates(7)) for e in round_trip(day, 1500 if i < 2 else 1000)]
+    retained = run(events, sessions=dates(7), withdrawal=lambda view: 1000)
+    assert retained.replay.receipts == 900 and retained.book.balance == 54_000
+    assert "custom causal withdrawal callback" in retained.replay.assumptions
+
+
+def test_payout_denial_preserves_cycle_then_a_later_request_can_be_approved():
+    result = run(winning_path(8), sessions=dates(8),
+                 decision=lambda at, request: "deny" if request.request_id == 1 else "approve")
+    assert any(e.kind == "rejection" for e in result.replay.events)
+    assert result.replay.receipts == 540 and result.book.balance == 50_600
+
+
+def test_processing_calendar_rolls_after_hours_weekends_and_holidays():
+    from propfirm_engine import ProcessingCalendar
+    calendar = ProcessingCalendar(holidays=(dates(9)[7],))
+    result = run(winning_path(9), sessions=dates(9), processing=calendar,
+                 config=config(approval_delay=timedelta(hours=1)))
+    approval, = [e for e in result.replay.events if e.kind == "approval"]
+    assert approval.at == at(dates(9)[8], 9, 0)
+    assert result.skipped_fills == 2 and result.replay.receipts == 450
+
+
+@pytest.mark.parametrize("amount", [-1, 501, float("nan")])
+def test_invalid_withdrawal_is_not_silently_clipped(amount):
+    with pytest.raises(ValueError):
+        run(winning_path(), sessions=dates(7), withdrawal=lambda view: amount)

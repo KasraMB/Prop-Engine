@@ -106,6 +106,10 @@ class _ReferenceSim:
         self.equity = start_equity
         self.peak = start_equity
         self.dd_floor = start_equity - self._cash(cp.dd_amount)  # live from trade 1 (§C3)
+        if not self._has_trailing():
+            static = [self._cash(cp.p0[i]) for i in cp.fail_idx if cp.kind[i] == RuleKind.STATIC_DD]
+            if static:
+                self.dd_floor = start_equity - min(static)
         self.dd_locked = False
         self.day_pnl = self._cash(0)
         self.total_pnl = self._cash(0)
@@ -151,7 +155,7 @@ class _ReferenceSim:
         post = 0 if self.payouts_taken == 0 else 1
         return 1 + post * 2 + ip
 
-    def _first_fail(self, phase, test_equity):
+    def _first_fail(self, phase, test_equity, *, daily_pnl=None):
         """Hard failure precedes soft at the same observation, then rule order;
         check_timing matches ``phase``. Returns (hit, severity, fail_code)."""
         cp = self.cp
@@ -164,9 +168,12 @@ class _ReferenceSim:
             if kind == int(RuleKind.TRAILING_DD):
                 breached = test_equity <= self.dd_floor
             elif kind == int(RuleKind.STATIC_DD):
-                breached = test_equity <= self.start_equity - float(cp.p0[i])
+                floor = self.start_equity - self._cash(cp.p0[i])
+                if self.dd_locked and not self._has_trailing():
+                    floor = max(floor, self.dd_floor)
+                breached = test_equity <= floor
             elif kind == int(RuleKind.DAILY_LOSS):
-                breached = self.day_pnl <= -float(cp.p0[i])
+                breached = (self.day_pnl if daily_pnl is None else daily_pnl) <= -self._cash(cp.p0[i])
             if breached:
                 result = (True, int(cp.severity[i]), int(cp.fail_code[i]))
                 if int(cp.severity[i]) == _HARD:
@@ -306,6 +313,10 @@ class _ReferenceSim:
 
     def observe(self, balance, equity, day, *, traded=False, allow_pass=False):
         """Apply an ordered portfolio observation, keeping balance and equity distinct."""
+        if getattr(self, "_observation_day", None) != day:
+            self._observation_day = day
+            self.day_pnl = self._cash(0)
+            self.day_low = equity
         if traded and day != self.cur_day:
             if self.cur_day != -1:
                 raise ValueError("close the previous session before observing a new one")
@@ -319,11 +330,22 @@ class _ReferenceSim:
         self.day_pnl += delta
         self.total_pnl += delta
         self.day_low = min(self.day_low, equity)
-        hit, severity, code = self._first_fail(_CONTINUOUS, equity)
+        self.observation_soft = False
+        daily_pnl = self.day_pnl + equity - balance
+        hit, severity, code = self._first_fail(_CONTINUOUS, equity, daily_pnl=daily_pnl)
         if hit:
-            if severity != _HARD:
-                raise ValueError("portfolio observations require hard failure rules")
+            self.observation_soft = severity != _HARD
             return code
+        if not self.dd_locked and self.cp.dd_update_timing == _CONTINUOUS and self._has_trailing():
+            self.peak = max(self.peak, equity)
+            self.dd_floor = self.peak - self._cash(self.cp.dd_amount)
+            if self.dd_floor >= self.cp.lock_at:
+                self.dd_floor = self._cash(self.cp.lock_at)
+                self.dd_locked = True
+            hit, severity, code = self._first_fail(_CONTINUOUS, equity, daily_pnl=daily_pnl)
+            if hit:
+                self.observation_soft = severity != _HARD
+                return code
         self._apply_adjusts(_CONTINUOUS)
         self.stage_mask = self._stage_mask()
         return _PASSED if allow_pass and self._all_pass(balance) else _ALIVE

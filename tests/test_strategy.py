@@ -207,6 +207,21 @@ def test_trace_mode_and_future_quotes_do_not_change_past_execution():
     assert short.orders == quiet.orders == longer.orders
 
 
+def test_daily_suspension_cancels_working_orders_without_failing_account():
+    from dataclasses import replace
+    from propfirm_engine import DailyLossRule
+    profile = replay_50k(eval_fee=105.2, reset_fee=105, contract_type="mini")
+    evaluation, funded = profile.account.phases
+    evaluation = replace(evaluation, rules=evaluation.rules + (DailyLossRule(500),))
+    profile = replace(profile, account=replace(profile.account, phases=(evaluation, funded)))
+    strategy = Script({0: [Order("a", "X", 1)],
+                       1: [Order("stop", "X", -1, "stop", stop=9400, reduce_only=True)]})
+    result = run([market(0), market(1), market(2, 9500), market(3, 10_000)], strategy, spec=profile)
+    assert result.result.replay.failed_attempts == 0
+    assert result.result.book.balance == 49_500
+    assert any(e.id == "stop" and e.reason == "daily_suspend" for e in result.orders)
+
+
 @pytest.mark.parametrize("kwargs", [dict(quantity=0), dict(kind="bad"), dict(kind="limit"),
     dict(kind="market", stop=1), dict(kind="trailing", trail=0), dict(parent="a"),
     dict(reduce_only=1), dict(tif="bad"), dict(expires=AT.replace(tzinfo=None))])

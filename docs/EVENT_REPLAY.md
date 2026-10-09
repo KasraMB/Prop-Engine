@@ -134,8 +134,38 @@ python benchmarks/portfolio.py --mode replay --events 2000 --repeat 3
 python benchmarks/portfolio.py --mode replay --events 2000 --repeat 3 --record
 ```
 
-Only the existing chronological profile capabilities are enabled: EOD trailing
-floor with continuous hard breach, evaluation profit/consistency/day gates and
-the dated funded payout ledger. Unsupported rule combinations are rejected.
-Static/intraday trailing drawdown, DLL suspension, general orders, strategy
-callbacks and overnight holding remain on the research engine roadmap.
+## Rule and payout controls
+
+Ordered observation replay supports one hard static or trailing drawdown rule per
+phase. Trailing updates can be continuous (observed open-equity peaks) or EOD
+(closed balance). Breach checks follow the rule's continuous/EOD setting. A
+continuous peak cannot be applied retroactively to an earlier observation.
+Daily loss uses closed session P&L plus current unrealized P&L; hard DLL ends the
+account, while soft DLL liquidates and suspends that session without counting an
+account failure. A suspended day is not a winning day. Hard breach takes priority
+over soft suspension at the same observation.
+
+Funded consistency gates use closed profit and the largest closed session profit.
+Declare `StateField.MAX_DAY_PNL` in the payout schema's reset fields when the
+largest-day statistic resets after approval. Withdrawals are not trading losses.
+The portfolio executor, not the payout ledger's closed balance alone, decides
+whether open equity breached a rule.
+
+Optional replay arguments apply to both recorded events and strategy replay:
+
+- `withdrawal(context)` receives immutable `PayoutContext` with balance, floor,
+  maximum eligible amount, cycle profit, qualifying days and payout count.
+  Return zero to skip or a valid amount up to the maximum. The minimum-request
+  rule still applies. This can express retained buffers or partial withdrawal.
+- `decision(at, request)` returns `"approve"` or `"deny"`. The default approves.
+  Denial leaves cycle profit, qualifying days and the request-time floor lock
+  intact; it creates no receipt. A later eligible session can request again.
+- `processing=ProcessingCalendar(...)` supplies timezone, weekdays, explicit
+  holidays and opening/closing times. First add the elapsed configured delay,
+  then roll forward into an open processing interval. Closing time is exclusive.
+  This is not a business-duration counter or a built-in holiday service.
+
+Unsupported rule combinations are still rejected. Multiple evaluation stages,
+overnight holding and broader execution adapters remain on the roadmap. The
+legacy bracket API retains its narrower guards rather than treating a closed
+summary as an observed intraday path.

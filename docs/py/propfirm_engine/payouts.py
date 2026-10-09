@@ -67,13 +67,17 @@ class PayoutLedger:
     """
 
     def __init__(self, schema: PayoutSchema, *, opening_balance, qualifying_days,
-                 winning_day_profit, initial_floor=None, lock_floor_on_request=None):
+                 winning_day_profit, initial_floor=None, lock_floor_on_request=None,
+                 floor_checks="balance"):
+        if floor_checks not in ("balance", "executor"):
+            raise ValueError("floor_checks must be balance or executor")
+        self._floor_checks = floor_checks
         validate(Account("payout-ledger", 1, (Phase("funded", "funded",
             (MinimumWinningDaysRule(qualifying_days, winning_day_profit),), schema),)))
         if schema.recompute_floor_on_payout:
             raise ValueError("recompute_floor_on_payout is unsupported by the dated ledger")
-        if any(f != StateField.N_QUALIFYING_DAYS for f in schema.reset_fields):
-            raise ValueError("dated ledger supports only qualifying-day counter resets")
+        if any(f not in (StateField.N_QUALIFYING_DAYS, StateField.MAX_DAY_PNL) for f in schema.reset_fields):
+            raise ValueError("dated ledger supports qualifying-day and executor consistency resets")
         self.schema = schema
         self._balance = _money(opening_balance, "opening_balance")
         self._reference = (self._balance if schema.profit_reference_balance is None
@@ -130,7 +134,8 @@ class PayoutLedger:
 
     @property
     def breached(self):
-        return self._terminated or (self._floor is not None and self._balance <= self._floor)
+        return self._terminated or (self._floor_checks == "balance" and
+                                   self._floor is not None and self._balance <= self._floor)
 
     @property
     def censored(self):
@@ -177,13 +182,15 @@ class PayoutLedger:
         self._terminated = True
         self._emit(at, "termination", pnl)
 
-    def close_session(self, at, session):
+    def close_session(self, at, session, *, winning_allowed=True):
         at = self._time(at)
         if not isinstance(session, date) or isinstance(session, datetime):
             raise ValueError("session must be an explicit date identifier")
         if self._last_session is not None and session <= self._last_session:
             raise ValueError("session identifiers must strictly increase")
-        if self._dirty_session and self._session_profit >= self._winning_threshold:
+        if type(winning_allowed) is not bool:
+            raise ValueError("winning_allowed must be bool")
+        if winning_allowed and self._dirty_session and self._session_profit >= self._winning_threshold:
             self._qualifying += 1
         self._session_profit = Fraction(0)
         self._dirty_session = False

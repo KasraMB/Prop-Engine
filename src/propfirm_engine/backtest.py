@@ -16,7 +16,7 @@ from zoneinfo import ZoneInfo
 import numpy as np
 
 from .compiler import compile_account
-from .enums import ExitCode, Severity, Timing
+from .enums import ExitCode, Severity, StateField, Timing
 from .execution import BacktestConfig, BracketHistory, DollarPolicy, LifecycleSpec
 from .feasibility import project_position
 from .payouts import PayoutLedger
@@ -97,23 +97,29 @@ class BacktestResult:
         return self.net_cash / self.calendar_days
 
 
-def _check_support(spec):
+def _check_support(spec, *, observations=False):
     validate(spec.account)
     compiled = compile_account(spec.account)
     allowed = {RuleKind.TRAILING_DD, RuleKind.PROFIT_TARGET,
                RuleKind.CONSISTENCY_GATE, RuleKind.MIN_WINNING_DAYS, RuleKind.MIN_DAYS}
+    if observations:
+        allowed |= {RuleKind.STATIC_DD, RuleKind.DAILY_LOSS}
     for p in compiled.phases:
-        if not isfinite(p.dd_amount) or p.dd_update_timing != Timing.EOD:
+        if not observations and (not isfinite(p.dd_amount) or p.dd_update_timing != Timing.EOD):
             raise ValueError("bracket replay currently requires an EOD trailing floor in each phase")
+        if observations and sum(int(k) in (RuleKind.STATIC_DD, RuleKind.TRAILING_DD) for k in p.kind) != 1:
+            raise ValueError("observation replay requires one static or trailing drawdown rule per phase")
         for i in range(p.n_rules):
             kind = RuleKind(int(p.kind[i]))
             if kind not in allowed:
                 raise ValueError(f"bracket replay does not support {kind.name}")
-            if kind == RuleKind.TRAILING_DD and (
+            if not observations and kind == RuleKind.TRAILING_DD and (
                 p.severity[i] != Severity.HARD or p.check_timing[i] != Timing.CONTINUOUS
             ):
                 raise ValueError("bracket replay requires hard continuous drawdown checks")
-            if kind == RuleKind.CONSISTENCY_GATE and p.role != "eval":
+            if observations and kind in (RuleKind.TRAILING_DD, RuleKind.STATIC_DD) and p.severity[i] != Severity.HARD:
+                raise ValueError("drawdown must terminate the account; only daily loss supports suspension")
+            if not observations and kind == RuleKind.CONSISTENCY_GATE and p.role != "eval":
                 raise ValueError("funded consistency is not supported by the dated payout ledger")
         if p.role == "funded" and p.payout is None:
             raise ValueError("funded replay requires an explicit payout schema")
@@ -137,7 +143,7 @@ class _Replay:
             raise ValueError("choose either bracket or resolved-price execution")
         self.execution_factory = execution_factory
         self.session_closes = dict(session_closes or {})
-        compiled = _check_support(spec)
+        compiled = self.check_support(spec)
         self.phases = {p.role: p for p in compiled.phases}
         self.source = {p.role: p for p in spec.account.phases}
         self.tz = ZoneInfo(spec.session_timezone)
@@ -175,6 +181,27 @@ class _Replay:
         if actual.tzinfo is None or actual > normal:
             raise ValueError("session close must be aware and no later than the firm cutoff")
         return actual
+
+    def check_support(self, spec):
+        return _check_support(spec)
+
+    def winning_allowed(self, session):
+        return True
+
+    def payout_allowed(self):
+        return True
+
+    def ledger_options(self):
+        return {}
+
+    def payout_amount(self, at, maximum):
+        return maximum
+
+    def payout_decision(self, at, request):
+        return "approve"
+
+    def processing_at(self, at, delay):
+        return at + delay
 
     def emit(self, at, kind, *, quantity=0, cash=0.0, regime=None, code=None,
              gross_payout=0.0):
@@ -224,26 +251,35 @@ class _Replay:
                 continue
             if kind == "approval":
                 request = ledger.pending
+                decision = self.payout_decision(at, ledger.requests[request - 1])
+                if decision not in ("approve", "deny"):
+                    raise ValueError("payout decision must be approve or deny")
+                if decision == "deny":
+                    ledger.reject(at)
+                    self.emit(at, "rejection", gross_payout=float(ledger.requests[request - 1].gross))
+                    continue
                 ledger.approve(at)
                 if ledger is self.ledger:
                     self.sim.equity = ledger.balance
                     self.sim.n_qual_days = ledger.qualifying_days
                     self.sim.cycle_start_equity = self.sim.equity
                     self.sim.payouts_taken += 1
+                    if StateField.MAX_DAY_PNL in self.source[self.role].payout_schema.reset_fields:
+                        self.sim.max_day_pnl = self.sim._cash(0)
                     # The public scaling page does not define intraday withdrawal
                     # timing. Conservatively apply downward payout changes now;
                     # trading-profit increases still wait for session close.
                     self.limit = min(self.limit, self.spec.funded_limit(
                         self.sim.equity - self.sim.start_equity))
                     self.emit(at, "approval", gross_payout=float(ledger.requests[request - 1].gross))
-                    if ledger.breached:
+                    if ledger.breached or (ledger.floor is not None and self.sim.equity <= ledger.floor):
                         self.fail(at, "FAIL_TRAILING_DD")
                     elif ledger.censored:
                         self.emit(at, "live_handoff", code="LIVE_HANDOFF")
                         self.status = "RESTART_PENDING"
                         self.failed_at = None
                         self.restart(at, self.spec.account.eval_fee)
-                self.schedule(at + self.config.receipt_delay, "receipt", ledger, attempt, request)
+                self.schedule(self.processing_at(at, self.config.receipt_delay), "receipt", ledger, attempt, request)
             else:
                 ledger.receive(at, request, payment_fee=self.config.payment_fee)
                 amount = float(ledger.requests[request - 1].net
@@ -296,6 +332,7 @@ class _Replay:
                 p.payout_schema, opening_balance=opening,
                 qualifying_days=self.required_days, winning_day_profit=cp.winning_day_threshold,
                 initial_floor=self.sim.dd_floor, lock_floor_on_request=self.spec.request_lock_floor,
+                **self.ledger_options(),
             )
             self.ledgers.append(self.ledger)
             self.limit = self.spec.funded_limit(0)
@@ -438,24 +475,25 @@ class _Replay:
         if sim is None or self.handoff or self.next_role is not None:
             return
         if sim.cur_day != -1:
-            code = sim._close_day(sim.equity, winning_allowed=True)
+            code = sim._close_day(sim.equity, winning_allowed=self.winning_allowed(session))
             sim.cur_day = -1  # the adapter has consumed this session-close event
             if code not in (ExitCode.ALIVE, ExitCode.PASSED):
                 self.fail(at, ExitCode(code).name)
                 return
         if self.ledger:
             ledger = self.ledger
-            ledger.close_session(at, session)
+            ledger.close_session(at, session, winning_allowed=self.winning_allowed(session))
             ledger.advance_floor(at, sim.dd_floor)
             self.emit(at, "session_close")
-            amount = ledger.maximum_request()
+            maximum = ledger.maximum_request() if self.payout_allowed() else 0
+            amount = self.payout_amount(at, maximum) if maximum else 0
             if amount > 0:
                 ledger.request(at, amount, flat=True)
                 sim.dd_floor = ledger.floor
                 if self.spec.request_lock_floor is not None:
                     sim.dd_locked = True
                 self.emit(at, "request", gross_payout=float(amount))
-                self.schedule(at + self.config.approval_delay, "approval",
+                self.schedule(self.processing_at(at, self.config.approval_delay), "approval",
                               ledger, self.attempts)
                 self.advance(at)
             if self.sim is not None:
