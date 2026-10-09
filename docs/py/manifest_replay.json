@@ -1,5 +1,5 @@
 {
-  "bundle_sha256": "604d03d288648284c1a83c0e9b08376854afbd2cce27da2e7cd6f0b5c1c46591",
+  "bundle_sha256": "ed54c2006a79e356183a3ca0e702f58c3ce34e2b3ecf6880b6569c3353024b1f",
   "files": [
     {
       "path": "numba.py",
@@ -7,7 +7,7 @@
     },
     {
       "path": "propfirm_engine/__init__.py",
-      "sha256": "097e786cee8cd53b7283d7c8753a4e29cb267c15f5f839c2097836fdd499790c"
+      "sha256": "fa8f3970582c3619921f29c8941a1384a5a3756140546f56ed0f0da3cf487911"
     },
     {
       "path": "propfirm_engine/analytical.py",
@@ -43,7 +43,7 @@
     },
     {
       "path": "propfirm_engine/engine.py",
-      "sha256": "751b8998656775fa359861dc132ed722afee819268dccf828d37a3408dfe0a5a"
+      "sha256": "e1c394540f8959ccd9ca85a5d1ed2167f539756bf4f2fe188ecb1d23abd5c9d1"
     },
     {
       "path": "propfirm_engine/enums.py",
@@ -94,6 +94,10 @@
       "sha256": "23257741133d9fb65f90fcf84b21a242c1b06ebc731dba4e35365d16142453cd"
     },
     {
+      "path": "propfirm_engine/market_data.py",
+      "sha256": "b051e9ec242359b72de6b0e5134a9c9b93afb8f9c89eb0c0ffeb1b9919bdc00a"
+    },
+    {
       "path": "propfirm_engine/market_replay.py",
       "sha256": "f6f677b63662f92f01426a7298ae72ee8f68f67846534d8f3fd41a7b4c7f349b"
     },
@@ -124,6 +128,10 @@
     {
       "path": "propfirm_engine/price_fitting.py",
       "sha256": "c3858e045a2590ae5a9b77cce90f016b1864ea18106fdce71ca337f9b7975f4f"
+    },
+    {
+      "path": "propfirm_engine/randomness.py",
+      "sha256": "a6eae7b91797ab0731519be2fa4abc08d864776dc1a56fdce7b21013639a01c1"
     },
     {
       "path": "propfirm_engine/reference.py",
@@ -175,7 +183,11 @@
     },
     {
       "path": "propfirm_engine/strategy.py",
-      "sha256": "4f128786ae633903cfac4fd18db82aeb86739c726251990769999915d9533fcf"
+      "sha256": "e9886f6b4036c2f9f7cf6b851752ff2c449df22eb47d8ac17ba9d6916b3942fd"
+    },
+    {
+      "path": "propfirm_engine/strategy_fitting.py",
+      "sha256": "a29c5513ac3a924a9afe2f7c3c52740bbca452a6194ed55b9ba6a3486c0c2c32"
     },
     {
       "path": "propfirm_engine/synthetic.py",

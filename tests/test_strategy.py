@@ -242,6 +242,22 @@ def test_gtc_exit_survives_cutoff_only_when_profile_allows_holding():
     assert fills(result)[-1].at == market(1440).at
 
 
+def test_prepared_market_and_iterable_have_identical_account_and_order_results():
+    from propfirm_engine import MarketTape
+    frames = [market(0), market(1), market(2, 10_100)]
+    actions = {0: [Order("entry", "X", 1)], 1: [Order("exit", "X", -1)]}
+    baseline = run(frames, Script(actions))
+    tape = MarketTape(frames, [X], sessions=(DAY,))
+    profile = replay_50k(eval_fee=105.2, reset_fee=105, contract_type="mini")
+    prepared = Engine().replay_strategy(profile, tape, [X],
+        BacktestConfig(0, timedelta(0), timedelta(0), timedelta(0)), Script(actions),
+        sessions=tape.sessions, fidelity="observed_marks", max_mark_age=timedelta(minutes=10),
+        liquidation_fee=0, models={"X": QuoteModel()}, trace=True)
+    assert baseline.orders == prepared.orders
+    assert baseline.result.replay.events == prepared.result.replay.events
+    assert baseline.result.trace == prepared.result.trace
+
+
 @pytest.mark.parametrize("kwargs", [dict(quantity=0), dict(kind="bad"), dict(kind="limit"),
     dict(kind="market", stop=1), dict(kind="trailing", trail=0), dict(parent="a"),
     dict(reduce_only=1), dict(tif="bad"), dict(expires=AT.replace(tzinfo=None))])

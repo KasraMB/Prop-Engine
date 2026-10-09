@@ -185,6 +185,16 @@ class Engine:
         from .strategy import replay_strategy
         return replay_strategy(spec, markets, instruments, config, strategy, **kwargs)
 
+    def fit_strategy(self, spec, tape, config, factory, **kwargs):
+        """Optimize declared causal strategy parameters on IS; report OOS metrics."""
+        from .strategy_fitting import fit_strategy
+        return fit_strategy(spec, tape, config, factory, **kwargs)
+
+    def walk_strategy(self, spec, tape, config, factory, **kwargs):
+        """Chronological refits with fresh account state for each OOS fold."""
+        from .strategy_fitting import walk_strategy
+        return walk_strategy(spec, tape, config, factory, **kwargs)
+
     def ruin(self, spec, history, policy, config, **kwargs):
         """Fixed-policy bootstrap funding risk and labelled ultimate cycle approximation."""
         from .ruin import bootstrap_ruin

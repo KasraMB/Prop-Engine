@@ -12,7 +12,14 @@ from .portfolio import Book, BookState, Position
 from .event_replay import EventReplay, EventState, PayoutContext
 from .calendars import ProcessingCalendar
 from .orders import Quote, Market, Order, Cancel, Amend, Abandon, OrderState, OrderEvent, QuoteModel
-from .strategy import Context, StrategyReplay
+from .strategy import Context, StrategyReplay, ReplayCancelled
+from .market_data import MarketTape, MarketView
+from .randomness import RandomStream
+from .strategy_fitting import (
+    Parameter, InfeasiblePolicy, StrategyPath, StrategyEvaluation, StrategyFit,
+    StrategyTrial, StrategyCheckpoint, SearchCancelled, evaluate_strategy,
+    StrategyWalkForward, evaluate_scenarios,
+)
 from .slippage import TickDistribution, SlippageModel
 from .price_fitting import PriceEvaluation, PriceFit, evaluate_prices
 from .fitting import HoldoutFit
@@ -128,6 +135,11 @@ from .rules import (
 )
 
 __all__ = [
+    "RandomStream",
+    "StrategyWalkForward", "evaluate_scenarios",
+    "Parameter", "InfeasiblePolicy", "StrategyPath", "StrategyEvaluation", "StrategyFit",
+    "StrategyTrial", "StrategyCheckpoint", "SearchCancelled", "ReplayCancelled", "evaluate_strategy",
+    "MarketTape", "MarketView",
     "PayoutContext", "ProcessingCalendar",
     "Quote", "Market", "Order", "Cancel", "Amend", "Abandon", "OrderState", "OrderEvent",
     "QuoteModel", "Context", "StrategyReplay",

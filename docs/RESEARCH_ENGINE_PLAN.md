@@ -236,21 +236,51 @@ deprecation warnings. The browser bundle remains synchronized at 49 modules.
 
 ### 5. Policy search and validation
 
-- [ ] Use the general replay core for every candidate and reported baseline.
-- [ ] Named regimes and custom causal policies using account and strategy state.
-- [ ] Fixed or optimized risk, quantity and targets as separate permissions.
-- [ ] Continuous, integer and categorical parameters and portfolio constraints.
-- [ ] Custom per-path and distribution objectives with all metrics preserved.
-- [ ] Distinguish infeasible candidates from simulator errors.
-- [ ] Chronological 70/30 default, rolling starts and walk-forward evaluation.
+- [x] Use the general replay core for every candidate and reported baseline.
+- [x] Named regimes and custom causal policies using account and strategy state.
+- [x] Fixed or optimized risk, quantity and targets as separate permissions.
+- [x] Continuous, integer and categorical parameters and portfolio constraints.
+- [x] Custom per-path and distribution objectives with all metrics preserved.
+- [x] Distinguish infeasible candidates from simulator errors.
+- [x] Chronological 70/30 default, rolling starts and walk-forward evaluation.
 - [ ] Inner validation, repeated seeds, search diagnostics and policy stability.
-- [ ] Explicit open-position/warm-up treatment at fold boundaries.
-- [ ] Preserve cross-asset and strategy-state dependencies during resampling.
-- [ ] Report historical, execution and market uncertainty separately.
+- [x] Explicit open-position/warm-up treatment at fold boundaries.
+- [x] Preserve cross-asset and strategy-state dependencies during resampling.
+- [x] Report historical, execution and market uncertainty separately.
 - [ ] Finite-horizon funding ruin and separately labeled ultimate approximations.
 
 OOS never chooses candidates, search settings, regime definitions or stopping.
 Repeatedly inspected holdouts are research evidence, not untouched final tests.
+
+General fitting milestone: `Engine.fit_strategy` reuses quote strategy replay and
+the existing CMA-ES and cash-risk reports. Small discrete spaces are enumerated
+within budget. Only named declared parameters change; an external policy can use
+phase names, balance, floor, payout days and its causal signal state. Unsupported
+execution remains an error, not an infeasible score. The factory and execution
+setup must produce fresh state for every window and seed.
+
+MarketTape validates once and stores immutable integer-tick quote columns with
+UTC microsecond clocks. Zero-copy session views are shared across candidates.
+Rolling starts and walk-forward refits preserve complete ordered market streams.
+Externally generated market scenarios are consumed one at a time; the engine
+does not shuffle quotes or break cross-asset/state dependencies. Independence
+requires an explicit model declaration. Finite-horizon risk uses unrestricted
+counterparts when a wallet stops trading; ultimate-cycle integration is separate.
+
+Optional inner validation, repeated seeds and compact trial diagnostics are
+available. Generic unvisited parameters and selection stability still need care:
+their identification cannot be inferred from an opaque strategy factory.
+Resume reconstructs deterministic search steps using completed scores. It checks
+input/profile/settings fingerprints and requires a caller revision for opaque
+callbacks. Cancellation never returns partial performance. Keyed RandomStream
+draws are independent of the number of previously executed opportunities.
+See [strategy fitting](STRATEGY_FITTING.md) for contracts and executable examples.
+
+Fitting milestone verification: 1,640 tests passed, 10 optional browser tests
+skipped, and two known deprecation warnings. The synchronized browser bundle
+contains 52 verified Python files. New acceptance cases include OOS mutation
+isolation, mixed-domain resume parity, explicit infeasibility, wallet counterparts,
+warmup boundaries, prepared/stream parity and immutable input precision.
 
 ### 6. Performance and release
 
@@ -260,7 +290,7 @@ Repeatedly inspected holdouts are research evidence, not untouched final tests.
 - [ ] Search, research and full-trace recording modes with identical economics.
 - [ ] Bounded caches, batched scenarios and optional streamed traces.
 - [ ] Avoid candidate-by-scenario copies of full histories and event ledgers.
-- [ ] Stable random streams when different policies execute different trades.
+- [x] Stable random streams when different policies execute different trades.
 - [ ] Checkpoint/resume, cancellation and workload/memory estimates.
 - [ ] Synthetic benchmarks for sequential/concurrent, multi-asset, bar/tick,
   Monte Carlo and complete optimization workloads.

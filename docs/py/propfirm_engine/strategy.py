@@ -8,6 +8,7 @@ from .event_replay import EventReplay, _EventReplay
 from .events import Fill, Marks, event_key
 from .orders import Abandon, Broker, Market, OrderEvent, OrderState
 from .portfolio import BookState
+from .market_data import MarketTape, MarketView
 
 
 @dataclass(frozen=True, slots=True)
@@ -35,14 +36,25 @@ class StrategyReplay:
     orders: tuple[OrderEvent, ...]
 
 
+class ReplayCancelled(RuntimeError):
+    """Execution stopped without returning partial performance."""
+
+
 class _StrategyReplay(_EventReplay):
     def __init__(self, spec, markets, instruments, config, strategy, *, models,
-                 warmup=(), **kwargs):
+                 warmup=(), cancel=None, **kwargs):
         if not callable(getattr(strategy, "on_market", None)):
             raise TypeError("strategy must implement on_market(context, market)")
         if "mark_fills" in kwargs:
             raise ValueError("strategy execution uses explicit market marks")
         super().__init__(spec, (), instruments, config, mark_fills=False, **kwargs)
+        self.prepared = isinstance(markets, (MarketTape, MarketView))
+        if self.prepared:
+            tape = markets.tape if isinstance(markets, MarketView) else markets
+            if (markets.instruments != self.instruments or markets.sessions != self.sessions
+                    or tape.timezone != spec.session_timezone or tape.session_open != spec.session_open):
+                raise ValueError("prepared market metadata must match instruments and replay sessions")
+            self.digest.update(markets.fingerprint.encode())
         self.strategy = strategy
         self.markets, self.warmup = iter(markets), iter(warmup)
         self.broker = Broker(self.instruments, models, self.units)
@@ -51,6 +63,14 @@ class _StrategyReplay(_EventReplay):
         self.order_cursor = 0
         self.seq = 0
         self.day = 0
+        if cancel is not None and not callable(cancel):
+            raise TypeError("cancel must be a callable")
+        self.cancel = cancel
+        self.polls = 0
+
+    def check_cancel(self):
+        if self.cancel is not None and self.cancel():
+            raise ReplayCancelled("strategy replay cancelled")
 
     def quantities(self):
         return {i.symbol: self.book.quantity(i.symbol) if self.book is not None else 0
@@ -111,12 +131,14 @@ class _StrategyReplay(_EventReplay):
         self.broker.cancel_all(at, "daily_suspend")
         super().suspend(at)
 
-    def validate_market(self, market):
+    def validate_market(self, market, *, prepared=False):
         if not isinstance(market, Market):
             raise TypeError("strategy replay requires Market observations")
         if self.last_market is not None and event_key(market) <= self.last_market:
             raise ValueError("market keys must strictly increase")
         self.last_market = event_key(market)
+        if prepared:
+            return
         for quote in market.quotes:
             instrument = self.broker.instruments.get(quote.symbol)
             if instrument is None:
@@ -164,8 +186,12 @@ class _StrategyReplay(_EventReplay):
             self.actions(callback(self.context(), session), enabled=False)
 
     def run(self):
+        self.check_cancel()
         self.current_session = self.sessions[0]
         for market in self.warmup:
+            self.polls += 1
+            if self.polls % 1024 == 0:
+                self.check_cancel()
             self.validate_market(market)
             if market.at >= self.start:
                 raise ValueError("warmup observations must precede the account horizon")
@@ -174,10 +200,11 @@ class _StrategyReplay(_EventReplay):
             self.notifications(enabled=False)
         market = self.next_market()
         for self.day, session in enumerate(self.sessions):
+            self.check_cancel()
             self.current_session = session
             opening, closing = self.open_at(session), self.close_at(session)
             while market is not None and market.at <= closing:
-                self.validate_market(market)
+                self.validate_market(market, prepared=self.prepared)
                 if market.at < opening:
                     raise ValueError("market observation lies outside a declared session")
                 self.clock = market.at
@@ -207,6 +234,9 @@ class _StrategyReplay(_EventReplay):
         return StrategyReplay(result, tuple(self.broker.events))
 
     def next_market(self):
+        self.polls += 1
+        if self.polls % 1024 == 0:
+            self.check_cancel()
         market = next(self.markets, None)
         if market is not None and not isinstance(market, Market):
             raise TypeError("strategy replay requires Market observations")

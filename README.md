@@ -15,8 +15,10 @@ portfolio marks now support arbitrary exits, partials and concurrent instruments
 through `Engine.replay_events`. See the [event replay API](docs/EVENT_REPLAY.md)
 for its explicit observation and liquidation assumptions. Causal strategy
 callbacks and quote-based orders are available through `Engine.replay_strategy`;
-see the [strategy API](docs/STRATEGY_REPLAY.md). General strategy optimization,
-additional execution models and broader profiles remain on the roadmap.
+see the [strategy API](docs/STRATEGY_REPLAY.md). `Engine.fit_strategy` adds shared
+market tapes, declared parameter search, chronological OOS, rolling windows and
+walk-forward refits. See [strategy fitting](docs/STRATEGY_FITTING.md). Additional
+execution models and the remaining release gates are tracked in the roadmap.
 
 The bracket API implements the agreed **sequential stop-or-target model**.
 It reuses the existing rule interpreter, feasibility projection, payout ledger,
