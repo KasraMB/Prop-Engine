@@ -52,16 +52,35 @@ Do not rewrite history, fabricate authorship metadata or add attribution trailer
 
 ### 1. Event and portfolio contracts
 
-- [ ] Typed instruments, signed fills, ordered marks and deterministic event keys.
-- [ ] Position accounting for long, short, partials, scale-ins and reversals.
-- [ ] Concurrent instruments and account-wide mark-to-market equity.
-- [ ] Explicit fees, price precision, contract units and gross/net definitions.
-- [ ] Validate chronology, identifiers, finite values and input capabilities.
-- [ ] Keep summaries separate from optional detailed traces.
+- [x] Typed instruments, signed fills, ordered marks and deterministic event keys.
+- [x] Position accounting for long, short, partials, scale-ins and reversals.
+- [x] Concurrent instruments and account-wide mark-to-market equity.
+- [x] Explicit fees, price precision, contract units and gross/net definitions.
+- [x] Validate chronology, identifiers and finite values.
+- [ ] Validate input capabilities against the requested execution and firm rules.
+- [x] Keep portfolio snapshots separate from retained event history.
+- [ ] Integrate search, research and trace recording modes with lifecycle results.
 
 Acceptance: hand-calculated partial-exit and reversal fixtures, same-time ordering,
 multi-instrument equity, fees exactly once, no future marks, and invalid-input
 rejection. No claim of prop-firm fidelity until integrated with the lifecycle.
+
+Implemented: `events.py`, `instruments.py` and `portfolio.py`. `Book` is a FIFO
+accounting component; it does not enforce firm rules or replace existing replay.
+Snapshots retain mark timestamps. Thirty new tests include independent random
+cash reconciliation and bounded retention of closed lots.
+
+Verification: 1,487 tests passed, 10 optional browser tests skipped. The browser
+source bundle contains 45 verified modules. A wheel build succeeded and its
+contents were checked: engine and package metadata only, no market data or local
+inputs. The broader release gates and lifecycle integration remain unfinished.
+
+Baseline benchmark: Python 3.12.7 on Windows, three warm runs with synthetic event
+creation included. 20,000 events took 0.713 seconds (median); 200,000 took 6.966
+seconds. Separate peak traced Python allocations were 3,524 and 3,484 bytes. This
+alternating flat-position workload retains no trace; it is not a native-memory,
+open-lot, full-account or optimizer benchmark. Run `benchmarks/portfolio.py` to
+reproduce it. Compiled execution and the broader performance gates remain open.
 
 ### 2. Incremental account replay
 
@@ -178,6 +197,8 @@ obtain a favorable benchmark. Monetary scaling and overflow need explicit tests.
   execution profile. No missing quote or intrabar path may be guessed silently.
 - Stop/target outcomes, forced closes and post-handoff restarts from earlier
   experiments are adapters/scenarios, not restrictions of the general core.
+- The public license needs an explicit owner choice before a package release.
+  GitHub pushes are authorized; publishing to a package registry is not implied.
 
 ## Completion
 

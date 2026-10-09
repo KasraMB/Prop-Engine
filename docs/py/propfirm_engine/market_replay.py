@@ -14,17 +14,7 @@ import numpy as np
 
 from .backtest import _Replay, _ResolvedExecution, BacktestResult
 from .execution import BracketHistory, BracketTrade
-
-
-@dataclass(frozen=True)
-class Instrument:
-    symbol: str
-    point_value: float
-    tick_size: float
-
-    def __post_init__(self):
-        if not self.symbol or any(not isfinite(x) or x <= 0 for x in (self.point_value, self.tick_size)):
-            raise ValueError("instrument requires a symbol and positive point/tick values")
+from .instruments import Instrument
 
 
 @dataclass(frozen=True)

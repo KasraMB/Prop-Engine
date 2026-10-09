@@ -25,6 +25,23 @@ general event replay, portfolio execution and measured performance budgets.
 
 ## Public workflows
 
+`Fill`, `Marks` and `Book` are the general portfolio accounting foundation.
+Fills carry signed integer contracts, actual execution prices and per-fill fees.
+The book uses FIFO lots, supports negative futures prices, and values all open
+positions. A `Marks` event applies simultaneous instrument prices atomically.
+Event keys are UTC time plus an explicit sequence number; ties are not guessed.
+`merge_events` combines ordered feeds lazily and rejects duplicate event keys.
+
+`Book(mark_fills=True)` treats each execution price as the latest mark for that
+instrument. With `mark_fills=False`, separate marks are required before fills.
+Snapshots expose each mark's timestamp; the accounting layer does not invent a
+staleness policy. Snapshots are optional and immutable. Closed lots are discarded;
+there is no retained execution history unless a caller records it.
+
+This component does not yet execute orders, apply firm rules or replace
+`Engine.backtest`. Those integrations are tracked in the research engine plan.
+Existing replay semantics remain unchanged.
+
 `Engine.backtest` processes an immutable sequential stop/target history.
 `Engine.fit` selects named dollar-risk regimes on IS and reports the frozen
 policy on the chronological OOS partition. Per-trade historical reward/risk

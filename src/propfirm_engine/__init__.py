@@ -5,7 +5,10 @@ from .execution import (
     BracketTrade, BracketHistory, RiskRegime, DollarPolicy, LifecycleSpec, BacktestConfig,
 )
 from .backtest import BacktestEvent, BacktestResult
-from .market_replay import Instrument, PriceSession, PriceDecision, PriceReplay
+from .instruments import Instrument
+from .market_replay import PriceSession, PriceDecision, PriceReplay
+from .events import Fill, Marks, merge_events
+from .portfolio import Book, BookState, Position
 from .slippage import TickDistribution, SlippageModel
 from .price_fitting import PriceEvaluation, PriceFit, evaluate_prices
 from .fitting import HoldoutFit
@@ -121,6 +124,7 @@ from .rules import (
 )
 
 __all__ = [
+    "Fill", "Marks", "merge_events", "Book", "BookState", "Position",
     "Instrument", "PriceSession", "PriceDecision", "PriceReplay",
     "TickDistribution", "SlippageModel", "PriceEvaluation", "PriceFit", "evaluate_prices",
     "RiskConfig", "CashRiskPath", "cash_risk_path", "risk_report",

@@ -9,6 +9,10 @@ firm rules and lifecycle settings remain separate from execution and optimizatio
 
 ## Status
 
+General order and portfolio execution is being developed under the
+[research engine plan](docs/RESEARCH_ENGINE_PLAN.md). The new fill/mark accounting
+component is available, but is not yet a replacement for the replay APIs below.
+
 The chronological API implements the agreed **sequential stop-or-target model**.
 It reuses the existing rule interpreter, feasibility projection, payout ledger,
 and CMA-ES optimizer. It does not reconstruct market paths from closed trades.

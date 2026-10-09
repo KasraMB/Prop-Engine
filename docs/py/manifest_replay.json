@@ -1,5 +1,5 @@
 {
-  "bundle_sha256": "348714b4dac46599f2ada2f66d372422d261b98a78f3dec76b98521453aa4cc7",
+  "bundle_sha256": "746947d85baad8126a5b942ad6e4c4a2bbbc31656fc2b680ed9b309a97df9eb3",
   "files": [
     {
       "path": "numba.py",
@@ -7,7 +7,7 @@
     },
     {
       "path": "propfirm_engine/__init__.py",
-      "sha256": "3f6daeaacf0036f909271cdee8e0f3ec8f2971feaca3dff643edffdf1745b69a"
+      "sha256": "9dcd8bd85910d2b7033d6eebff5507fbe10eedcac57c91cf45e9a34aaf48bc9e"
     },
     {
       "path": "propfirm_engine/analytical.py",
@@ -46,6 +46,10 @@
       "sha256": "10dad3ccffd95eb185ba2316c35048da96efba5f1a2d8bce1e191d1d49b3a105"
     },
     {
+      "path": "propfirm_engine/events.py",
+      "sha256": "e3283231a6fc79306a990fd26c598571c6aff152b3ca7f4e80042428c9d40ca3"
+    },
+    {
       "path": "propfirm_engine/execution.py",
       "sha256": "2cc70df6212a9aceb755c4ceea8b66f46d53f7bc7e54c3113a98543062894601"
     },
@@ -70,6 +74,10 @@
       "sha256": "f57a243953e366e2374d7bd2e518701585932154ffa646d0a47e21a20a201164"
     },
     {
+      "path": "propfirm_engine/instruments.py",
+      "sha256": "2e3f44120f107ce13dae94c87750867508bd4581442b428338f883895966d44b"
+    },
+    {
       "path": "propfirm_engine/kernels.py",
       "sha256": "318b23b13402da2600ea723f4e14a1a24887ddaa7300c39bd769bdf19f600962"
     },
@@ -79,7 +87,7 @@
     },
     {
       "path": "propfirm_engine/market_replay.py",
-      "sha256": "f997a3753d975bedfa39fb8b5094208770e4521d8464339496b14ef5755b7385"
+      "sha256": "f6f677b63662f92f01426a7298ae72ee8f68f67846534d8f3fd41a7b4c7f349b"
     },
     {
       "path": "propfirm_engine/model.py",
@@ -96,6 +104,10 @@
     {
       "path": "propfirm_engine/payouts.py",
       "sha256": "73086069ad98926b8c6d1cd505c3b311aa4bc2b40f0d087b20ea6e11e89d8383"
+    },
+    {
+      "path": "propfirm_engine/portfolio.py",
+      "sha256": "1c6dc6943071ef5ace19206d001031e4db4210cd1873b5c9e5548ac1b427780d"
     },
     {
       "path": "propfirm_engine/price_fitting.py",
