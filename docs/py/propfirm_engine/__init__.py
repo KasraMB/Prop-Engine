@@ -1,6 +1,6 @@
 """Research simulator for futures prop-firm strategies and attempt economics."""
 
-__version__ = "0.2.0"
+__version__ = "0.2.1"
 
 from . import firms, statistics
 from .execution import (

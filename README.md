@@ -9,7 +9,7 @@ firm rules and lifecycle settings remain separate from execution and optimizatio
 
 ## Status
 
-Version 0.2.0 provides general order and portfolio research execution under the
+Version 0.2.1 provides general order and portfolio research execution under the
 [research engine plan](docs/RESEARCH_ENGINE_PLAN.md). Recorded fills and ordered
 portfolio marks now support arbitrary exits, partials and concurrent instruments
 through `Engine.replay_events`. See the [event replay API](docs/EVENT_REPLAY.md)
@@ -21,6 +21,9 @@ walk-forward refits. See [strategy fitting](docs/STRATEGY_FITTING.md). Additiona
 input adapters include external opportunities, explicit bar/trade scenarios and
 atomic or legged multi-instrument orders. See [market inputs](docs/MARKET_INPUTS.md).
 See the [changelog](CHANGELOG.md) and measured [performance gates](docs/PERFORMANCE.md).
+The [research audit](docs/RESEARCH_AUDIT.md) records correctness findings, repairs,
+independent tests and the limits of research confidence. General strategy capital
+estimates require an explicit wallet-invariance declaration; see the fitting guide.
 
 The bracket API implements the agreed **sequential stop-or-target model**.
 It reuses the existing rule interpreter, feasibility projection, payout ledger,

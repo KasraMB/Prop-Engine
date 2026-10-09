@@ -102,6 +102,12 @@ def _check_support(spec, *, observations=False):
     if not observations and not spec.flatten_at_close:
         raise ValueError("overnight positions require observation replay")
     validate(spec.account, sequence=observations)
+    for phase in spec.account.phases:
+        if phase.role == "funded":
+            if phase.payout_schema is not None and phase.payout_schema.recompute_floor_on_payout:
+                raise ValueError("recompute_floor_on_payout is unsupported by the dated ledger")
+            if sum(r.compile().kind == RuleKind.MIN_WINNING_DAYS for r in phase.rules) != 1:
+                raise ValueError("dated replay requires exactly one winning-day rule")
     compiled = compile_account(spec.account)
     allowed = {RuleKind.TRAILING_DD, RuleKind.PROFIT_TARGET,
                RuleKind.CONSISTENCY_GATE, RuleKind.MIN_WINNING_DAYS, RuleKind.MIN_DAYS}

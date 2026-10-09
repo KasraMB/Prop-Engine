@@ -5,6 +5,7 @@ Historical targets are immutable: changing them requires replayable market data.
 """
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta, timezone
+from fractions import Fraction
 from math import isfinite
 from numbers import Integral, Real
 
@@ -97,7 +98,7 @@ class BracketHistory:
         if not 0 < fraction < 1:
             raise ValueError("train_fraction must be between zero and one")
         days = self.sessions
-        count = int(len(days) * fraction)
+        count = int(len(days) * Fraction(str(fraction)))
         if count == 0 or count == len(days):
             raise ValueError("split needs at least one complete session in each partition")
         boundary = days[count]

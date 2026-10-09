@@ -21,10 +21,14 @@ class MarketFeed:
     def __iter__(self):
         source = MarketSource(self.fidelity, self.assumptions)
         for event in self.events:
+            if not isinstance(event, Market):
+                raise TypeError("market feeds require Market observations")
             if (event.source is not None and event.source.fidelity != self.fidelity
                     and self.fidelity != "mixed_scenario"):
                 raise ValueError("a feed cannot relabel another source fidelity")
-            yield replace(event, source=source)
+            inherited = event.source.assumptions if event.source is not None else ()
+            yield replace(event, source=MarketSource(source.fidelity,
+                          tuple(dict.fromkeys((*source.assumptions, *inherited)))))
 
 
 @dataclass(frozen=True, slots=True)
@@ -164,6 +168,7 @@ def merge_markets(*feeds, ties):
         for _, group in groupby(stream, key=event_key):
             first = next(group)
             quotes = list(first.quotes)
+            inherited = list(first.source.assumptions if first.source is not None else ())
             if first.source is not None and first.source.fidelity not in kinds:
                 raise ValueError("preserve source wrappers when merging approximate feeds")
             for other in group:
@@ -172,6 +177,9 @@ def merge_markets(*feeds, ties):
                 if ties == "reject":
                     raise ValueError("market feed keys collide; declare atomic quotes or supply ordered sequences")
                 quotes.extend(other.quotes)
-            yield Market(first.at, tuple(quotes), first.seq)
+                if other.source is not None:
+                    inherited.extend(other.source.assumptions)
+            yield Market(first.at, tuple(quotes), first.seq,
+                         MarketSource(kind, tuple(dict.fromkeys(inherited))))
 
     return MarketFeed(events(), kind, assumptions+(f"merged market feed key ties: {ties}",))

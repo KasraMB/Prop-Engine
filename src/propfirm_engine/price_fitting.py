@@ -4,6 +4,7 @@ Execution scenarios are fixed inputs, never search dimensions. Monte Carlo
 here repeats execution uncertainty on one historical tape, not market futures.
 """
 from dataclasses import asdict, dataclass, replace
+from fractions import Fraction
 from math import isfinite
 from numbers import Real
 
@@ -66,8 +67,14 @@ def evaluate_prices(spec, sessions, policy, instrument, config, *, slippage=None
                                  collision_policy=collision_policy) for i in range(paths if slippage else 1))
     scores = tuple(_objective(objective, r.replay) for r in results)
     metrics = []
-    for path in results:
-        row = asdict(cash_risk_path(path.replay))
+    for i, path in enumerate(results):
+        unrestricted = None
+        if any(e.kind == "wallet_wait" for e in path.replay.events):
+            unrestricted = replay_prices(spec, sessions, policy.sizing, targets, instrument,
+                replace(config, initial_wallet=None), quantity=quantity, slippage=slippage,
+                execution_seed=execution_seed, execution_path=path_offset+i,
+                compensate_slippage=compensate_slippage, collision_policy=collision_policy).replay
+        row = asdict(cash_risk_path(path.replay, unrestricted=unrestricted))
         events, decisions = path.replay.events, path.decisions
         row.update(trades=len(decisions), evaluation_passes=sum(e.kind == "evaluation_pass" for e in events),
                    collisions=sum(d.collision for d in decisions),
@@ -113,7 +120,7 @@ def fit_prices(spec, sessions, instrument, config, *, policy, risk_bounds, targe
     sessions = tuple(sessions)
     if any(b.session <= a.session for a, b in zip(sessions, sessions[1:])):
         raise ValueError("sessions must be unique and chronological")
-    split = int(len(sessions)*train_fraction)
+    split = int(len(sessions)*Fraction(str(train_fraction)))
     if not 0 < split < len(sessions):
         raise ValueError("split requires nonempty training and holdout histories")
     train, test = sessions[:split], sessions[split:]

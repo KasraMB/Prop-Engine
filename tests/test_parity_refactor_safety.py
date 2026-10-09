@@ -141,28 +141,31 @@ def test_feasibility_parity_over_funded_phase_with_payouts():
 def test_static_dd_eod_parity():
     cp = compile_phase(Phase("eval", "eval",
         (ProfitTargetRule(1e9),
-         StaticDrawdownRule(1000.0, severity=Severity.HARD)),))
+         StaticDrawdownRule(1000.0, severity=Severity.HARD, check_timing=Timing.EOD)),))
     # a slow bleed that crosses the static floor only at an EOD close
     ret = [-90.0] * 40
     day = list(range(40))
     low = [0.0] * 40
     code, _ = _assert_parity(cp, ret, day, low, size_base=1.0, start=50_000.0)
     assert code == int(ExitCode.FAIL_STATIC_DD)
+    recovered, _ = _assert_parity(cp, [-1100.0, 1100.0], [0, 0], [0.0, 0.0],
+                                  size_base=1.0, start=50_000.0)
+    assert recovered == int(ExitCode.TIMED_OUT)
 
 
 def test_buffer_floor_blocks_payout_parity():
     # A payout that would drop equity below buffer_floor must not fire, in BOTH.
     schema = PayoutSchema(dollar_cap=(5000.0,), split=1.0, max_payouts=2,
-                          cap_fraction=1.0, min_request=1.0, buffer_floor=49_900.0)
+                          cap_fraction=1.0, min_request=1.0, buffer_floor=50_200.0)
     cp = compile_phase(Phase("funded", "funded",
         (TrailingDrawdownRule(3000.0), MinimumWinningDaysRule(1, 50.0)),
         payout_schema=schema))
-    # one qualifying day of +200 cycle profit; cap 5000 > profit, but releasing it
-    # would breach the 49_900 buffer (equity 50_200 - 200 = 50_000 >= 49_900 ok?).
+    # No balance is available above the non-withdrawable floor.
     ret = [200.0]
     day = [0]
     low = [0.0]
-    _assert_parity(cp, ret, day, low, size_base=1.0, start=50_000.0)
+    _, amounts = _assert_parity(cp, ret, day, low, size_base=1.0, start=50_000.0)
+    assert amounts == []
 
 
 def test_tiered_split_and_multi_cap_with_recompute_and_lock_parity():

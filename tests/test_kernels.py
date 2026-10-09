@@ -198,8 +198,8 @@ def test_payout_below_min_request_does_not_fire():
 
 def test_payout_blocked_by_buffer_floor_does_not_fire():
     # Releasing would drop balance below the non-withdrawable buffer -> withheld.
-    cp = _funded_1day_payout(max_payouts=2, buffer_floor=100_100.0)
-    # start 100_000, +150 -> 100_150; releasing 150 -> 100_000 < buffer 100_100 -> blocked
+    cp = _funded_1day_payout(max_payouts=2, buffer_floor=100_100.0, min_request=100.0)
+    # Only 50 is available above the floor, below the 100 minimum request.
     code, amounts, _ = _both(cp, [150.0], [0], [0.0], start_equity=100_000.0)
     assert amounts == []
 

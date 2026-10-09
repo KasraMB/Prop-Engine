@@ -172,6 +172,23 @@ class RenewalObjective:
     n_boot: int = 200  # bootstrap resamples of the (reward, time) pairs (cvar_q<1 only)
     boot_seed: int = 12345  # CRN seed: identical resample indices for every candidate
 
+    def __post_init__(self):
+        for name in ("p_min", "max_breach_rate"):
+            value = getattr(self, name)
+            if isinstance(value, bool) or not isinstance(value, Real) or not np.isfinite(value) or not 0 <= value <= 1:
+                raise ValueError(f"{name} must be in [0,1]")
+        for name, positive in (("penalty", False), ("cvar_q", True)):
+            value = getattr(self, name)
+            if (isinstance(value, bool) or not isinstance(value, Real) or not np.isfinite(value)
+                    or value < 0 or positive and value == 0):
+                raise ValueError(f"invalid {name}")
+        if type(self.include_fees) is not bool:
+            raise ValueError("include_fees must be bool")
+        for name, minimum in (("n_boot", 1), ("boot_seed", 0)):
+            value = getattr(self, name)
+            if isinstance(value, bool) or not isinstance(value, Integral) or value < minimum:
+                raise ValueError(f"invalid {name}")
+
     def breach_rate(self, o) -> float:
         code = o.code
         n = code.shape[0]
@@ -183,6 +200,12 @@ class RenewalObjective:
         """The renewal rate: nominal ``E[R]/E[T]`` (``cvar_q>=1``), else the CVaR of the
         left ``cvar_q`` tail of the ratio's bootstrap distribution (§16.11). Returns
         ``None`` when undefined (non-positive total time / empty tail)."""
+        reward, time = np.asarray(reward, dtype=float), np.asarray(time, dtype=float)
+        if (reward.ndim != 1 or reward.shape != time.shape
+                or not np.all(np.isfinite(reward)) or not np.all(np.isfinite(time)) or np.any(time < 0)):
+            raise ValueError("reward/time must be aligned finite vectors with nonnegative time")
+        if not len(time):
+            return None
         t_mean = float(np.mean(time))
         if t_mean <= 0.0:
             return None
@@ -192,14 +215,21 @@ class RenewalObjective:
         if n == 0:
             return None
         rng = np.random.default_rng(self.boot_seed)  # CRN: same indices for every candidate
-        idx = rng.integers(0, n, size=(int(self.n_boot), n))
-        den = time[idx].sum(axis=1)
-        good = den > 0.0
-        if not np.any(good):
-            return None
-        r = reward[idx].sum(axis=1)[good] / den[good]  # bootstrap ratio dist (ratio-correct)
-        k = max(1, int(np.ceil(self.cvar_q * r.shape[0])))
-        return float(np.mean(np.partition(r, k - 1)[:k]))  # mean of the worst q-fraction
+        r = np.empty(int(self.n_boot))
+        batch = max(1, 1_000_000 // n)
+        for first in range(0, len(r), batch):
+            stop = min(first+batch, len(r))
+            idx = rng.integers(0, n, size=(stop-first, n))
+            den = time[idx].sum(axis=1)
+            if np.any(den <= 0):
+                return None
+            r[first:stop] = reward[idx].sum(axis=1) / den
+        mass = self.cvar_q * len(r)
+        whole = int(np.floor(mass))
+        if not whole:
+            return float(r.min())
+        ordered = np.partition(r, min(whole, len(r)-1))
+        return float((ordered[:whole].sum() + (mass-whole)*ordered[min(whole, len(r)-1)]) / mass)
 
     def value(self, o) -> float:
         """The scalar to maximize (rate minus constraint penalties).
@@ -208,14 +238,14 @@ class RenewalObjective:
         time) ONCE — ``r_renewal``/``prob_profitable``/``breach_rate`` would each
         re-derive the fee otherwise — matching their definitions exactly."""
         if o.net_payout.size == 0:
-            return -self.penalty
+            raise ValueError("renewal rate is undefined for empty outcomes")
         # eval_fee + activation_fee*reached_funded (§H1); dropped for the funded leg.
         fee = attributable_fee(o) if self.include_fees else 0.0
         reward = o.net_payout - fee
         time = o.total_trading_days.astype(np.float64) / o.trading_days_per_week
         rate = self._rate(reward, time)  # nominal E[R]/E[T] or CVaR of the left tail
         if rate is None or not np.isfinite(rate):
-            return -self.penalty
+            raise ValueError("renewal rate is undefined; use a cash objective or a supported positive-time model")
         pen = 0.0
         pp = float(np.mean(o.net_payout > fee))  # == statistics.prob_profitable
         if np.isfinite(pp) and pp < self.p_min:

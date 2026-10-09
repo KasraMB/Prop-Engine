@@ -94,13 +94,13 @@ class CashRiskPath:
     max_cash_drawdown: float
     longest_underwater_days: float
     days_to_first_receipt: float | None
-    required_bankroll: float
+    required_bankroll: float | None
     observed_funding_shortfall: bool
     performance_initial_wallet: float | None
     return_on_initial_wallet: float | None
 
 
-def cash_risk_path(result, *, unrestricted=None):
+def cash_risk_path(result, *, unrestricted=None, capital_identified=True):
     """Summarize a run; a wallet-truncated run needs an unrestricted counterpart.
 
     The counterpart must replay identical inputs/policy/random tape with only
@@ -109,16 +109,17 @@ def cash_risk_path(result, *, unrestricted=None):
     """
     shortfall = any(e.kind == "wallet_wait" for e in result.events)
     capital = result if unrestricted is None else unrestricted
-    if any(e.kind == "wallet_wait" for e in capital.events):
+    if capital_identified and any(e.kind == "wallet_wait" for e in capital.events):
         raise ValueError("bankroll analysis needs an unrestricted-wallet replay of the same path")
     if unrestricted is not None and (
         capital.start != result.start or capital.end != result.end or capital.spec != result.spec
+        or getattr(capital, "history_fingerprint", None) != getattr(result, "history_fingerprint", None)
         or capital.policy != result.policy or capital.config.initial_wallet is not None
         or replace(capital.config, initial_wallet=result.config.initial_wallet) != result.config
     ):
         raise ValueError("unrestricted replay must match horizon, account and policy")
     drawdown, underwater, _ = _cash_extremes(result)
-    _, _, required = _cash_extremes(capital)
+    required = _cash_extremes(capital)[2] if capital_identified else None
     receipts = [e for e in result.events if e.kind == "receipt"]
     wallet = result.config.initial_wallet
     return CashRiskPath(result.net_cash, result.net_cash_per_day, result.calendar_days,
@@ -181,7 +182,8 @@ def risk_report(paths, *, options=RiskConfig(), sample_kind="historical_windows"
         raise ValueError("unknown sample_kind")
     n = len(paths)
     independent = sample_kind == "independent_model" and n > 1
-    requirements = sorted(p.required_bankroll for p in paths)
+    capital_identified = all(p.required_bankroll is not None for p in paths)
+    requirements = sorted(p.required_bankroll for p in paths) if capital_identified else []
     fields = ("net_cash", "net_cash_per_day", "receipts", "fees", "outstanding_payouts",
               "calendar_days", "attempts", "failed_attempts", "payout_count",
               "max_cash_drawdown", "longest_underwater_days", "required_bankroll",
@@ -190,13 +192,14 @@ def risk_report(paths, *, options=RiskConfig(), sample_kind="historical_windows"
                                          options.percentiles) for field in fields}
     curve = []
     from bisect import bisect_right
-    for capital in sorted(set([0.0] + requirements + ([] if options.bankroll is None else [options.bankroll]))):
+    capitals = sorted(set([0.0] + requirements + ([] if options.bankroll is None else [options.bankroll])))
+    for capital in capitals if capital_identified else ():
         count = n - bisect_right(requirements, capital)
         curve.append({"bankroll": capital, "ruined_paths": count, "ruin_probability": count/n})
     alpha = options.target_ruin_probability
-    required = _required_capital(requirements, alpha)
-    supported = _confidence_capital(requirements, alpha, options.confidence) if independent else None
-    if options.bankroll is None:
+    required = _required_capital(requirements, alpha) if capital_identified else None
+    supported = _confidence_capital(requirements, alpha, options.confidence) if independent and capital_identified else None
+    if options.bankroll is None or not capital_identified:
         ruined = probability = None
     else:
         ruined = n - bisect_right(requirements, options.bankroll)
@@ -226,16 +229,17 @@ def risk_report(paths, *, options=RiskConfig(), sample_kind="historical_windows"
         "worst_tail_mean_net_cash": _tail_mean([p.net_cash for p in paths], tail),
         "ruined_paths": ruined, "ruin_probability": probability,
         "required_bankroll": required,
-        "achieved_empirical_ruin_probability": (n-bisect_right(requirements, required))/n,
+        "capital_status": "conditional_wallet_invariance" if capital_identified else "not_identified",
+        "achieved_empirical_ruin_probability": (n-bisect_right(requirements, required))/n if capital_identified else None,
         "confidence_supported_bankroll": supported,
-        "confidence_status": ("supported" if supported is not None else
+        "confidence_status": ("capital_not_identified" if not capital_identified else "supported" if supported is not None else
                               "insufficient_independent_paths" if independent else "no_independent_sample"),
         "probability_intervals": intervals,
         "best_case_zero_failure_upper_bound": float(-np.expm1(log1p(-options.confidence)/n)) if independent else None,
         "bankroll_curve": curve, "path_records": [asdict(p) for p in paths],
         "definitions": {
             "ruin": "First inability to pay a required evaluation/reset/activation within the observed horizon; equality with the fee is sufficient. A prop-account breach is not investor ruin.",
-            "bankroll": "Maximum external cash deficit on the same policy's unrestricted-wallet path, rounded up to cents. Receipts finance later fees; approvals and trading balances are not spendable cash.",
+            "bankroll": "Maximum external cash deficit on the same policy's unrestricted-wallet path, rounded up to cents. Requires decisions invariant to available wallet until funding stops. Otherwise capital and counterfactual ruin are not identified. Receipts finance later fees; approvals and trading balances are not spendable cash.",
             "horizon": "Finite observed horizon only; no perpetual ruin probability or extrapolated annual return.",
             "variance": "Descriptive variance uses ddof=0; sample variance uses ddof=1. Dollar variance has units USD squared.",
             "tail": "Loss=max(0,-net cash). VaR is the empirical inverse-CDF loss threshold; expected shortfall averages the worst tail with fractional observation weights.",

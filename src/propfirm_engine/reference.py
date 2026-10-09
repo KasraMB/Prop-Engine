@@ -244,13 +244,11 @@ class _ReferenceSim:
                      else schema.profit_reference_balance)
         fraction_profit = equity - reference if schema.fraction_basis == 1 else cycle_profit
         gross = min(schema.dollar_cap_at(self.payouts_taken),
-                    schema.cap_fraction * fraction_profit)
+                    schema.cap_fraction * fraction_profit, equity - schema.buffer_floor)
         # never fire a zero/blocked amount (§6b): a $0 release would still record a
         # payout, burn a max_payouts slot, and reset the cycle counters. min_request
         # cannot supply this (neutral default 0.0), so guard gross explicitly.
         if gross <= 0.0 or gross < schema.min_request:
-            return False, 0.0, 0.0
-        if equity - gross < schema.buffer_floor:
             return False, 0.0, 0.0
         first_gross = min(gross, max(0.0, schema.tier_cap - self.cumulative_paid))
         net = first_gross * schema.first_tier_split + (gross - first_gross) * schema.split
@@ -302,6 +300,13 @@ class _ReferenceSim:
             if self.dd_floor >= cp.lock_at:
                 self.dd_floor = self._cash(cp.lock_at)
                 self.dd_locked = True
+
+        if test_equity is not None:
+            for timing in (_CONTINUOUS, _EOD):
+                hit, severity, fail_code = self._first_fail(timing, observed,
+                    daily_pnl=observed-getattr(self, "day_base", closing_equity))
+                if hit and severity == _HARD:
+                    return fail_code
 
         # (2d) EOD PASS (conjunctive) against closing equity
         if self._all_pass(closing_equity):

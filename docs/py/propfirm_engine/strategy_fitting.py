@@ -108,6 +108,8 @@ class StrategyEvaluation:
         return fsum(p.cash.net_cash_per_day for p in self.paths)/len(self.paths)
 
     def ultimate_ruin(self, *, bankroll, **kwargs):
+        if any(p.cash.required_bankroll is None for p in self.paths):
+            return {"status": "not_identified", "reason": "wallet-invariant decisions were not declared"}
         cycles = tuple(c for p in self.paths for c in p.cycles)
         excluded = sum(p.excluded_cycles for p in self.paths)
         if not cycles:
@@ -172,10 +174,25 @@ def _seeds(seeds):
     return seeds
 
 
+def _partition_seeds(seeds, validation_seeds=None, holdout_seeds=None):
+    seeds = _seeds(seeds)
+    def derived(label):
+        return tuple(int.from_bytes(sha256(f"strategy:{label}:{seed}".encode()).digest()[:4], "big") for seed in seeds)
+    groups = dict(training=seeds,
+        validation=_seeds(derived('validation') if validation_seeds is None else validation_seeds),
+        oos=_seeds(derived('holdout') if holdout_seeds is None else holdout_seeds))
+    values = [seed for group in groups.values() for seed in group]
+    if len(set(values)) != len(values):
+        raise ValueError("training, validation and holdout seeds must be disjoint")
+    return groups
+
+
 def evaluate_strategy(spec, tape, config, factory, *, params, setup, seeds=(0,), rolling=None,
-                      warmup_sessions=0, risk=RiskConfig(), objective=None, cancel=None):
+                      warmup_sessions=0, risk=RiskConfig(), objective=None, cancel=None, wallet_invariant=False):
     """Evaluate frozen parameters. setup(seed) returns fresh replay models and options."""
     view, parameters, seeds = _view(tape), _params(params), _seeds(seeds)
+    if type(wallet_invariant) is not bool:
+        raise ValueError("wallet_invariant must be bool")
     if not callable(factory) or not callable(setup):
         raise TypeError("factory and setup must be callables")
     if type(warmup_sessions) is not int or warmup_sessions < 0:
@@ -203,9 +220,9 @@ def evaluate_strategy(spec, tape, config, factory, *, params, setup, seeds=(0,),
             result = run(config)
             replay = result.result.replay
             unrestricted = None
-            if any(e.kind == "wallet_wait" for e in replay.events):
+            if wallet_invariant and any(e.kind == "wallet_wait" for e in replay.events):
                 unrestricted = run(replace(config, initial_wallet=None)).result.replay
-            cash = cash_risk_path(replay, unrestricted=unrestricted)
+            cash = cash_risk_path(replay, unrestricted=unrestricted, capital_identified=wallet_invariant)
             cycles, excluded = _settled_cycles(replay if unrestricted is None else unrestricted)
             book = result.result.book
             paths.append(StrategyPath(window.sessions[0], window.sessions[-1], seed, cash,
@@ -315,8 +332,9 @@ def _partitions(view, train_fraction, validation_fraction):
 
 def estimate_strategy_work(tape, *, generations=20, population=8, seeds=(0,), search_seeds=(0,),
                            train_fraction=.7, validation_fraction=0, finalists=3, rolling=None,
-                           warmup_sessions=0):
+                           warmup_sessions=0, validation_seeds=None, holdout_seeds=None):
     view, seeds, search_seeds = _view(tape), _seeds(seeds), _seeds(search_seeds)
+    streams = _partition_seeds(seeds, validation_seeds, holdout_seeds)
     for name, value, low in (("generations", generations, 0), ("population", population, 4),
                              ("finalists", finalists, 1), ("warmup_sessions", warmup_sessions, 0)):
         if type(value) is not int or value < low:
@@ -328,7 +346,7 @@ def estimate_strategy_work(tape, *, generations=20, population=8, seeds=(0,), se
             total += len(window)
             if warmup_sessions and window.first:
                 total += len(window.tape.view(max(0, window.first-warmup_sessions), window.first))
-        costs[name] = total*len(seeds)
+        costs[name] = total*len(streams[name])
     candidates = (2+generations*population)*len(search_seeds)
     training, validation, oos = costs["training"], costs.get("validation", 0), costs["oos"]
     return {"max_search_candidates": candidates,
@@ -345,9 +363,11 @@ def fit_strategy(spec, tape, config, factory, *, baseline, space, setup, train_f
                  validation_fraction=0, finalists=3, generations=20, population=8, seed=0,
                  seeds=(0,), rolling=None, warmup_sessions=0, risk=RiskConfig(), objective=None,
                  direction="maximize", constraint=None, study_id=None, resume=None,
-                 checkpoint=None, progress=None, cancel=None, search_seeds=None):
+                 checkpoint=None, progress=None, cancel=None, search_seeds=None, wallet_invariant=False,
+                 validation_seeds=None, holdout_seeds=None):
     """Search IS only; report selected and baseline performance on untouched OOS."""
     view, base, seeds = _view(tape), _params(baseline), _seeds(seeds)
+    streams = _partition_seeds(seeds, validation_seeds, holdout_seeds)
     space = dict(sorted(dict(space).items()))
     if not space or any(k not in dict(base) or not isinstance(v, Parameter) for k, v in space.items()):
         raise ValueError("space must declare Parameter domains for baseline names")
@@ -367,7 +387,8 @@ def fit_strategy(spec, tape, config, factory, *, baseline, space, setup, train_f
     x0 = [domain.encode(dict(base)[name]) for name, domain in space.items()]
     key = sha256(repr(("strategy-fit-v1", view.fingerprint, spec, config, base, tuple(space.items()),
         train_fraction, validation_fraction, finalists, generations, population, seed, seeds,
-        rolling, warmup_sessions, risk, direction, study_id, search_seeds)).encode()).hexdigest()
+        rolling, warmup_sessions, risk, direction, study_id, search_seeds, wallet_invariant,
+        tuple(streams.items()))).encode()).hexdigest()
     trials, cache = [], {}
     if resume is not None:
         if not isinstance(resume, StrategyCheckpoint) or resume.fingerprint != key:
@@ -394,8 +415,8 @@ def fit_strategy(spec, tape, config, factory, *, baseline, space, setup, train_f
         if constraint is not None and not constraint(MappingProxyType(dict(parameters))):
             raise InfeasiblePolicy("declared parameter constraint")
         return evaluate_strategy(spec, partitions[part], config, factory, params=dict(parameters),
-            setup=setup, seeds=seeds, rolling=rolling, warmup_sessions=warmup_sessions,
-            risk=risk, objective=objective, cancel=cancel)
+            setup=setup, seeds=streams[part], rolling=rolling, warmup_sessions=warmup_sessions,
+            risk=risk, objective=objective, cancel=cancel, wallet_invariant=wallet_invariant)
 
     sign = 1 if direction == "maximize" else -1
 
@@ -463,7 +484,8 @@ def fit_strategy(spec, tape, config, factory, *, baseline, space, setup, train_f
         raise SearchCancelled(state()) from None
     work = estimate_strategy_work(view, generations=generations, population=population, seeds=seeds,
         search_seeds=search_seeds, train_fraction=train_fraction, validation_fraction=validation_fraction,
-        finalists=finalists, rolling=rolling, warmup_sessions=warmup_sessions)
+        finalists=finalists, rolling=rolling, warmup_sessions=warmup_sessions,
+        validation_seeds=streams['validation'], holdout_seeds=streams['oos'])
     return StrategyFit(selected, original, trained, validated, tuple(trials), state(),
                        oos.sessions[0], work, tuple(search_runs))
 

@@ -60,6 +60,7 @@ fit = Engine().fit_strategy(
     baseline={"quantity": 1}, space={"quantity": Parameter("integer", 1, 3)},
     setup=setup, generations=2, population=4,
     risk=RiskConfig(bankroll=1000, target_ruin_probability=.05),
+    wallet_invariant=True,
     objective=lambda result: result.mean_net_cash,
 )
 print(fit.params, fit.score)
@@ -86,7 +87,11 @@ poor candidate scores. The baseline must be feasible.
 - `rolling=RollingConfig(window_sessions=20, stride_sessions=5)` starts a fresh
   account, wallet and strategy in each complete window of each partition.
 - `seeds=(1,2,3)` repeats the same declared execution/strategy seeds for every
-  candidate. The factory and setup must actually use those seeds where random.
+  candidate within training. Validation and holdout use separate deterministic
+  seed streams by default; `validation_seeds` and `holdout_seeds` can override
+  them with disjoint sets. This avoids replaying a reset strategy's training
+  noise in OOS. Actual seeds are retained per path. The factory and setup must
+  use those seeds where random and must create fresh state.
 - `search_seeds=(7,8,9)` repeats optimizer starts on IS. `fit.search_runs` retains
   each training winner; `fit.stability` reports parameter ranges and selection
   frequency. This is search sensitivity, not independent market evidence. Small
@@ -121,7 +126,16 @@ engine does not shuffle individual quotes or splice price levels together.
 Independence is a declared generator assumption, not inferred from path count.
 
 Reports retain variance, percentiles, drawdown, receipts, costs and finite-horizon
-funding risk. Wallet-stopped paths are replayed with an unrestricted wallet using
+funding outcomes. Capital thresholds and counterfactual ruin require
+`wallet_invariant=True`: strategy, execution and scenario decisions must not depend
+on wallet value, except that the engine stops when a fee cannot be paid. This is
+a caller declaration, not an automatically proven property. General callbacks
+can inspect wallet, so the default reports these capital estimates as unidentified.
+Actual performance and observed funding shortfalls remain available. For a
+wallet-sensitive strategy, evaluate each proposed bankroll directly on the same
+independent scenarios; do not infer a monotone capital curve from one replay.
+
+With that declaration, wallet-stopped paths are replayed with an unrestricted wallet using
 fresh identical strategy and execution seeds for capital estimation. No finite
 historical sample establishes ultimate ruin. The existing complete-cycle
 approximation remains separately labelled in the [risk API](BRACKET_BACKTEST.md).

@@ -153,7 +153,7 @@ def research_path(spec, model, policy, config, uniforms):
         "gross drift and volatility determine hit probabilities, not calendar duration",
         "common uniform tapes couple policies statistically, not through shared market paths",
     )
-    fingerprint = sha256(repr((model, policy, tape, decisions)).encode()).hexdigest()
+    fingerprint = sha256(repr((model, policy, tape)).encode()).hexdigest()
     return ResearchPath(replace(replay, assumptions=assumptions, history_fingerprint=fingerprint), tuple(decisions))
 
 
@@ -281,7 +281,7 @@ def fit_targets(spec, model, config, *, policy, risk_bounds, target_bounds,
             raise ValueError("candidate policies must have identical regime conditions")
         if np.any(values(candidate) < lo) or np.any(values(candidate) > bounds[:, 1]):
             raise ValueError("initial and candidate policies must lie within bounds")
-    train_count = int(paths * 0.7)
+    train_count = paths * 7 // 10
     # Separate streams even if the caller uses identical integer seeds.
     train = np.random.default_rng(np.random.SeedSequence([seed, 0])).random((train_count, model.sessions))
     sign = 1 if direction == "maximize" else -1

@@ -51,7 +51,7 @@ def ending_balance(evaluation):
 
 def fit(**kwargs):
     options = dict(baseline={"quantity": 1}, space={"quantity": Parameter("integer", 1, 3)},
-                   setup=setup, generations=3, population=4, objective=ending_balance)
+                   setup=setup, generations=3, population=4, objective=ending_balance, wallet_invariant=True)
     options.update(kwargs)
     return Engine().fit_strategy(SPEC, options.pop("tape", tape()), CONFIG,
                                  options.pop("factory", Daily), **options)
@@ -136,7 +136,7 @@ def test_cancel_resume_matches_uninterrupted_with_completed_trials_cached():
 
 def test_wallet_shortfall_gets_a_fresh_identical_unrestricted_replay():
     result = evaluate_strategy(SPEC, tape(), replace(CONFIG, initial_wallet=100), Daily,
-        params={"quantity": 1}, setup=setup, risk=RiskConfig(bankroll=100))
+        params={"quantity": 1}, setup=setup, risk=RiskConfig(bankroll=100), wallet_invariant=True)
     assert result.paths[0].cash.observed_funding_shortfall
     assert result.paths[0].cash.required_bankroll == 105.2
     assert result.metrics["ruin_probability"] == 1
@@ -244,7 +244,7 @@ def test_complete_cycle_approximation_is_separate_from_finite_horizon_metrics():
                 return [Abandon()]
             return super().on_market(context, market)
 
-    result = evaluate_strategy(SPEC, tape(), CONFIG, End, params={"quantity": 1}, setup=setup)
+    result = evaluate_strategy(SPEC, tape(), CONFIG, End, params={"quantity": 1}, setup=setup, wallet_invariant=True)
     assert len(result.paths[0].cycles) == 10
     ultimate = result.ultimate_ruin(bankroll=1000, paths=2, max_cycles=2)
     assert ultimate["status"] == "certain_ruin"

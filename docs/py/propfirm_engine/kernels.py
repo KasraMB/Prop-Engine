@@ -158,9 +158,8 @@ def _try_payout(payout_idx, kind, p0, p1, n_qual, bal, cycle_start, s_min_reques
     fraction_profit = bal - reference if s_profit_terms[0] == 1 else cycle_profit
     capv = s_cap_fraction * fraction_profit
     gross = s_dollar_cap[jcap] if s_dollar_cap[jcap] < capv else capv
+    gross = min(gross, bal - s_buffer_floor)
     if gross <= 0.0 or gross < s_min_request:
-        return False, 0.0, 0.0
-    if bal - gross < s_buffer_floor:
         return False, 0.0, 0.0
     first_gross = min(gross, max(0.0, s_tier_cap - cumulative_paid))
     net = first_gross * s_first_tier + (gross - first_gross) * s_split
