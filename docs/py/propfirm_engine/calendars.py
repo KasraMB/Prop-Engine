@@ -3,6 +3,15 @@ from datetime import date, datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 
+def local_clock(day, clock, zone):
+    local = datetime.combine(day, clock, zone)
+    utc = local.astimezone(timezone.utc)
+    restored = utc.astimezone(zone)
+    if restored.replace(tzinfo=None) != local.replace(tzinfo=None):
+        raise ValueError("local calendar cutoff does not exist because of a timezone transition")
+    return utc
+
+
 @dataclass(frozen=True)
 class ProcessingCalendar:
     timezone: str = "America/New_York"
@@ -30,13 +39,13 @@ class ProcessingCalendar:
         if not isinstance(delay, timedelta) or delay < timedelta(0):
             raise ValueError("processing delay must be nonnegative")
         zone = ZoneInfo(self.timezone)
-        local = (at.astimezone(timezone.utc) + delay).astimezone(zone)
-        day = local.date()
+        target = at.astimezone(timezone.utc) + delay
+        day = target.astimezone(zone).date()
         while True:
             if day.weekday() in self.weekdays and day not in self.holidays:
-                opening = datetime.combine(day, self.opening, zone)
-                closing = datetime.combine(day, self.closing, zone)
-                candidate = max(local, opening)
+                opening = local_clock(day, self.opening, zone)
+                closing = local_clock(day, self.closing, zone)
+                candidate = max(target, opening)
                 if candidate < closing:
-                    return candidate.astimezone(timezone.utc)
+                    return candidate
             day += timedelta(days=1)

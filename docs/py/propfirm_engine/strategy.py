@@ -34,6 +34,7 @@ class Context:
 class StrategyReplay:
     result: EventReplay
     orders: tuple[OrderEvent, ...]
+    order_counts: tuple[tuple[str, int], ...] = ()
 
 
 class ReplayCancelled(RuntimeError):
@@ -57,7 +58,8 @@ class _StrategyReplay(_EventReplay):
             self.digest.update(markets.fingerprint.encode())
         self.strategy = strategy
         self.markets, self.warmup = iter(markets), iter(warmup)
-        self.broker = Broker(self.instruments, models, self.units)
+        self.broker = Broker(self.instruments, models, self.units,
+                             compact=self.recording == "search", sink=self.sink)
         self.last_market = None
         self.clock = self.start
         self.order_cursor = 0
@@ -117,6 +119,9 @@ class _StrategyReplay(_EventReplay):
         if callback is not None:
             for event in events:
                 self.actions(callback(self.context(), event), enabled=enabled)
+        if self.recording == "search":
+            del self.broker.events[:end]
+            self.order_cursor = 0
 
     def restart(self, at, fee):
         self.broker.cancel_all(at, "account_ended")
@@ -172,6 +177,10 @@ class _StrategyReplay(_EventReplay):
             return None
         self.seq += 1
         fill = Fill(self.clock, order.symbol, quantity, price, fee, self.seq)
+        effect = self.book.preview(fill)
+        self.advance(self.clock, qualifying_close=bool(effect.closed and abs(effect.closed_net) >= self.activity_threshold))
+        if self.book is None or self.next_role is not None:
+            return None
         self.fill_count += 1
         self.settle(fill, self.day)
         return fill
@@ -208,10 +217,11 @@ class _StrategyReplay(_EventReplay):
                 if market.at < opening:
                     raise ValueError("market observation lies outside a declared session")
                 self.clock = market.at
-                self.advance(market.at)
+                self.advance(market.at, qualifying_close=True)
                 self.mark(market)
                 if self.book is not None and self.eligible(market.at) and self.next_role is None:
                     self.broker.match(market, self.quantities, self.execute)
+                self.advance(market.at)
                 self.notifications()
                 self.actions(self.strategy.on_market(self.context(), market))
                 market = self.next_market()
@@ -231,7 +241,8 @@ class _StrategyReplay(_EventReplay):
             "configured withdrawal, approval/denial and processing scenarios; no trading while pending",
             "retry and live handoff use the shared next-session, fee and wallet rules",
         ))
-        return StrategyReplay(result, tuple(self.broker.events))
+        return StrategyReplay(result, () if self.recording == "search" else tuple(self.broker.events),
+                              tuple(sorted(self.broker.counts.items())))
 
     def next_market(self):
         self.polls += 1

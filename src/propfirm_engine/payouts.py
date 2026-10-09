@@ -68,7 +68,10 @@ class PayoutLedger:
 
     def __init__(self, schema: PayoutSchema, *, opening_balance, qualifying_days,
                  winning_day_profit, initial_floor=None, lock_floor_on_request=None,
-                 floor_checks="balance"):
+                 floor_checks="balance", record_events=True):
+        if type(record_events) is not bool:
+            raise ValueError("record_events must be bool")
+        self._record_events = record_events
         if floor_checks not in ("balance", "executor"):
             raise ValueError("floor_checks must be balance or executor")
         self._floor_checks = floor_checks
@@ -128,6 +131,11 @@ class PayoutLedger:
     def requests(self):
         return tuple(self._requests.values())
 
+    def get_request(self, request_id):
+        if type(request_id) is not int or request_id not in self._requests:
+            raise ValueError("unknown payout request")
+        return self._requests[request_id]
+
     @property
     def pending(self):
         return self._pending
@@ -149,7 +157,8 @@ class PayoutLedger:
 
     def _emit(self, at, kind, amount=Fraction(0), request_id=None):
         self._last_at = at
-        self._events.append(PayoutEvent(at, kind, request_id, amount, self._balance, self._floor))
+        if self._record_events or kind == "receipt":
+            self._events.append(PayoutEvent(at, kind, request_id, amount, self._balance, self._floor))
 
     def record_trade(self, at, net_pnl):
         at = self._time(at)

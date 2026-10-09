@@ -40,7 +40,7 @@ class _Position:
 
     def __init__(self, instrument):
         self.instrument = instrument
-        self.tick = Fraction(str(instrument.tick_size))
+        self.tick = instrument.tick
         self.value = instrument.tick_value
         self.lots = deque()
         self.quantity = self.cost = 0
@@ -218,11 +218,13 @@ class Book:
             updates = [(self._position(symbol), price) for symbol, price in event.prices]
             updates = [(p, p.ticks(price)) for p, price in updates]
             for p, price in updates:
-                self._unrealized -= p.unrealized
+                if p.quantity:
+                    self._unrealized -= p.unrealized
                 p.mark = price
                 p.mark_at = event.at
-                p.revalue()
-                self._unrealized += p.unrealized
+                if p.quantity:
+                    p.revalue()
+                    self._unrealized += p.unrealized
         else:
             p = self._position(event.symbol)
             price = p.ticks(event.price)

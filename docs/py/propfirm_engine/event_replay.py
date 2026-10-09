@@ -1,5 +1,6 @@
 """Recorded portfolio executions on the shared account lifecycle."""
 from dataclasses import dataclass
+from collections import Counter
 from datetime import date, datetime, timedelta, timezone
 from fractions import Fraction
 from hashlib import sha256
@@ -32,6 +33,8 @@ class EventReplay:
     fills: int
     skipped_fills: int
     marks: int
+    event_counts: tuple[tuple[str, int], ...] = ()
+    recording: str = "research"
 
 
 @dataclass(frozen=True, slots=True)
@@ -50,7 +53,8 @@ class _EventReplay(_Replay):
                  mark_fills, max_mark_age, liquidation_fee, trace=False, units=None,
                  session_closes=None, withdrawal=None, decision=None, processing=None,
                  phase_limits=None, transition_delays=None, retry_on_failure=True,
-                 restart_on_handoff=True, drawdown_basis="rule", daily_loss_basis="balance"):
+                 restart_on_handoff=True, drawdown_basis="rule", daily_loss_basis="balance",
+                 recording=None, sink=None):
         if not isinstance(spec, LifecycleSpec) or not isinstance(config, BacktestConfig):
             raise TypeError("event replay requires LifecycleSpec and BacktestConfig")
         if fidelity != "observed_marks":
@@ -61,6 +65,13 @@ class _EventReplay(_Replay):
             raise ValueError("max_mark_age must be a nonnegative timedelta")
         if type(trace) is not bool:
             raise ValueError("trace must be bool")
+        recording = ("trace" if trace else "research") if recording is None else recording
+        if recording not in ("search", "research", "trace") or trace and recording != "trace":
+            raise ValueError("recording must be search, research or trace; trace=True requires trace mode")
+        if sink is not None and not callable(sink):
+            raise TypeError("sink must be callable")
+        self.recording, self.sink = recording, sink
+        self.event_counts = Counter()
         if any(callback is not None and not callable(callback) for callback in (withdrawal, decision)):
             raise TypeError("withdrawal and decision must be callbacks or None")
         if processing is not None and not isinstance(processing, ProcessingCalendar):
@@ -98,7 +109,7 @@ class _EventReplay(_Replay):
             if any(v <= 0 for v in self.units.values()):
                 raise ValueError("contract units must be positive")
         self.mark_fills, self.max_mark_age = mark_fills, max_mark_age
-        self.keep_trace, self.trace = trace, []
+        self.keep_trace, self.trace = recording == "trace", []
         self.book = None
         self.following = False
         self.suspended_session = None
@@ -125,7 +136,14 @@ class _EventReplay(_Replay):
         return _check_support(spec, observations=True)
 
     def ledger_options(self):
-        return {"floor_checks": "executor"}
+        return {"floor_checks": "executor", "record_events": self.recording != "search"}
+
+    def append_event(self, event):
+        self.event_counts[event.kind] += 1
+        if self.sink is not None:
+            self.sink(event)
+        if self.recording != "search" or event.cash or event.kind == "wallet_wait":
+            super().append_event(event)
 
     def phase_limit(self, index):
         baseline = super().phase_limit(index)
@@ -209,9 +227,13 @@ class _EventReplay(_Replay):
         self.record(at, "daily_suspend")
 
     def record(self, at, kind):
-        if self.keep_trace and self.book is not None:
-            self.trace.append(EventState(at, kind, self.attempts, self.role,
-                                        self.book.balance, self.book.equity, self.sim.dd_floor))
+        if (self.keep_trace or self.sink is not None) and self.book is not None:
+            event = EventState(at, kind, self.attempts, self.role,
+                               self.book.balance, self.book.equity, self.sim.dd_floor)
+            if self.sink is not None:
+                self.sink(event)
+            if self.keep_trace:
+                self.trace.append(event)
 
     def emit(self, at, kind, **kwargs):
         if kind == "approval" and self.book is not None:
@@ -377,7 +399,8 @@ class _EventReplay(_Replay):
             "elapsed processing delays" if self.processing is None else f"elapsed delays rolled through {self.processing!r}",
         ))
         return EventReplay(result, self.book.snapshot() if self.book is not None else None,
-                           tuple(self.trace), self.fill_count, self.skip_count, self.mark_count)
+                           tuple(self.trace), self.fill_count, self.skip_count, self.mark_count,
+                           tuple(sorted(self.event_counts.items())), self.recording)
 
 
 def replay_events(spec, events, instruments, config, **kwargs):

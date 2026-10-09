@@ -1,5 +1,18 @@
 # Strategy replay
 
+Recording is selected with `recording="search"`, `"research"` (default), or
+`"trace"`. Search retains the external cash ledger and event/order counts, but
+discards delivered order logs and non-cash lifecycle records. Research retains
+those logs; trace also retains every observed account state. `trace=True` is the
+legacy spelling of trace mode. `sink(event)` can stream lifecycle, order and
+state events without retaining a full trace. Callback exceptions propagate.
+Recording does not change order feedback, execution or cash-risk results.
+
+Completed order IDs and compact parent metadata remain retained to enforce
+duplicate-ID and linked-exit semantics. Search memory is not constant in the
+number of unique orders, account attempts or cash events. Full market tapes are
+shared across candidates; completed candidate ledgers are not cached.
+
 `Engine.replay_strategy` runs an external strategy against timestamped quotes.
 It shares the event portfolio, account rules, payout ledger, wallet and retry
 coordinator. Strategies stay outside the package. This is a deterministic quote

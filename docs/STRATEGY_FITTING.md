@@ -146,5 +146,7 @@ cost grows with completed trial count but does not repeat their simulations.
 
 `fit.work` reports shared tape bytes and a search observation upper bound. It
 excludes final reporting, inner validation and unrestricted-wallet counterparts;
-it is not a measured runtime or process memory budget. Full order/lifecycle
-recording is currently per replay, not retained across all search candidates.
+it is not a measured runtime or process memory budget. Search recording is used
+unless setup explicitly selects another recording mode. Detailed logs from
+completed candidates are not cached. Cash ledgers, active state and compact
+order identities still require memory; this is not a constant-memory promise.

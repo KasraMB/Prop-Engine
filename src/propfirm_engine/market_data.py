@@ -106,7 +106,7 @@ class MarketTape:
         quotes = []
         for row in rows:
             instrument = self.instruments[int(row["instrument"])]
-            tick = Fraction(str(instrument.tick_size))
+            tick = instrument.tick
             quotes.append(Quote(instrument.symbol, int(row["bid"])*tick, int(row["ask"])*tick,
                                 int(row["mark"])*tick,
                                 None if row["bid_size"] < 0 else int(row["bid_size"]),

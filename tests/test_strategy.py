@@ -46,6 +46,22 @@ def fills(result):
     return [e.fill for e in result.orders if e.fill is not None]
 
 
+@pytest.mark.parametrize("profit,failures", [(10, 0), (0, 1)])
+def test_strategy_inactivity_cutoff_waits_only_for_a_qualifying_close(profit, failures):
+    from dataclasses import replace
+    profile = replace(replay_50k(eval_fee=105.2, reset_fee=105, contract_type="mini"), flatten_at_close=False)
+    cutoff = datetime(2026, 10, 1, 20, 15, tzinfo=timezone.utc)
+    stream = [market(0), market(1),
+        Market(cutoff-timedelta(minutes=1), (Quote("X", 10000, 10000, 10000),)),
+        Market(cutoff, (Quote("X", 10000+profit, 10000+profit, 10000+profit),))]
+    strategy = Script({0: [Order("a", "X", 1)], 2: [Order("b", "X", -1, reduce_only=True)]})
+    result = run(stream, strategy, spec=profile, sessions=(DAY, date(2026, 10, 1)),
+                 max_mark_age=timedelta(days=31))
+    assert result.result.replay.failed_attempts == failures
+    if not failures:
+        assert result.result.book.balance == 50010
+
+
 def test_market_orders_execute_on_next_observation():
     strategy = Script({0: [Order("a", "X", 1)], 1: [Order("b", "X", -1, reduce_only=True)]})
     result = run([market(0), market(1, 10_005), market(2, 10_028)], strategy)

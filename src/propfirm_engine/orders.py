@@ -1,5 +1,6 @@
 """Causal quote execution with explicit liquidity and order state."""
 from dataclasses import dataclass, replace
+from collections import Counter
 from datetime import datetime
 from fractions import Fraction
 
@@ -143,7 +144,7 @@ class QuoteModel:
     def price(self, order, quote, instrument):
         side = 1 if order.quantity > 0 else -1
         base = quote.ask if side > 0 else quote.bid
-        price = base + side * self.slip_ticks * Fraction(str(instrument.tick_size))
+        price = base + side * self.slip_ticks * instrument.tick
         if order.limit is not None and side * (price - order.limit) > 0:
             return None
         return price
@@ -152,8 +153,21 @@ class QuoteModel:
         return self.fee * abs(quantity) + (self.fixed_fee if first else 0)
 
 
+@dataclass(frozen=True, slots=True)
+class _OrderRef:
+    symbol: str
+    quantity: int
+
+
+@dataclass(frozen=True, slots=True)
+class _ClosedOrder:
+    order: _OrderRef
+    filled: int
+    status: str
+
+
 class Broker:
-    def __init__(self, instruments, models, units):
+    def __init__(self, instruments, models, units, *, compact=False, sink=None):
         self.instruments = {i.symbol: i for i in instruments}
         self.models = dict(models)
         if set(self.models) != set(self.instruments):
@@ -166,12 +180,23 @@ class Broker:
         self.events = []
         self.pending = {}
         self.marks = {}
+        self.compact, self.sink = compact, sink
+        self.counts = Counter()
 
     def observe(self, market):
         self.marks.update((q.symbol, q.mark) for q in market.quotes)
 
+    def archive(self, state):
+        if self.compact and state.status in ("filled", "cancelled"):
+            return _ClosedOrder(_OrderRef(state.order.symbol, state.order.quantity), state.filled, state.status)
+        return state
+
     def note(self, at, id, status, reason=None, fill=None):
-        self.events.append(OrderEvent(at, id, status, reason, fill))
+        event = OrderEvent(at, id, status, reason, fill)
+        self.counts[status] += 1
+        if self.sink is not None:
+            self.sink(event)
+        self.events.append(event)
 
     def exposure(self, quantities, replacement=None):
         buys, sells = {}, {}
@@ -237,7 +262,7 @@ class Broker:
         if state is None:
             self.note(at, id, "rejected", "not_working")
             return
-        self.orders[id] = replace(state, status="cancelled")
+        self.orders[id] = self.archive(replace(state, status="cancelled"))
         self.note(at, id, "cancelled", reason)
         if not state.filled:
             for child, linked in tuple(self.pending.items()):
@@ -304,7 +329,7 @@ class Broker:
                                 status="filled" if n == state.remaining else "partial")
                 if id not in self.pending and state.remaining:
                     state = replace(state, status="cancelled")
-                self.orders[id] = state
+                self.orders[id] = self.archive(state)
                 if id in self.pending:
                     if not state.remaining:
                         del self.pending[id]

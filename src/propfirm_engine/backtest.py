@@ -8,12 +8,13 @@ from datetime import datetime, timedelta, timezone
 from heapq import heappop, heappush
 from itertools import groupby
 from fractions import Fraction
-from functools import cached_property
+from functools import cached_property, lru_cache
 from hashlib import sha256
 from math import isfinite
 from zoneinfo import ZoneInfo
 
 from .compiler import compile_account
+from .cache import freeze_compiled
 from .enums import ExitCode, Severity, StateField, Timing
 from .execution import BacktestConfig, BracketHistory, DollarPolicy, LifecycleSpec
 from .feasibility import project_position
@@ -96,6 +97,7 @@ class BacktestResult:
         return self.net_cash / self.calendar_days
 
 
+@lru_cache(maxsize=128)
 def _check_support(spec, *, observations=False):
     if not observations and not spec.flatten_at_close:
         raise ValueError("overnight positions require observation replay")
@@ -124,7 +126,7 @@ def _check_support(spec, *, observations=False):
                 raise ValueError("funded consistency is not supported by the dated payout ledger")
         if p.role == "funded" and p.payout is None:
             raise ValueError("funded replay requires an explicit payout schema")
-    return compiled
+    return freeze_compiled(compiled)
 
 
 class _Replay:
@@ -227,9 +229,12 @@ class _Replay:
     def phase_name(self):
         return self.spec.account.phases[self.phase_index].name
 
+    def append_event(self, event):
+        self.events.append(event)
+
     def emit(self, at, kind, *, quantity=0, cash=0.0, regime=None, code=None,
              gross_payout=0.0):
-        self.events.append(BacktestEvent(
+        self.append_event(BacktestEvent(
             at, kind, self.attempts, self.role,
             float(self.sim.equity) if self.sim else 0.0,
             float(self.sim.dd_floor) if self.sim else 0.0,
@@ -276,12 +281,12 @@ class _Replay:
                 continue
             if kind == "approval":
                 request = ledger.pending
-                decision = self.payout_decision(at, ledger.requests[request - 1])
+                decision = self.payout_decision(at, ledger.get_request(request))
                 if decision not in ("approve", "deny"):
                     raise ValueError("payout decision must be approve or deny")
                 if decision == "deny":
                     ledger.reject(at)
-                    self.emit(at, "rejection", gross_payout=float(ledger.requests[request - 1].gross))
+                    self.emit(at, "rejection", gross_payout=float(ledger.get_request(request).gross))
                     continue
                 ledger.approve(at)
                 if ledger is self.ledger:
@@ -296,7 +301,7 @@ class _Replay:
                     # trading-profit increases still wait for session close.
                     self.limit = min(self.limit, self.funded_limit(
                         self.sim.equity - self.sim.start_equity))
-                    self.emit(at, "approval", gross_payout=float(ledger.requests[request - 1].gross))
+                    self.emit(at, "approval", gross_payout=float(ledger.get_request(request).gross))
                     if ledger.breached or (ledger.floor is not None and self.sim.equity <= ledger.floor):
                         self.fail(at, "FAIL_TRAILING_DD")
                     elif ledger.censored:
@@ -307,14 +312,14 @@ class _Replay:
                 self.schedule(self.processing_at(at, self.config.receipt_delay), "receipt", ledger, attempt, request)
             else:
                 ledger.receive(at, request, payment_fee=self.config.payment_fee)
-                amount = float(ledger.requests[request - 1].net
+                amount = float(ledger.get_request(request).net
                                - Fraction(str(self.config.payment_fee)))
-                self.events.append(BacktestEvent(
+                self.append_event(BacktestEvent(
                     at, "receipt", attempt, "funded",
                     float(ledger.balance), float(ledger.floor), cash=amount,
                     qualifying_days=ledger.qualifying_days,
                     cycle_profit=float(ledger.cycle_profit),
-                    gross_payout=float(ledger.requests[request - 1].gross),
+                    gross_payout=float(ledger.get_request(request).gross),
                     phase_name=self.ledger_names[ledger] if self.named_phases else None,
                 ))
                 if self.wallet is not None:

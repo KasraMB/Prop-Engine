@@ -176,6 +176,8 @@ def evaluate_strategy(spec, tape, config, factory, *, params, setup, seeds=(0,),
                 if cancel is not None and cancel():
                     raise ReplayCancelled("strategy evaluation cancelled")
                 options = dict(setup(seed))
+                if "trace" not in options:
+                    options.setdefault("recording", "search")
                 if {"sessions", "warmup", "cancel"} & options.keys():
                     raise ValueError("setup cannot override sessions, warmup or cancellation")
                 strategy = factory(MappingProxyType(dict(parameters)), seed)
@@ -191,8 +193,8 @@ def evaluate_strategy(spec, tape, config, factory, *, params, setup, seeds=(0,),
             book = result.result.book
             paths.append(StrategyPath(window.sessions[0], window.sessions[-1], seed, cash,
                 float(book.balance) if book else None, float(book.equity) if book else None,
-                result.result.fills, sum(e.status == "rejected" for e in result.orders),
-                sum(e.kind == "evaluation_pass" for e in replay.events)))
+                result.result.fills, dict(result.order_counts).get("rejected", 0),
+                dict(result.result.event_counts).get("evaluation_pass", 0)))
             digest.update(replay.history_fingerprint.encode())
     evaluation = StrategyEvaluation(parameters, tuple(paths), risk, digest.hexdigest())
     score = evaluation.mean_cash_per_day if objective is None else objective(evaluation)

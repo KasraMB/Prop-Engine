@@ -21,7 +21,8 @@ from __future__ import annotations
 
 import hashlib
 from collections.abc import Mapping
-from dataclasses import dataclass, field
+from collections import OrderedDict
+from dataclasses import dataclass, field, fields, is_dataclass, replace
 
 import numpy as np
 
@@ -30,10 +31,40 @@ from .data import preprocess
 from .fingerprint import fingerprint
 
 
+def freeze_compiled(value):
+    if isinstance(value, np.ndarray):
+        return np.frombuffer(value.tobytes(), dtype=value.dtype).reshape(value.shape)
+    if is_dataclass(value):
+        return replace(value, **{f.name: freeze_compiled(getattr(value, f.name)) for f in fields(value)})
+    if isinstance(value, tuple):
+        return tuple(freeze_compiled(v) for v in value)
+    return value
+
+
 @dataclass
 class _Stats:
     hits: int = 0
     misses: int = 0
+
+
+class _Store(OrderedDict):
+    def __init__(self, max_entries):
+        super().__init__()
+        if type(max_entries) is not int or max_entries < 1:
+            raise ValueError("max_entries must be a positive integer")
+        self.max_entries = max_entries
+
+    def get(self, key, default=None):
+        if key not in self:
+            return default
+        self.move_to_end(key)
+        return self[key]
+
+    def __setitem__(self, key, value):
+        super().__setitem__(key, value)
+        self.move_to_end(key)
+        if len(self) > self.max_entries:
+            self.popitem(last=False)
 
 
 def _dataset_key(rows, session_reset) -> str:
@@ -92,8 +123,8 @@ def _hash_column(h, values) -> None:
 class TradeCache:
     """Preprocessed-trades cache keyed on raw input + session boundary (§11.5)."""
 
-    def __init__(self) -> None:
-        self._store: dict[str, object] = {}
+    def __init__(self, max_entries=32) -> None:
+        self._store = _Store(max_entries)
         self.stats = _Stats()
 
     def get(self, rows, *, session_reset="17:00", trading_days_per_week=None, session_timezone=None):
@@ -120,8 +151,8 @@ class TradeCache:
 class CompiledAccountCache:
     """Compiled-account cache keyed on the structural fingerprint (§10)."""
 
-    def __init__(self) -> None:
-        self._store: dict[str, object] = {}
+    def __init__(self, max_entries=128) -> None:
+        self._store = _Store(max_entries)
         self.stats = _Stats()
 
     def get(self, account, program_version: str = "v1", *, key: str | None = None):
@@ -150,8 +181,8 @@ class CompiledAccountCache:
 class CompiledRuleCache:
     """Compiled-rule cache keyed on the frozen rule object itself (§10)."""
 
-    def __init__(self) -> None:
-        self._store: dict[object, object] = {}
+    def __init__(self, max_entries=512) -> None:
+        self._store = _Store(max_entries)
         self.stats = _Stats()
 
     def get(self, rule):

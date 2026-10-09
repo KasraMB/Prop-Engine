@@ -29,3 +29,21 @@ def test_processing_close_is_exclusive_and_open_is_inclusive():
 def test_invalid_processing_calendar(kwargs):
     with pytest.raises(ValueError):
         ProcessingCalendar(**kwargs)
+
+
+def test_fall_back_fold_never_moves_processing_backwards():
+    calendar = ProcessingCalendar(weekdays=(6,), opening=time(1, 30), closing=time(2, 30))
+    at = datetime(2026, 11, 1, 1, 15, tzinfo=NY, fold=1)
+    assert calendar.after(at, timedelta(0)) == at.astimezone(timezone.utc)
+
+
+def test_second_fold_opening_is_an_explicit_later_cutoff():
+    calendar = ProcessingCalendar(weekdays=(6,), opening=time(1, 30, fold=1), closing=time(2, 30))
+    at = datetime(2026, 11, 1, 1, 45, tzinfo=NY, fold=0)
+    assert calendar.after(at, timedelta(0)) == datetime(2026, 11, 1, 6, 30, tzinfo=timezone.utc)
+
+
+def test_nonexistent_spring_cutoff_is_rejected_instead_of_guessed():
+    calendar = ProcessingCalendar(weekdays=(6,), opening=time(2, 30), closing=time(4))
+    with pytest.raises(ValueError, match="does not exist"):
+        calendar.after(datetime(2026, 3, 8, 1, tzinfo=NY), timedelta(0))

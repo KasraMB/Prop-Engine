@@ -59,7 +59,7 @@ Do not rewrite history, fabricate authorship metadata or add attribution trailer
 - [x] Validate chronology, identifiers and finite values.
 - [ ] Validate input capabilities against the requested execution and firm rules.
 - [x] Keep portfolio snapshots separate from retained event history.
-- [ ] Integrate search, research and trace recording modes with lifecycle results.
+- [x] Integrate search, research and trace recording modes with lifecycle results.
 
 Acceptance: hand-calculated partial-exit and reversal fixtures, same-time ordering,
 multi-instrument equity, fees exactly once, no future marks, and invalid-input
@@ -284,12 +284,12 @@ warmup boundaries, prepared/stream parity and immutable input precision.
 
 ### 6. Performance and release
 
-- [ ] Prepared immutable columnar inputs and compact numeric event/state storage.
-- [ ] Incremental equity/rule updates and efficient merging of ordered feeds.
+- [x] Prepared immutable columnar inputs and compact numeric event/state storage.
+- [x] Incremental equity/rule updates and efficient merging of ordered feeds.
 - [ ] Reusable buffers and compiled hot paths where profiling supports them.
-- [ ] Search, research and full-trace recording modes with identical economics.
-- [ ] Bounded caches, batched scenarios and optional streamed traces.
-- [ ] Avoid candidate-by-scenario copies of full histories and event ledgers.
+- [x] Search, research and full-trace recording modes with identical economics.
+- [x] Bounded caches, batched scenarios and optional streamed traces.
+- [x] Avoid candidate-by-scenario copies of full histories and event ledgers.
 - [x] Stable random streams when different policies execute different trades.
 - [ ] Checkpoint/resume, cancellation and workload/memory estimates.
 - [ ] Synthetic benchmarks for sequential/concurrent, multi-asset, bar/tick,
@@ -304,6 +304,40 @@ Performance is a gate in every phase, not a final rewrite. Improve single-core
 time and memory first. Arbitrary Python callbacks remain supported even when
 they cannot use compiled execution. Never drop metrics or change arithmetic to
 obtain a favorable benchmark. Monetary scaling and overflow need explicit tests.
+
+Recording milestone: search retains cash records and complete event/order counts,
+research retains lifecycle/order logs, and trace also retains observed states.
+Optional sinks stream all three event types. Tests compare callback chains,
+terminal parent links, duplicate IDs, final positions, full funded payouts and
+cash-risk metrics across modes. Compact order identities remain O(unique IDs).
+Cash events and account attempts also consume space; no constant-memory claim.
+
+Profiling identified repeated Fraction/tick conversion and flat-book arithmetic.
+Tick fractions are now prepared per instrument; flat marks avoid redundant P&L
+updates. Replay validation/compilation uses a 128-entry immutable LRU; legacy
+trade/account/rule caches have configurable entry bounds. Payout lookup no longer
+copies all requests. Exact-time strategy closes now apply the same inactivity
+tie rule as recorded fills. Processing calendars compare UTC clocks across DST
+folds and reject nonexistent local cutoffs rather than inventing an offset.
+
+Measurements on Python 3.12.7 / Windows, three warm medians, no JIT in this path:
+20,000 mark-heavy streaming strategy observations took 2.393 seconds (8,358/s),
+versus the earlier 3.192-second baseline. Prepared replay took 2.151 seconds
+(9,300/s), plus 0.635 seconds preparation and 1,520,016 input bytes. Separate peak
+Python replay allocations were 15,954/16,308 bytes, excluding the prepared tape.
+These small held-position workloads do not represent every strategy.
+
+For 2,000 order-heavy prepared observations, search used 390,399 peak Python
+bytes versus research's 1,945,175; warm times were 0.534/0.517 seconds. The measured
+benefit here is memory, not speed. Input storage was 152,016 bytes in both cases.
+Run `benchmarks/portfolio.py --mode orders --events 200 --recording search` and
+repeat with research. Preparation, native/process memory and broader multi-asset,
+bar and optimizer budgets still require the remaining release benchmarks.
+
+Retention milestone verification: 1,655 tests passed, 10 optional browser tests
+skipped, and two known deprecation warnings. The prior fitting checkpoint also
+passed GitHub's Python 3.11/3.12/3.13 and real-browser jobs; Pages deployed it.
+The local browser bundle at this checkpoint contains 52 verified Python files.
 
 ## Required acceptance cases
 
