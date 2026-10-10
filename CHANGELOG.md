@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.4.0 - 2026-10-10
+
+- Optional separate-phase sizing search and paired joint-search comparison.
+- Multiple phase objectives, bounded trade-off archives and complete lifecycle
+  pair selection on IS, followed by frozen chronological OOS evaluation.
+- Explicit horizon censoring, serial trade-visit budgets and complete cash-risk
+  reports independent of the chosen objective.
+- Shared account mechanics, bounded score caches and compact phase summaries.
+
 ## 0.3.0 - 2026-10-09
 
 - Scope the library to prop-firm simulation from externally generated trade logs.

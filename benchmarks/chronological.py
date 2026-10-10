@@ -63,6 +63,43 @@ def main():
         tracemalloc.stop()
         print(json.dumps(dict(name=name, seconds=median(timings), peak_bytes=peak,
                               result_sha256=hashes[0])), flush=True)
+    search_comparison()
+
+
+def search_comparison():
+    import csv
+    from datetime import timedelta
+    from io import StringIO
+    from propfirm_engine import BacktestConfig, BracketHistory, DollarPolicy, Engine, PhaseSearch
+    from propfirm_engine.firms.lucidflex import replay_50k
+
+    data = generate(dict(generator="iid", win_rate=.6, rr=8, stop_loss=100,
+        trades_per_day=1, sessions=30, seed=7, start_date="2026-01-05"))["csv"]
+    history = BracketHistory.from_records(csv.DictReader(StringIO(data)))
+    spec = replay_50k(eval_fee=105.2, reset_fee=105, contract_type="micro")
+    config = BacktestConfig(0, timedelta(0), timedelta(0), timedelta(0))
+    kwargs = dict(policy=DollarPolicy.constant(100),
+                  risk_bounds={"evaluation": (50, 1000), "funded": (50, 1000)},
+                  search=PhaseSearch(trade_budget=2000, horizon_sessions=5,
+                                     stride_sessions=5, archive_size=4, population=4), seed=17)
+    hashes, rows = [], []
+    for _ in range(3):
+        results = Engine().compare_searches(spec, history, config, **kwargs)
+        output = {name: dict(policy=[r.risk_dollars for r in result.policy.regimes],
+            is_score=result.in_sample_score, oos_score=result.score,
+            trade_visits=result.work.search_trade_visits,
+            report_visits=result.work.report_trade_visits,
+            unused_budget=result.work.unused_budget) for name, result in results.items()}
+        hashes.append(sha256(json.dumps(output, sort_keys=True, allow_nan=False).encode()).hexdigest())
+        rows.append({name: r.work.search_seconds for name, r in results.items()})
+    assert len(set(hashes)) == 1
+    tracemalloc.start()
+    Engine().compare_searches(spec, history, config, **kwargs)
+    peak = tracemalloc.get_traced_memory()[1]
+    tracemalloc.stop()
+    print(json.dumps(dict(name="phase_comparison", results=output,
+        seconds={name: median(r[name] for r in rows) for name in results},
+        peak_bytes=peak, result_sha256=hashes[0])), flush=True)
 
 
 if __name__ == "__main__":

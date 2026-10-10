@@ -133,7 +133,7 @@ before interpreting results.
 
 ## Status
 
-Version 0.3.0 is a trade-log prop-firm simulator, not a market-data backtester.
+Version 0.4.0 is a trade-log prop-firm simulator, not a market-data backtester.
 It supports recorded-fill accounting, sequential bracket sizing optimization,
 account rules, repeated attempts, payouts, rolling evaluations and cash-risk
 reporting. See the [changelog](CHANGELOG.md), [design](docs/DESIGN.md) and
@@ -301,6 +301,14 @@ fit = engine.fit(
 )
 ```
 
+## Separate-phase search (experimental)
+
+For experimental separate evaluation/funded search, use `Engine.fit_phases(...)`.
+`Engine.compare_searches(...)` compares it with joint search under the same
+single-process trade-visit cap. Both select using the whole IS lifecycle and
+report untouched OOS. See the runnable [phase-search guide](docs/PHASE_SEARCH.md)
+for budgets, censoring and risk reports. `Engine.fit` remains the default.
+
 ## Rolling historical starts
 
 Keep the market sequence intact and reset the account and wallet at each selected
@@ -410,6 +418,8 @@ remains unidentified by finite simulations. See the
 | Cash distributions, ruin and bankroll | `RiskConfig`, `cash_risk_path(...)`, `risk_report(...)` |
 | Dated lifecycle Monte Carlo and ultimate cycle approximation | `Engine.ruin(...)`, `RuinConfig`, `ultimate_cycle_ruin(...)` |
 | Fit dollar regimes and evaluate held-out history | `Engine.fit(...)` |
+| Screen phases, then select a full lifecycle policy | `Engine.fit_phases(...)` |
+| Compare joint and separate search budgets | `Engine.compare_searches(...)` |
 | Resampled Monte Carlo research on trade summaries | `Engine.run(...)` |
 | Drift-aware barrier approximations | [Analytical API](docs/ANALYTICAL_MODEL.md) |
 | Explicit payout event accounting | [Payout lifecycle](docs/PAYOUT_LIFECYCLE.md) |

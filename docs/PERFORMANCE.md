@@ -18,6 +18,11 @@ risk/target workloads three times, checks identical complete-output hashes and
 unchanged requests, and reports median wall time. Peak traced Python allocation
 is measured separately to avoid including tracing overhead in timing.
 
+It also compares joint and separate-phase searches with identical trade-visit
+caps, reporting actual visits, unused budget, IS/OOS scores and repeated-output
+hashes. Timing is excluded from deterministic hashes. Neither architecture is
+assumed to win; this public fixture measures wiring and cost, not general efficacy.
+
 The portfolio benchmark measures recorded fills and valuation marks, including
 event construction. It compares N and 10N events. Search recording avoids
 retaining per-mark snapshots; accounting results and economic ledger events

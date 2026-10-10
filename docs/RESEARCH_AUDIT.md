@@ -30,6 +30,12 @@ the separate bracket-log contract and preserves recorded reward/risk ratios.
 
 ## Release checks
 
+Separate-phase search additionally checks single-attempt stopping, delayed and
+multiple funded payouts, unresolved-account reporting, distinct candidate
+selection in both directions, common-window OOS isolation, archive bounds and
+exact input-trade work accounting. Its phase metrics are horizon-specific
+screening proxies; final selection always uses the complete IS lifecycle.
+
 CI runs the unit suite on Python 3.11/3.12/3.13, minimum supported numerical
 dependencies, isolated wheel/source installation, executable documentation,
 browser integration and single-process benchmarks. The published Python bundle

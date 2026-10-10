@@ -73,6 +73,7 @@ def test_clean_wheel_and_sdist_install_without_repository_data(tmp_path):
         assert all(name.startswith("propfirm_engine/") or name.split("/", 1)[0].endswith(".dist-info") for name in names)
         assert any(name.endswith("/LICENSE") for name in names)
         assert "propfirm_engine/event_replay.py" in names
+        assert "propfirm_engine/phase_search.py" in names
         assert "propfirm_engine/strategy.py" not in names
         assert "propfirm_engine/market_replay.py" not in names
         assert "propfirm_engine/uncertainty.py" in names
@@ -86,7 +87,8 @@ def test_clean_wheel_and_sdist_install_without_repository_data(tmp_path):
         target = tmp_path / artifact.name.replace(".", "_")
         subprocess.run([sys.executable, "-m", "pip", "install", "--no-deps", "--target", str(target), str(artifact)], check=True)
         uncertainty = re.findall(r"```python\n(.*?)\n```", (ROOT / "docs/UNCERTAINTY.md").read_text(encoding="utf-8"), re.DOTALL)
-        for example in (_quickstart(), "\n".join(uncertainty)):
+        phases = re.findall(r"```python\n(.*?)\n```", (ROOT / "docs/PHASE_SEARCH.md").read_text(encoding="utf-8"), re.DOTALL)
+        for example in (_quickstart(), "\n".join(uncertainty), "\n".join(phases)):
             code = ("import sys\nfrom pathlib import Path\nsys.path.insert(0, sys.argv[1])\n"
                     "import propfirm_engine\nassert Path(propfirm_engine.__file__).resolve().is_relative_to(Path(sys.argv[1]).resolve())\n"
                     + example)

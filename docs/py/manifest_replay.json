@@ -1,5 +1,5 @@
 {
-  "bundle_sha256": "fc048c73d89ed640fd9ab7ef17950744a1b5cdbf2f8d05d6d701abeec69cdf6d",
+  "bundle_sha256": "0dcfa8f5d90a55cce394012bb0eaed9847f312197bdb140845ff61b3dc34787d",
   "files": [
     {
       "path": "numba.py",
@@ -7,7 +7,7 @@
     },
     {
       "path": "propfirm_engine/__init__.py",
-      "sha256": "c53a8361928be8bee1682af74caa1a92009eee381c5443c77150a66e66010197"
+      "sha256": "20a93696d2e965c37b71b0bb9b78c621333eb5eee3cbe878d216e6cde3297c5d"
     },
     {
       "path": "propfirm_engine/analytical.py",
@@ -47,7 +47,7 @@
     },
     {
       "path": "propfirm_engine/engine.py",
-      "sha256": "e22e1646373caed0edbc0343b6cd766b7a50b87f5cbca605412c3c76c14af0dd"
+      "sha256": "125a384042b0af8bfe53d74b74bd461d9160c5d58fbc45079375b53b64d9ba5d"
     },
     {
       "path": "propfirm_engine/enums.py",
@@ -116,6 +116,10 @@
     {
       "path": "propfirm_engine/payouts.py",
       "sha256": "594183e3ae66e3423ed867b9902dc10ff1d2f91d17a199c58bb940f695f7979a"
+    },
+    {
+      "path": "propfirm_engine/phase_search.py",
+      "sha256": "1e2746f7f56715e4852ec6040699228d037e8160372b9015663048efeaefd0ec"
     },
     {
       "path": "propfirm_engine/portfolio.py",

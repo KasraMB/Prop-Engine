@@ -200,6 +200,16 @@ class Engine:
         from .fitting import fit_holdout
         return fit_holdout(spec, history, config, **kwargs)
 
+    def fit_phases(self, spec, history, config, **kwargs):
+        """Screen phases on IS, then select a complete lifecycle policy."""
+        from .phase_search import fit_phases
+        return fit_phases(spec, history, config, **kwargs)
+
+    def compare_searches(self, spec, history, config, **kwargs):
+        """Compare joint and separate searches under the same serial work cap."""
+        from .phase_search import compare_searches
+        return compare_searches(spec, history, config, **kwargs)
+
     def rolling_backtest(self, spec, history, policy, config, *, rolling, objective=None, risk=None):
         """Fresh-account replays from complete historical session windows; no resampling."""
         from .rolling import rolling_backtest

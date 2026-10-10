@@ -19,6 +19,7 @@ market-data processing remain outside this repository.
 | `payouts.py`, `cashflows.py` | Payout events and external cash accounting |
 | `backtest.py` | Chronological lifecycle orchestration using existing components |
 | `optimizer.py`, `fitting.py` | Search and chronological held-out policy evaluation |
+| `phase_search.py` | Optional serial phase screening, bounded candidate archives and lifecycle pair selection |
 | `rolling.py` | Whole-session historical windows and compact outcomes over the same backtest engine |
 | `analytical.py` | Explicitly scoped diffusion approximations |
 | `firms/` | Account configurations; no firm-name branches in execution logic |

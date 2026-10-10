@@ -1,6 +1,6 @@
 """Prop-firm simulation from trade logs, sizing policies and attempt economics."""
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"
 
 from . import firms, statistics
 from .execution import (
@@ -13,6 +13,7 @@ from .portfolio import Book, BookState, Position
 from .event_replay import EventReplay, EventState, PayoutContext
 from .calendars import ProcessingCalendar
 from .fitting import HoldoutFit
+from .phase_search import PhaseSearch, PhaseSample, PhaseCandidate, SearchWork, PhaseFit
 from .rolling import RollingConfig, RollingWindow, RollingResult as RollingReplayResult
 from .risk import RiskConfig, CashRiskPath, cash_risk_path, risk_report
 from .uncertainty import UncertaintyConfig, uncertainty_report, paired_uncertainty, scenario_sensitivity
@@ -130,6 +131,7 @@ from .rules import (
 __all__ = [
     "UncertaintyConfig", "uncertainty_report", "paired_uncertainty", "scenario_sensitivity",
     "account_info",
+    "PhaseSearch", "PhaseSample", "PhaseCandidate", "SearchWork", "PhaseFit",
     "ReplaySupport", "check_replay",
     "PayoutContext", "ProcessingCalendar",
     "EventReplay", "EventState",
