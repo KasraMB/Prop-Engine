@@ -1,6 +1,6 @@
-"""Research simulator for futures prop-firm strategies and attempt economics."""
+"""Prop-firm simulation from trade logs, sizing policies and attempt economics."""
 
-__version__ = "0.2.4"
+__version__ = "0.3.0"
 
 from . import firms, statistics
 from .execution import (
@@ -8,24 +8,10 @@ from .execution import (
 )
 from .backtest import BacktestEvent, BacktestResult
 from .instruments import Instrument
-from .market_replay import PriceSession, PriceDecision, PriceReplay
 from .events import Fill, Marks, merge_events
 from .portfolio import Book, BookState, Position
 from .event_replay import EventReplay, EventState, PayoutContext
 from .calendars import ProcessingCalendar
-from .orders import Quote, Market, MarketSource, Order, Basket, Cancel, Amend, Abandon, OrderState, OrderEvent, QuoteModel
-from .strategy import Context, StrategyReplay, ReplayCancelled
-from .market_data import MarketTape, MarketView
-from .feeds import Bar, TradeTick, MarketFeed, bar_quotes, trade_quotes, merge_markets
-from .opportunities import Opportunity, OpportunityStrategy, OpportunityReplay
-from .randomness import RandomStream
-from .strategy_fitting import (
-    Parameter, InfeasiblePolicy, StrategyPath, StrategyEvaluation, StrategyFit,
-    StrategyTrial, StrategyCheckpoint, SearchCancelled, evaluate_strategy,
-    StrategyWalkForward, evaluate_scenarios, SearchRun, estimate_strategy_work,
-)
-from .slippage import TickDistribution, SlippageModel
-from .price_fitting import PriceEvaluation, PriceFit, evaluate_prices
 from .fitting import HoldoutFit
 from .rolling import RollingConfig, RollingWindow, RollingResult as RollingReplayResult
 from .risk import RiskConfig, CashRiskPath, cash_risk_path, risk_report
@@ -144,24 +130,11 @@ from .rules import (
 __all__ = [
     "UncertaintyConfig", "uncertainty_report", "paired_uncertainty", "scenario_sensitivity",
     "account_info",
-    "SearchRun", "estimate_strategy_work",
     "ReplaySupport", "check_replay",
-    "Basket",
-    "Opportunity", "OpportunityStrategy", "OpportunityReplay",
-    "MarketSource",
-    "Bar", "TradeTick", "MarketFeed", "bar_quotes", "trade_quotes", "merge_markets",
-    "RandomStream",
-    "StrategyWalkForward", "evaluate_scenarios",
-    "Parameter", "InfeasiblePolicy", "StrategyPath", "StrategyEvaluation", "StrategyFit",
-    "StrategyTrial", "StrategyCheckpoint", "SearchCancelled", "ReplayCancelled", "evaluate_strategy",
-    "MarketTape", "MarketView",
     "PayoutContext", "ProcessingCalendar",
-    "Quote", "Market", "Order", "Cancel", "Amend", "Abandon", "OrderState", "OrderEvent",
-    "QuoteModel", "Context", "StrategyReplay",
     "EventReplay", "EventState",
     "Fill", "Marks", "merge_events", "Book", "BookState", "Position",
-    "Instrument", "PriceSession", "PriceDecision", "PriceReplay",
-    "TickDistribution", "SlippageModel", "PriceEvaluation", "PriceFit", "evaluate_prices",
+    "Instrument",
     "RiskConfig", "CashRiskPath", "cash_risk_path", "risk_report",
     "BracketTrade", "BracketHistory", "RiskRegime", "DollarPolicy",
     "LifecycleSpec", "BacktestConfig", "BacktestEvent", "BacktestResult", "HoldoutFit",

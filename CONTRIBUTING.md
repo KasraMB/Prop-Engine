@@ -34,7 +34,6 @@ choose policies, regime definitions, hyperparameters or stopping criteria.
   runtime certification.
 - Maintained specifications and official-source evidence: `docs/`.
 - Reproducible benchmarks: `benchmarks/`. Avoid one-off variants of the same program.
-- Standalone strategy examples: `Test_Strategies/`.
 
 Make small, tested commits. Do not rewrite existing history, delete user inputs,
 or push remote changes as a side effect of local implementation.
@@ -42,13 +41,12 @@ or push remote changes as a side effect of local implementation.
 ## Release checks
 
 Run the complete suite and `python dashboard/build_pages.py`; generated browser
-sources must match the canonical package. Run the performance matrix and applicable
-hardware budget in [performance](docs/PERFORMANCE.md). CI also checks Python
+sources must match the canonical package. Run the replay benchmarks and memory checks in [performance](docs/PERFORMANCE.md). CI also checks Python
 3.11/3.12/3.13, minimum NumPy/Numba dependencies and the real browser runtime.
 
 Set `RUN_PACKAGE_TESTS=1` and run `python -m pytest tests/test_package.py -q` to
 build a source distribution and wheel, inspect their contents, install each into
-an isolated target, and run the documented fitting example outside the repository.
+an isolated target, and run the documented trade-log example outside the repository.
 The source archive includes only engine sources and required build metadata;
 Hatch also always includes `.gitignore`. No private data is needed for installation.
 

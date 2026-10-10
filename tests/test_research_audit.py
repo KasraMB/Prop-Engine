@@ -1,5 +1,5 @@
 from dataclasses import replace
-from datetime import timedelta
+from datetime import date, datetime, timedelta, timezone
 import inspect
 from types import SimpleNamespace
 
@@ -7,14 +7,16 @@ import numpy as np
 import pytest
 
 from propfirm_engine import (
-    BracketHistory, DollarPolicy, Engine, Fill, Market, MarketFeed, MarketSource,
-    MarketTape, Marks, ProfitTargetRule, Quote, RiskConfig, RollingConfig,
-    Timing, TrailingDrawdownRule, merge_markets,
+    BracketHistory, DollarPolicy, Engine, Fill, Marks, ProfitTargetRule,
+    RollingConfig, Timing, TrailingDrawdownRule,
 )
-from propfirm_engine import fitting, price_fitting, target_research
+from propfirm_engine import fitting, target_research
 from propfirm_engine.optimizer import RenewalObjective
 from test_chronological_backtest import config, session_day, spec, trade
-from test_strategy import AT, DAY, X
+
+
+AT = datetime(2026, 9, 1, 14, tzinfo=timezone.utc)
+DAY = date(2026, 9, 1)
 
 
 def _mutate(monkeypatch, module, name, old, new):
@@ -28,8 +30,8 @@ def _mutate(monkeypatch, module, name, old, new):
 
 
 def _search_check(monkeypatch, adapter, direction, mutate):
-    module = fitting if adapter in ('bracket', 'rolling') else price_fitting if adapter == 'price' else target_research
-    name = 'fit_holdout' if module is fitting else 'fit_prices' if module is price_fitting else 'fit_targets'
+    module = fitting if adapter in ('bracket', 'rolling') else target_research
+    name = 'fit_holdout' if module is fitting else 'fit_targets'
     expected = 100 if direction == 'minimize' else 300
 
     class Candidates:
@@ -56,15 +58,6 @@ def _search_check(monkeypatch, adapter, direction, mutate):
             objective=lambda r: r.final_balance, **common)
         selected = fit.policy
         assert fit.in_sample_score == 50000 + (2 if adapter == 'rolling' else 7)*(expected//100)*10
-    elif module is price_fitting:
-        from test_price_fitting import SPEC, CONFIG, INSTRUMENT, history
-        brackets = target_research.TargetPolicy(DollarPolicy.constant(100), (500, 500))
-        sessions = [replace(s, ohlc=np.array([[100,101,97,100]])) for s in history()]
-        fit = module.fit_prices(SPEC, sessions, INSTRUMENT, CONFIG, policy=brackets,
-            target_bounds={r.name: (100, 1000) for r in policy.regimes}, paths=1,
-            collision_policy='stop_first', objective=lambda r: r.final_balance,
-            **common)
-        selected = fit.policy.sizing
     else:
         from test_target_research import SPEC, CONFIG
         monkeypatch.setattr(np.random, 'default_rng', lambda seed:
@@ -77,13 +70,13 @@ def _search_check(monkeypatch, adapter, direction, mutate):
     assert selected.regimes[0].risk_dollars == expected
 
 
-@pytest.mark.parametrize('adapter', ['bracket', 'rolling', 'price', 'target'])
+@pytest.mark.parametrize('adapter', ['bracket', 'rolling', 'target'])
 @pytest.mark.parametrize('direction', ['minimize', 'maximize'])
 def test_search_orders_distinct_candidates_and_reports_the_selected_policy(monkeypatch, adapter, direction):
     _search_check(monkeypatch, adapter, direction, False)
 
 
-@pytest.mark.parametrize('adapter', ['bracket', 'rolling', 'price', 'target'])
+@pytest.mark.parametrize('adapter', ['bracket', 'rolling', 'target'])
 def test_search_assertions_reject_always_maximize_mutation(monkeypatch, adapter):
     with pytest.raises(AssertionError):
         _search_check(monkeypatch, adapter, 'minimize', True)
@@ -121,36 +114,6 @@ def test_decimal_holdout_boundary_is_exact():
     assert len(training.sessions) == 63 and len(held.sessions) == 27
 
 
-def test_price_decimal_split_and_wallet_shortfall():
-    from test_price_fitting import SPEC, CONFIG, POLICY, INSTRUMENT, history
-    sessions = []
-    from propfirm_engine import PriceSession
-    for i in range(90):
-        day = session_day(i)
-        at = AT.replace(year=day.year, month=day.month, day=day.day)
-        sessions.append(PriceSession(day, at+timedelta(minutes=1), [int(at.timestamp()*1e9)], [[100,112,99,110]]))
-    fit = price_fitting.fit_prices(SPEC, sessions, INSTRUMENT, CONFIG, policy=POLICY,
-        risk_bounds={r.name:(100,2000) for r in POLICY.sizing.regimes},
-        target_bounds={r.name:(100,3000) for r in POLICY.sizing.regimes},
-        generations=0, paths=1, collision_policy='stop_first')
-    assert len(fit.train_sessions) == 63
-    stopped = price_fitting.evaluate_prices(SPEC, history(), POLICY, INSTRUMENT,
-        replace(CONFIG, initial_wallet=100), collision_policy='stop_first')
-    assert stopped.paths[0].replay.attempts == 0
-    assert stopped.distributions['required_bankroll']['distribution']['minimum'] >= 105.2
-
-
-def test_feed_wrapping_and_merging_preserve_each_assumption():
-    points = [Market(AT+timedelta(minutes=i), (Quote('X',100,100,100),),
-                     source=MarketSource(assumptions=(str(i),))) for i in range(2)]
-    feed = MarketFeed(points, assumptions=('wrapper',))
-    merged = merge_markets(feed, ties='atomic')
-    tape = MarketTape(merged, [X], sessions=(DAY,))
-    assert {'0', '1', 'wrapper'}.issubset(tape.assumptions)
-    with pytest.raises(TypeError, match='Market'):
-        list(MarketFeed([None]))
-
-
 def test_new_eod_floor_checks_open_equity_at_the_same_close():
     from test_event_rules import run
     at = AT+timedelta(hours=6, minutes=40)
@@ -162,22 +125,6 @@ def test_new_eod_floor_checks_open_equity_at_the_same_close():
     failure, = [e for e in result.replay.events if e.kind == 'failure']
     assert failure.floor == 53000 and failure.balance == 52500
     assert failure.at == AT.replace(hour=20, minute=45)
-
-
-def test_wallet_sensitive_policies_do_not_get_fabricated_capital_thresholds():
-    from test_strategy_fitting import SPEC, CONFIG, Daily, tape, setup
-    from propfirm_engine import evaluate_strategy
-    class WalletPolicy(Daily):
-        def on_market(self, context, market):
-            if context.wallet is None or context.wallet >= 200:
-                return super().on_market(context, market)
-    result = evaluate_strategy(SPEC, tape(), replace(CONFIG, initial_wallet=100), WalletPolicy,
-        params={'quantity': 1}, setup=setup, risk=RiskConfig(bankroll=100))
-    assert result.mean_net_cash == 0
-    assert result.metrics['required_bankroll'] is None
-    assert result.metrics['ruin_probability'] is None
-    assert result.metrics['bankroll_curve'] == []
-    assert result.ultimate_ruin(bankroll=100)['status'] == 'not_identified'
 
 
 def test_summary_and_dated_payouts_share_partial_buffer_headroom():
@@ -205,7 +152,8 @@ def test_ratio_tail_resamples_reward_and_time_pairs_not_individual_rates(monkeyp
 
 
 def test_preflight_rejects_late_funded_features_before_any_evaluation():
-    from test_strategy_fitting import SPEC
+    from propfirm_engine.firms.lucidflex import replay_50k
+    SPEC = replay_50k(eval_fee=105.2, reset_fee=105, contract_type="mini")
     funded = SPEC.account.phases[1]
     changed = replace(funded, payout_schema=replace(funded.payout_schema, recompute_floor_on_payout=True))
     profile = replace(SPEC, account=replace(SPEC.account, phases=(SPEC.account.phases[0], changed)))
@@ -241,19 +189,6 @@ def test_batched_bootstrap_matches_independent_full_draw_calculation():
     expected = (sum(rates[:50]) + .1*rates[50])/50.1
     actual = RenewalObjective(cvar_q=.1, n_boot=501, boot_seed=19)._rate(reward, time)
     assert actual == pytest.approx(expected, abs=1e-12)
-
-
-def test_general_search_uses_disjoint_execution_streams_without_holdout_selection():
-    from test_strategy_fitting import fit
-    first = fit(validation_fraction=.3, seeds=(11, 22))
-    groups = [set(p.seed for p in part.paths) for part in (first.training, first.validation, first.selected)]
-    assert groups[0] == {11, 22}
-    assert all(not a & b for i, a in enumerate(groups) for b in groups[i+1:])
-    changed = fit(validation_fraction=.3, seeds=(11, 22), holdout_seeds=(99,))
-    assert changed.params == first.params and changed.trials == first.trials
-    assert {p.seed for p in changed.selected.paths} == {99}
-    with pytest.raises(ValueError, match='disjoint'):
-        fit(seeds=(11,), holdout_seeds=(11,))
 
 
 def test_model_input_identity_is_independent_of_wallet_truncation():

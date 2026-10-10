@@ -1,7 +1,7 @@
 # Propfirm Engine
 
-A Python engine for replaying trading strategies through futures prop-firm
-accounts and optimizing account-state-dependent position sizing.
+A Python engine for evaluating externally generated trade logs against futures
+prop-firm rules and optimizing account-state-dependent position sizing.
 
 **One account at a time, repeated attempts, explicit cashflows, untouched
 out-of-sample reporting.** LucidFlex 50K DLL-off is the first reference profile;
@@ -10,9 +10,10 @@ firm rules and lifecycle settings remain separate from execution and optimizatio
 ## Getting started
 
 Use this as a Python library, not a broker/platform plugin. Import it into your
-research project; keep your strategy and market-data loader outside the engine.
-The [dashboard](#dashboard) is a separate interface for bracket experiments, not
-the full general strategy API.
+research project and supply trades produced by your own strategy backtester.
+The engine handles account rules, sizing, payouts and cash risk. It does not
+consume market bars, generate orders or decide strategy entries and exits.
+The [dashboard](#dashboard) provides trade-history and model-based experiments.
 
 ### Install
 
@@ -32,62 +33,48 @@ python -m pip install .
 ```
 
 For engine development, use `python -m pip install -e ".[dev]"` instead, then
-`python -m pytest -q`. Optional DuckDB/calendar experiments need
-`python -m pip install ".[research]"`. Neither the engine nor the example below
-needs private market data. Record the Git revision with your research results.
+`python -m pytest -q`. No market-data dependencies or private datasets are required.
+Record the Git revision with your research results.
 
 ### Choose your input
 
-| What you have or want | Use | Guide |
+| Input | API | Guide |
 | --- | --- | --- |
-| Strategy code that places orders on market observations | `Engine.replay_strategy` | [Strategies and orders](docs/STRATEGY_REPLAY.md) |
-| Optimize that strategy's sizing, targets or other declared parameters | `Engine.fit_strategy` | [Fitting and OOS results](docs/STRATEGY_FITTING.md) |
-| Already-executed fills, arbitrary exits and ordered portfolio marks | `Engine.replay_events` | [Recorded events](docs/EVENT_REPLAY.md) |
-| External signals, quote/trade/bar adapters or multi-asset orders | `Engine.replay_opportunities`, market adapters | [Market inputs](docs/MARKET_INPUTS.md) |
-| Sequential trades that ended exactly at their stop or target | `Engine.backtest`, `Engine.fit` | [Bracket replay](docs/BRACKET_BACKTEST.md) |
-| Minute bars with fixed-size, adjustable dollar brackets | `Engine.backtest_prices`, `Engine.fit_prices` | [Price replay](docs/PRICE_REPLAY.md) |
+| Recorded fills with arbitrary exits, partial exits or concurrent positions | `Engine.replay_events` | [Trade/fill logs](docs/EVENT_REPLAY.md) |
+| Sequential completed stop-or-target trades for dollar sizing optimization | `Engine.backtest`, `Engine.fit` | [Bracket trade logs](docs/BRACKET_BACKTEST.md) |
 
-For new strategy development, start with the first two rows. Recorded fills
-cannot regenerate alternative exits; closed-trade P&L alone cannot establish
-intraday breach behavior. Declare the data fidelity and execution assumptions.
+Both long and short recorded trades are supported. Fill logs retain their actual
+quantities, exit prices and fees. Bracket logs retain their realized outcomes
+and original reward-to-risk ratios while the sizing policy changes quantities.
 
-### Run your first strategy
+Ordered valuation marks are additional evidence for open-position drawdown
+checks, not strategy inputs. Closed P&L alone cannot reveal an intratrade breach.
+The engine does not reconstruct missing paths or regenerate exits.
 
-Save this as `example.py` and run `python example.py`. It uses three synthetic
-observations, one mini contract and a signal-based exit. No stop/target is required.
-Fees and zero processing delays are illustrative scenarios, not current quotes.
+### Evaluate a recorded trade
+
+Save this as `example.py` and run `python example.py`. These are already-executed
+entry and exit fills, not signals. Fees and zero processing delays are illustrative.
 
 ```python
 from datetime import date, datetime, timedelta, timezone
-from propfirm_engine import (
-    BacktestConfig, Engine, Instrument, Market, Order, Quote, QuoteModel,
-)
+from propfirm_engine import BacktestConfig, Engine, Fill, Instrument
 from propfirm_engine.firms.lucidflex import replay_50k
 
-class Example:
-    def __init__(self):
-        self.step = 0
-
-    def on_market(self, context, market):
-        self.step += 1
-        if self.step == 1:
-            return [Order("entry", "ES", 1)]
-        if self.step == 2:
-            return [Order("exit", "ES", -1, reduce_only=True)]
-
 at = datetime(2026, 9, 1, 14, tzinfo=timezone.utc)
-markets = [Market(at + timedelta(minutes=i), (Quote("ES", p, p, p),))
-           for i, p in enumerate((6000, 6001, 6003))]
+fills = [
+    Fill(at, "ES", 1, 6001, fee=2),
+    Fill(at + timedelta(minutes=1), "ES", -1, 6003, fee=2),
+]
 spec = replay_50k(eval_fee=105.20, reset_fee=105, contract_type="mini")
 config = BacktestConfig(0, timedelta(0), timedelta(0), timedelta(0))
-result = Engine().replay_strategy(
-    spec, markets, [Instrument("ES", point_value=50, tick_size=.25)],
-    config, Example(), sessions=(date(2026, 9, 1),),
-    fidelity="observed_marks", models={"ES": QuoteModel(fee=2)},
-    max_mark_age=timedelta(minutes=2), liquidation_fee=2,
+result = Engine().replay_events(
+    spec, fills, [Instrument("ES", point_value=50, tick_size=.25)], config,
+    sessions=(date(2026, 9, 1),), fidelity="observed_marks",
+    mark_fills=True, max_mark_age=timedelta(minutes=2), liquidation_fee=2,
 )
-print(f"Account balance: {float(result.result.book.balance):.2f}")
-print(f"External net cash: {result.result.replay.net_cash:.2f}")
+print(f"Account balance: {float(result.book.balance):.2f}")
+print(f"External net cash: {result.replay.net_cash:.2f}")
 ```
 
 Expected output:
@@ -97,11 +84,10 @@ Account balance: 50096.00
 External net cash: -105.20
 ```
 
-The entry fills on the second observation at 6001 and the exit on the third at
-6003. Gross trading profit is $100, less $4 in fill fees. External cash is still
-negative because the evaluation cost $105.20 and no payout was received. Account
-balance and spendable cash are different. Inspect `result.orders` for execution
-feedback and `result.result.replay.events` for the account/cash ledger.
+Gross trading profit is $100, less $4 in fill fees. External cash is negative
+because the evaluation cost $105.20 and no payout was received. Inspect
+`result.replay.events` for the account and cash ledger. This short example
+demonstrates accounting, not sufficient intratrade observation coverage.
 
 ### Inspect the firm's rules
 
@@ -127,64 +113,44 @@ Every call returns the report as text; `print_output=False` suppresses printing.
 `Account`, including custom multi-stage profiles. An `Account` alone lacks dated
 lifecycle settings. Reports read configured values, not a separate rule table.
 Assumptions and source links are labelled; this is not a live website lookup or
-an executor-support check. Fill models and callback/calendar overrides remain
+an input-support check. Withdrawal and calendar overrides remain
 separate inputs and are not inferred from `spec` or `config`.
 
 ### Optimize and read the results
 
-Continue with the complete runnable [strategy fitting example](docs/STRATEGY_FITTING.md#example).
-It prepares a shared `MarketTape`, declares parameter bounds, creates fresh
-strategy/execution state per run, fits on IS and reports the frozen policy on OOS.
+Use the [trade-history sizing example](#optimize-on-70-report-on-30) below.
+`Engine.fit` selects dollar-risk regimes using the first 70% of complete sessions
+and reports the frozen policy on the remaining 30%. The chosen objective does
+not remove other reported performance metrics.
 
-- `fit.params`: selected parameters; `fit.score` and `fit.metrics`: OOS results.
-- `fit.baseline`: the initial parameters on the same OOS observations.
-- `fit.training` and `fit.validation`: selection diagnostics, not OOS claims.
-- `fit.metrics["distributions"]`: cash/day, total cash and other performance
-  distributions, regardless of the chosen optimization objective.
-- Capital and counterfactual ruin estimates require `wallet_invariant=True` only
-  when your strategy and execution decisions truly satisfy that contract.
+Recorded fills are evaluated as supplied; they are not automatically rescaled
+or retargeted. The sizing optimizer uses the explicit bracket-log contract.
+Joint risk/target search is available as a separate synthetic outcome model,
+not as a way to infer new exits from a closed trade log.
 
-Use inner validation for model selection and reserve an untouched final holdout.
-One short replay proves API wiring, not profitability or a reliable ruin estimate.
-See the [research checklist](docs/RESEARCH_AUDIT.md#research-use-checklist) before
-interpreting results, and the [API map](#api-map) for other entry points.
+See the [research checklist](docs/RESEARCH_AUDIT.md#research-use-checklist)
+before interpreting results.
 
 ## Status
 
-Version 0.2.4 provides general order and portfolio research execution under the
-[research engine plan](docs/RESEARCH_ENGINE_PLAN.md). Recorded fills and ordered
-portfolio marks now support arbitrary exits, partials and concurrent instruments
-through `Engine.replay_events`. See the [event replay API](docs/EVENT_REPLAY.md)
-for its explicit observation and liquidation assumptions. Causal strategy
-callbacks and quote-based orders are available through `Engine.replay_strategy`;
-see the [strategy API](docs/STRATEGY_REPLAY.md). `Engine.fit_strategy` adds shared
-market tapes, declared parameter search, chronological OOS, rolling windows and
-walk-forward refits. See [strategy fitting](docs/STRATEGY_FITTING.md). Additional
-input adapters include external opportunities, explicit bar/trade scenarios and
-atomic or legged multi-instrument orders. See [market inputs](docs/MARKET_INPUTS.md).
-See the [changelog](CHANGELOG.md) and measured [performance gates](docs/PERFORMANCE.md).
-The [research audit](docs/RESEARCH_AUDIT.md) records correctness findings, repairs,
-independent tests and the limits of research confidence. General strategy capital
-estimates require an explicit wallet-invariance declaration; see the fitting guide.
+Version 0.3.0 is a trade-log prop-firm simulator, not a market-data backtester.
+It supports recorded-fill accounting, sequential bracket sizing optimization,
+account rules, repeated attempts, payouts, rolling evaluations and cash-risk
+reporting. See the [changelog](CHANGELOG.md), [design](docs/DESIGN.md) and
+[performance checks](docs/PERFORMANCE.md).
 
-The bracket API implements the agreed **sequential stop-or-target model**.
-It reuses the existing rule interpreter, feasibility projection, payout ledger,
-and CMA-ES optimizer. It does not reconstruct market paths from closed trades.
+Recorded fills support arbitrary exits, partials, reversals and concurrent
+instruments. Read the [event contract](docs/EVENT_REPLAY.md) for required marks,
+session calendars and rule-triggered liquidation assumptions.
 
-This is **not a claim of complete contractual or live-execution fidelity**.
-The consistency cushion is intentionally excluded; fills and processing delays
-are explicit scenarios. Live-account valuation, discretionary reviews, holidays
-and platform-specific agreements need additional treatment.
-Read the [execution contract](docs/BRACKET_BACKTEST.md) before relying on results.
+The bracket API implements a sequential stop-or-target input contract. It reuses
+the rule interpreter, feasibility projection, payout ledger and CMA-ES optimizer.
+It does not reconstruct market paths from closed trades.
 
-An explicit minute-OHLC approximation also supports state-dependent dollar
-brackets at fixed contract count, gap fills and timed session exits. See the
-[historical price replay guide](docs/PRICE_REPLAY.md) for the API and the
-DuckDB-backed 09:30 versus 18:00 long-only experiment.
-
-Price replay also supports explicit state-dependent slippage scenarios,
-slippage-aware brackets, and joint dollar risk/target fitting through
-`Engine.fit_prices`. See [execution scenarios and fitting](docs/PRICE_REPLAY.md#execution-scenarios-and-price-policy-fitting).
+This is not a claim of complete contractual fidelity. The consistency cushion
+is intentionally excluded; processing delays and liquidation assumptions are
+explicit scenarios. Live-account valuation, discretionary reviews and unknown
+agreements are not inferred.
 
 ## Research state-dependent risk and targets
 
@@ -220,8 +186,7 @@ engine handles consistency, winning days, drawdown, payouts, fees and restarts.
 The assumed clock is one completed bracket per available session, **not simulated
 market passage time**. The 70/30 split here is independent model paths, not
 historical IS/OOS. Read [assumptions and verification](docs/ANALYTICAL_MODEL.md#joint-risk-and-target-research)
-before interpreting the cash/day result. For a separate historical minute-bar
-test with explicit execution assumptions, see [price replay](docs/PRICE_REPLAY.md).
+before interpreting the cash/day result.
 
 To search from a flat $500/$500 policy without supplying the example as a seed:
 
@@ -439,13 +404,6 @@ remains unidentified by finite simulations. See the
 | Print configured firm rules and research assumptions | `firms.lucidflex.info(...)`, `Engine.info(...)`, `account_info(...)` |
 | Check account/input support before running | `Engine.check_replay(...)` |
 | Replay arbitrary recorded fills and portfolio marks | `Engine.replay_events(...)` |
-| Run causal strategies with orders and execution models | `Engine.replay_strategy(...)` |
-| Replay external opportunities through an order policy | `Engine.replay_opportunities(...)` |
-| Prepare shared market inputs for repeated research | `MarketTape(...)` |
-| Fit general strategy parameters with chronological OOS | `Engine.fit_strategy(...)` |
-| Refit across chronological walk-forward folds | `Engine.walk_strategy(...)` |
-| Evaluate frozen strategies and complete market scenarios | `evaluate_strategy(...)`, `evaluate_scenarios(...)` |
-| Replay, evaluate and fit long/short dollar brackets on price bars | `Engine.backtest_prices(...)`, `Engine.evaluate_prices(...)`, `Engine.fit_prices(...)` |
 | Import sequential stop/target records | `BracketHistory.from_records(...)` |
 | Replay dated account attempts | `Engine.backtest(...)` |
 | Evaluate ordered historical starting windows | `Engine.rolling_backtest(...)` |
@@ -464,7 +422,7 @@ ideal sequential stop/target contract; it does not relabel arbitrary MAE data.
 ## Uncertainty
 
 Results distinguish outcome dispersion from uncertainty in an estimated mean.
-Use `result.uncertainty` for chronological, rolling, strategy and price results;
+Use `result.uncertainty` for chronological, rolling and recorded-fill results;
 cash risk reports include it under `report["uncertainty"]`. Independent model
 paths receive conditional mean standard errors. Overlapping historical windows
 and selected training samples do not receive naive confidence intervals.
@@ -531,7 +489,6 @@ required. See [dashboard setup and deployment](dashboard/README.md).
 - `src/propfirm_engine/`: canonical package, generic rules, execution and optimization.
 - `tests/`: boundary, independent hand-calculation, leakage and regression tests.
 - `docs/`: maintained API contracts, model limitations and browser distribution.
-- `Test_Strategies/`: standalone input producers; strategies are not engine API features.
 - `benchmarks/`: reproducible performance/model-comparison programs, not scratch scripts.
 - `dashboard/`: chronological replay, holdout fitting and account trace with a shared adapter.
 

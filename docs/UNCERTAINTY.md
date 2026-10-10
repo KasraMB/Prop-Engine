@@ -5,7 +5,7 @@ whether the simulator's assumptions match future trading.
 
 ## What is reported
 
-- One reporting contract across cash-risk, historical replay, price evaluation
+- One reporting contract across cash-risk, historical replay, recorded fills
   and target-model results.
 - Cheap default reports: observed sample dispersion, conditional standard errors
   when independence is declared, and explicit reasons for withheld inference.
@@ -60,7 +60,7 @@ count and check stability, especially at high confidence levels.
 | `sample_kind` | Meaning | Mean inference |
 | --- | --- | --- |
 | `independent_model` | Independent paths from a fixed declared model | IID mean SE, optional IID bootstrap |
-| `execution_model` | Independent execution draws on the same price history | Same calculation, execution uncertainty only |
+| `execution_model` | Externally supplied independent execution scenarios on the same history | Same calculation, execution uncertainty only |
 | `historical_series` | Ordered, equally spaced scalar observations | Optional circular block bootstrap with explicit block length |
 | `historical_windows` | Dependent/overlapping historical starts | Descriptive only |
 | `single_history` | One observed replay | Descriptive only |
@@ -133,7 +133,7 @@ print(report["metrics"]["net_cash"])
 The difference is selected minus baseline. Rows must refer to the same scenarios
 in the same order and at the same horizon. Pairing is an input contract; equal
 array lengths alone cannot prove correct alignment. Missingness in either side
-suppresses inference. Target/price fit reports orient `objective_gain` so positive
+suppresses inference. Target fit reports orient `objective_gain` so positive
 means improvement for either maximization or minimization.
 
 Keep a genuinely untouched holdout. The selected policy's training report has
@@ -165,14 +165,9 @@ question and must be labelled separately.
 ## Result access
 
 - `BacktestResult.uncertainty`: single chronological replay, no inference.
-- `EventReplay`, `StrategyReplay`, `PriceReplay`: delegate `.uncertainty` to
-  their single chronological account replay.
+- `EventReplay.uncertainty`: delegates to its single chronological account replay.
 - `RollingReplayResult.uncertainty`: window/objective dispersion, no IID claims.
-- `StrategyEvaluation.uncertainty` and `.metrics["uncertainty"]`: cash and portfolio
-  metrics under the declared scenario design; ordinary history stays descriptive.
-- `StrategyFit.uncertainty` and `HoldoutFit.uncertainty`: selected OOS result.
-- `PriceEvaluation.uncertainty`: conditional execution mean SE for all metrics.
-- `PriceFit.uncertainty`: OOS and paired objective gain, execution-only.
+- `HoldoutFit.uncertainty`: selected OOS result.
 - `ResearchSummary.uncertainty`: objective, net cash and cash/day model mean SE.
 - `TargetFit.uncertainty`: model holdout and paired objective gain.
 - `risk_report(...)["uncertainty"]`: mean report for the existing cash distributions.

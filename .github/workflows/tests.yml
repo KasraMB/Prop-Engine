@@ -68,22 +68,14 @@ jobs:
         with:
           python-version: '3.12'
       - run: python -m pip install -e ".[dev]"
-      - run: python benchmarks/research.py --repeat 3 --cold > performance.json
-      - name: Check recording overhead
+      - run: python benchmarks/chronological.py > performance.jsonl
+      - run: python benchmarks/portfolio.py --mode replay --events 1000 --recording search > portfolio.json
+      - name: Check streaming memory
         run: |
-          python -c 'import json; r=json.load(open("performance.json"))["results"]; assert r["quote_search"]["peak_python_bytes"] < .85*r["quote_research"]["peak_python_bytes"]; assert r["quote_search"]["warm_median_seconds"] < 2.5*r["quote_research"]["warm_median_seconds"]'
+          python -c 'import json; a,b=json.load(open("portfolio.json"))["results"]; assert b["peak_python_bytes"] < 3*a["peak_python_bytes"]'
       - uses: actions/upload-artifact@v4
         with:
           name: performance
-          path: performance.json
-
-  research:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-      - run: python -m pip install -e ".[dev,research]"
-      - run: python -c "import duckdb, pandas, pandas_market_calendars, pytz"
-      - run: python -m pytest tests/test_open_long_data.py tests/test_zero_drift.py -q -rs
+          path: |
+            performance.jsonl
+            portfolio.json

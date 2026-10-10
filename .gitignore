@@ -35,8 +35,7 @@ coverage.xml
 /Data/
 /research/
 /results/
-/Test_Strategies/results/
-/Test_Strategies/*.csv
+/Test_Strategies/
 files.zip
 *.log
 

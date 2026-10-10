@@ -97,9 +97,9 @@ While a payout is pending, recorded fills are skipped. Retries start no earlier
 than the next observed session. If an entry was skipped or an account was
 liquidated, its later source exit cannot become a new opposite position. The
 adapter waits for the entire recorded source portfolio to become flat before
-following another entry. This can skip multiple instruments together. Strategies
-whose future signals depend on fills or account outcomes need the future callback
-adapter, not this recorded-history assumption.
+following another entry. This can skip multiple instruments together. Future
+signals are not regenerated when the account skips a trade. A supplied log must
+be appropriate for that fixed-history assumption.
 
 ## Results and performance
 
@@ -152,7 +152,7 @@ largest-day statistic resets after approval. Withdrawals are not trading losses.
 The portfolio executor, not the payout ledger's closed balance alone, decides
 whether open equity breached a rule.
 
-Optional replay arguments apply to both recorded events and strategy replay:
+Optional recorded-replay arguments:
 
 - `withdrawal(context)` receives immutable `PayoutContext` with balance, floor,
   maximum eligible amount, cycle profit, qualifying days and payout count.
@@ -166,10 +166,8 @@ Optional replay arguments apply to both recorded events and strategy replay:
   then roll forward into an open processing interval. Closing time is exclusive.
   This is not a business-duration counter or a built-in holiday service.
 
-Unsupported rule combinations are still rejected. Broader execution adapters
-remain on the roadmap. The
-legacy bracket API retains its narrower guards rather than treating a closed
-summary as an observed intraday path.
+Unsupported rule combinations are still rejected. The bracket API retains its
+narrower guards rather than treating a closed summary as an observed intraday path.
 
 An account may declare multiple uniquely named evaluation phases followed by at
 most one funded phase. Observation replay executes them in that order, resetting

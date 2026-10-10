@@ -180,11 +180,6 @@ class Engine:
         from .backtest import backtest
         return backtest(spec, history, policy, config)
 
-    def backtest_prices(self, spec, sessions, policy, targets, instrument, config, **kwargs):
-        """Fixed-position price replay; explicitly select an OHLC collision policy."""
-        from .market_replay import replay_prices
-        return replay_prices(spec, sessions, policy, targets, instrument, config, **kwargs)
-
     def replay_events(self, spec, events, instruments, config, **kwargs):
         """Recorded fills and portfolio marks on the chronological account lifecycle."""
         from .event_replay import replay_events
@@ -195,40 +190,10 @@ class Engine:
         from .capabilities import check_replay
         return check_replay(spec, **kwargs)
 
-    def replay_strategy(self, spec, markets, instruments, config, strategy, **kwargs):
-        """Run an external causal strategy against explicit quote execution models."""
-        from .strategy import replay_strategy
-        return replay_strategy(spec, markets, instruments, config, strategy, **kwargs)
-
-    def fit_strategy(self, spec, tape, config, factory, **kwargs):
-        """Optimize declared causal strategy parameters on IS; report OOS metrics."""
-        from .strategy_fitting import fit_strategy
-        return fit_strategy(spec, tape, config, factory, **kwargs)
-
-    def replay_opportunities(self, spec, markets, instruments, config, opportunities, policy, **kwargs):
-        """Deliver causal external opportunities to a resizable order policy."""
-        from .opportunities import replay_opportunities
-        return replay_opportunities(spec, markets, instruments, config, opportunities, policy, **kwargs)
-
-    def walk_strategy(self, spec, tape, config, factory, **kwargs):
-        """Chronological refits with fresh account state for each OOS fold."""
-        from .strategy_fitting import walk_strategy
-        return walk_strategy(spec, tape, config, factory, **kwargs)
-
     def ruin(self, spec, history, policy, config, **kwargs):
         """Fixed-policy bootstrap funding risk and labelled ultimate cycle approximation."""
         from .ruin import bootstrap_ruin
         return bootstrap_ruin(spec, history, policy, config, **kwargs)
-
-    def fit_prices(self, spec, sessions, instrument, config, **kwargs):
-        """IS-only joint risk/target optimization on replayable prices."""
-        from .price_fitting import fit_prices
-        return fit_prices(spec, sessions, instrument, config, **kwargs)
-
-    def evaluate_prices(self, spec, sessions, policy, instrument, config, **kwargs):
-        """Evaluate a fixed risk/target policy on long, short or mixed sessions."""
-        from .price_fitting import evaluate_prices
-        return evaluate_prices(spec, sessions, policy, instrument, config, **kwargs)
 
     def fit(self, spec, history, config, **kwargs):
         """Fit named dollar regimes on IS; headline results come only from OOS."""

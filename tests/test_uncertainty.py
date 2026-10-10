@@ -203,31 +203,6 @@ def test_target_training_is_descriptive_and_holdout_se_matches_raw_values():
     assert gain["mean"] == 3 and gain["mean_standard_error"] == 1
 
 
-def test_price_fit_labels_training_and_conditions_on_execution():
-    from test_price_fitting import fit, MODEL
-    result = fit(generations=0, paths=3, slippage=MODEL)
-    assert result.in_sample.uncertainty["selected_on_sample"]
-    assert result.out_of_sample.uncertainty["sample_kind"] == "execution_model"
-    assert result.uncertainty["holdout"] == result.out_of_sample.uncertainty
-    assert "same historical market tape" in result.uncertainty["holdout"]["scope"]
-    assert result.out_of_sample.paths[0].replay.uncertainty["sample_kind"] == "single_history"
-    assert result.out_of_sample.paths[0].uncertainty == result.out_of_sample.paths[0].replay.uncertainty
-    changed = replace(result, direction="minimize",
-        out_of_sample=replace(result.out_of_sample, objective_values=(1., 4.)),
-        baseline_out_of_sample=replace(result.baseline_out_of_sample, objective_values=(3., 8.)))
-    gain = changed.uncertainty["paired_gain"]["metrics"]["objective_gain"]
-    assert gain["mean"] == 3 and gain["mean_standard_error"] == 1
-
-
-def test_strategy_reports_retain_cash_and_portfolio_metrics():
-    from test_strategy_fitting import fit
-    result = fit()
-    assert result.training.uncertainty["selected_on_sample"]
-    assert result.uncertainty == result.selected.uncertainty
-    assert {"balance", "net_cash", "net_cash_per_day"} <= result.uncertainty["metrics"].keys()
-    assert all(m["mean_standard_error"] is None for m in result.uncertainty["metrics"].values())
-
-
 def test_rolling_and_holdout_do_not_invent_independent_observations():
     from test_rolling_backtest import inputs
     from propfirm_engine import RollingConfig
@@ -256,12 +231,10 @@ def test_legacy_results_require_an_explicit_sampling_design():
 
 def test_replay_wrappers_forward_single_history_report():
     from test_rolling_backtest import inputs
-    from propfirm_engine import EventReplay, StrategyReplay
+    from propfirm_engine import EventReplay
     replay = Engine().backtest(*inputs())
     events = EventReplay(replay, None, (), 0, 0, 0)
-    strategy = StrategyReplay(events, ())
     assert events.uncertainty is replay.uncertainty
-    assert strategy.uncertainty is replay.uncertainty
 
 
 def test_reports_are_json_serializable_with_no_nonfinite_numbers():

@@ -4,8 +4,8 @@ The package separates strategy inputs, account mechanics, execution assumptions,
 cashflows and policy optimization. Strategies are external input producers.
 The initial operating scope is one active account with repeated attempts.
 
-The [research engine plan](RESEARCH_ENGINE_PLAN.md) tracks the migration to
-general event replay, portfolio execution and measured performance budgets.
+The engine consumes externally produced trade logs. Strategy backtesting and
+market-data processing remain outside this repository.
 
 ## Components
 
@@ -39,10 +39,8 @@ staleness policy. Snapshots are optional and immutable. Closed lots are discarde
 there is no retained execution history unless a caller records it.
 
 `Engine.replay_events` applies the shared account lifecycle to recorded fills.
-`Engine.replay_strategy` adds causal callbacks and quote-based order execution.
-Both keep explicit observation and liquidation assumptions. `Engine.backtest`
-remains the sequential bracket adapter. Broader rule and optimization work is
-tracked in the research engine plan.
+Recorded fills keep explicit observation and rule-liquidation assumptions.
+`Engine.backtest` remains the sequential bracket-log adapter.
 
 `Engine.backtest` processes an immutable sequential stop/target history.
 `Engine.fit` selects named dollar-risk regimes on IS and reports the frozen

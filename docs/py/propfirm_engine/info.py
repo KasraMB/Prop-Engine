@@ -135,9 +135,9 @@ def _report(spec, config=None, *, title=None, sources=(), unknown_fees=(), notes
         lines.extend(_fields(config))
         lines.append("  Initial wallet not set means unrestricted funding, not zero capital.")
     lines.extend([
-        "  Strategy/event fill fees, slippage, liquidity, mark basis, calendars and callback overrides are separate inputs.",
-        "  Recorded replay uses supplied fill fees; strategy replay uses execution-model fees.",
-        "  BacktestConfig trading costs apply to bracket/price adapters, not recorded/strategy fills.",
+        "  Recorded fill prices/fees, valuation marks, calendars and payout overrides are separate inputs.",
+        "  Recorded replay uses supplied fill fees; bracket replay uses configured trading costs.",
+        "  BacktestConfig trading costs apply to bracket logs, not recorded fills.",
         "  CONTINUOUS checks only supplied observations; sparse data cannot certify an unseen price path.",
         "  This report does not validate executor support. Use Engine.check_replay for dated preflight.",
         "", "Assumptions and limitations",

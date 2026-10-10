@@ -43,21 +43,6 @@ class BacktestEvent:
 
 
 @dataclass(frozen=True)
-class _ResolvedExecution:
-    """Internal price-adapter result; dollar values are gross per contract.
-
-    Zero quantity denotes a buffer too small for the requested fixed position.
-    The adapter must stop its price scan at the first exit, never use later lows.
-    """
-
-    exit_at: datetime
-    quantity: int
-    stop_loss: float
-    pnl: float
-    low: float
-
-
-@dataclass(frozen=True)
 class BacktestResult:
     """Observed cash economics, NOT an unbiased population-EV estimate."""
 
@@ -145,7 +130,7 @@ class _Replay:
     """Coordinates existing rules, feasibility projection and dated payout accounting."""
 
     def __init__(self, spec, history, policy, config, *, bracket_factory=None,
-                 execution_factory=None, session_closes=None, sessions=None):
+                 session_closes=None, sessions=None):
         self.spec, self.history, self.policy, self.config = spec, history, policy, config
         self.fixed_cost = Fraction(str(config.cost_per_trade))
         self.contract_cost = Fraction(str(config.cost_per_contract))
@@ -154,9 +139,6 @@ class _Replay:
         self.activity_threshold = Fraction(str(spec.activity_threshold))
         # Internal research hook; the public historical API never retargets trades.
         self.bracket_factory = bracket_factory
-        if bracket_factory is not None and execution_factory is not None:
-            raise ValueError("choose either bracket or resolved-price execution")
-        self.execution_factory = execution_factory
         self.session_closes = dict(session_closes or {})
         compiled = self.check_support(spec)
         self.phase_list = compiled.phases
@@ -435,28 +417,6 @@ class _Replay:
         )
         if regime.risk_dollars == 0:
             self.emit(trade.entry_at, "policy_skip", regime=regime.name)
-            return
-        if self.execution_factory is not None:
-            fill = self.execution_factory(trade, regime, self, day_index)
-            if fill is None:
-                self.emit(trade.entry_at, "execution_skip", regime=regime.name)
-                return
-            if not isinstance(fill, _ResolvedExecution):
-                raise TypeError("execution factory must return a resolved execution")
-            if type(fill.quantity) is not int or fill.quantity < 0:
-                raise ValueError("resolved quantity must be a nonnegative integer")
-            if fill.quantity == 0:
-                self.fail(trade.entry_at, "CAPPED_OUT", regime=regime.name)
-                return
-            if (fill.exit_at.tzinfo is None or not trade.entry_at < fill.exit_at <= self.close_at(trade.session)
-                    or fill.quantity > self.limit or fill.stop_loss <= 0
-                    or not all(isfinite(x) for x in (fill.stop_loss, fill.pnl, fill.low))
-                    or fill.low > min(0, fill.pnl)):
-                raise ValueError("invalid resolved execution")
-            planned_loss = (Fraction(str(fill.stop_loss)) + self.contract_cost) * fill.quantity + self.fixed_cost
-            if planned_loss > min(self.risk_budgets[regime.name], sim.equity - sim.dd_floor):
-                raise ValueError("resolved execution exceeds the pre-trade risk budget")
-            self.settle_trade(trade, day_index, regime, fill.quantity, fill.pnl, fill.low, fill.exit_at)
             return
         if self.bracket_factory is not None:
             trade = self.bracket_factory(trade, regime, self, day_index)

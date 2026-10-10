@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "propfirm_engine"
-version = "0.2.4"
+version = "0.3.0"
 description = "A research simulator for futures prop-firm strategies, sizing policies and repeated-attempt economics."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -17,12 +17,6 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-research = [
-    "duckdb>=1.1",
-    "pandas>=2.2",
-    "pandas-market-calendars>=5.0",
-    "pytz>=2024.1",
-]
 dev = [
     "pytest>=8.0",
     "build>=1.2",

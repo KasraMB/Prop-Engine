@@ -335,7 +335,7 @@ class _EventReplay(_Replay):
             exposure = sum(abs(self.book.quantity(s)) * u for s, u in self.units.items())
             exposure += (abs(held + event.quantity) - abs(held)) * self.units[event.symbol]
             if exposure > self.limit:
-                raise ValueError("recorded fill exceeds the account contract limit; resizing needs a strategy adapter")
+                raise ValueError("recorded fill exceeds the account contract limit; supply a compliant trade log")
             self.source_book.apply(event)
             self.fill_count += 1
             self.settle(event, day)

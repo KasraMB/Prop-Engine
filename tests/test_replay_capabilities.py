@@ -5,12 +5,14 @@ import pytest
 
 from propfirm_engine import Engine, UnsupportedInputCapabilityError
 from propfirm_engine.firms.lucidflex import RULE_VERSION, SOURCES
-from test_strategy_fitting import SPEC
+from propfirm_engine.firms.lucidflex import replay_50k
+
+SPEC = replay_50k(eval_fee=105.2, reset_fee=105, contract_type="mini")
 
 
 def test_general_replay_declares_data_capabilities_and_profile_boundaries():
-    report = Engine().check_replay(SPEC, features=("atomic_baskets", "partial_exits"))
-    assert report.adapter == "strategy"
+    report = Engine().check_replay(SPEC, features=("multi_asset", "partial_exits"))
+    assert report.adapter == "recorded"
     assert "observed_equity" in report.features
     with pytest.raises(UnsupportedInputCapabilityError, match="overnight"):
         Engine().check_replay(SPEC, features=("overnight",))
@@ -24,6 +26,12 @@ def test_recorded_fills_do_not_silently_enable_retargeting_or_quote_models():
         Engine().check_replay(SPEC, adapter="recorded", fidelity="ohlc_path")
     with pytest.raises(UnsupportedInputCapabilityError):
         Engine().check_replay(SPEC, features=("exact_intrabar",))
+
+
+@pytest.mark.parametrize("adapter", ["strategy", "opportunities", "prices"])
+def test_market_adapters_are_not_supported(adapter):
+    with pytest.raises(UnsupportedInputCapabilityError, match="recorded fills"):
+        Engine().check_replay(SPEC, adapter=adapter)
 
 
 def test_reference_profile_is_versioned_with_official_only_evidence():

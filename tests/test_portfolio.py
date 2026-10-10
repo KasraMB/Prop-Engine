@@ -83,9 +83,9 @@ def test_snapshot_retains_mark_age_and_does_not_change():
 
 def test_public_exports_preserve_instrument_import():
     from propfirm_engine import Book as PublicBook, Fill as PublicFill, Marks as PublicMarks
-    from propfirm_engine.market_replay import Instrument as PriceInstrument
+    from propfirm_engine import Instrument as PublicInstrument
     assert PublicBook is Book and PublicFill is Fill and PublicMarks is Marks
-    assert PriceInstrument is Instrument
+    assert PublicInstrument is Instrument
 
 
 def test_invalid_mark_batch_leaves_all_state_unchanged():

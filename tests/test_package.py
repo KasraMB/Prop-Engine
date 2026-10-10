@@ -20,8 +20,8 @@ def _quickstart():
     assert examples
     example = "\n".join(examples)
     return example + (
-        "\nassert result.result.book.balance == 50096\n"
-        "assert result.result.replay.net_cash == -105.20\n")
+        "\nassert result.book.balance == 50096\n"
+        "assert result.replay.net_cash == -105.20\n")
 
 
 def test_readme_quickstart():
@@ -35,6 +35,22 @@ def test_public_exports_are_distinct_and_resolve():
     assert all(hasattr(engine, name) for name in engine.__all__)
     assert engine.RollingResult is optimizer.RollingResult
     assert engine.RollingReplayResult is rolling.RollingResult
+
+
+def test_package_scope_is_trade_logs_not_strategy_execution():
+    from importlib.util import find_spec
+    from propfirm_engine import Engine
+    for name in ("backtest_prices", "fit_prices", "evaluate_prices", "replay_strategy",
+                 "fit_strategy", "walk_strategy", "replay_opportunities"):
+        assert not hasattr(Engine, name)
+    for name in ("market_replay", "price_fitting", "strategy", "strategy_fitting",
+                 "orders", "market_data", "feeds", "opportunities", "slippage", "randomness"):
+        assert find_spec(f"propfirm_engine.{name}") is None
+    source = {p.relative_to(ROOT / "src/propfirm_engine")
+              for p in (ROOT / "src/propfirm_engine").rglob("*.py")}
+    published = {p.relative_to(ROOT / "docs/py/propfirm_engine")
+                 for p in (ROOT / "docs/py/propfirm_engine").rglob("*.py")}
+    assert source == published
 
 
 def test_package_version_and_source_manifest():
@@ -56,7 +72,9 @@ def test_clean_wheel_and_sdist_install_without_repository_data(tmp_path):
         names = archive.namelist()
         assert all(name.startswith("propfirm_engine/") or name.split("/", 1)[0].endswith(".dist-info") for name in names)
         assert any(name.endswith("/LICENSE") for name in names)
-        assert "propfirm_engine/strategy_fitting.py" in names
+        assert "propfirm_engine/event_replay.py" in names
+        assert "propfirm_engine/strategy.py" not in names
+        assert "propfirm_engine/market_replay.py" not in names
         assert "propfirm_engine/uncertainty.py" in names
         assert all(name.endswith(".py") for name in names if name.startswith("propfirm_engine/"))
     with tarfile.open(source) as archive:
@@ -67,10 +85,8 @@ def test_clean_wheel_and_sdist_install_without_repository_data(tmp_path):
     for artifact in (wheel, source):
         target = tmp_path / artifact.name.replace(".", "_")
         subprocess.run([sys.executable, "-m", "pip", "install", "--no-deps", "--target", str(target), str(artifact)], check=True)
-        examples = re.findall(r"```python\n(.*?)\n```", (ROOT / "docs/STRATEGY_FITTING.md").read_text(encoding="utf-8"), re.DOTALL)
         uncertainty = re.findall(r"```python\n(.*?)\n```", (ROOT / "docs/UNCERTAINTY.md").read_text(encoding="utf-8"), re.DOTALL)
-        for example in (_quickstart(), "\n".join(examples) + "\nassert fit.score == fit.selected.score\n",
-                        "\n".join(uncertainty)):
+        for example in (_quickstart(), "\n".join(uncertainty)):
             code = ("import sys\nfrom pathlib import Path\nsys.path.insert(0, sys.argv[1])\n"
                     "import propfirm_engine\nassert Path(propfirm_engine.__file__).resolve().is_relative_to(Path(sys.argv[1]).resolve())\n"
                     + example)

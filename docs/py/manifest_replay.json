@@ -1,5 +1,5 @@
 {
-  "bundle_sha256": "2bb2f94ccad21894d9fe96cf6511b6853a0206267ccbef826b6ce52ef05779c4",
+  "bundle_sha256": "fc048c73d89ed640fd9ab7ef17950744a1b5cdbf2f8d05d6d701abeec69cdf6d",
   "files": [
     {
       "path": "numba.py",
@@ -7,7 +7,7 @@
     },
     {
       "path": "propfirm_engine/__init__.py",
-      "sha256": "f4766731195d3b7c8cd3b30c8de13b409a7e838589c117c8c003469790c1460c"
+      "sha256": "c53a8361928be8bee1682af74caa1a92009eee381c5443c77150a66e66010197"
     },
     {
       "path": "propfirm_engine/analytical.py",
@@ -15,7 +15,7 @@
     },
     {
       "path": "propfirm_engine/backtest.py",
-      "sha256": "b188b768bcde596040229b638765e00fe67df4a8c04e35f66f490f1203cea81a"
+      "sha256": "fcf05f0ae68d7e177530c79098f7db9e42a9a37f053554a84a14d4e8c0490c5a"
     },
     {
       "path": "propfirm_engine/cache.py",
@@ -27,7 +27,7 @@
     },
     {
       "path": "propfirm_engine/capabilities.py",
-      "sha256": "a9955c4b86e3f6ddf0531abc4e8b654cc974705d8feca0a5e0b4c0684de4723f"
+      "sha256": "3cd89f8332e4208806b03d52744034388190e0c96682185069ce305db7712fb9"
     },
     {
       "path": "propfirm_engine/cashflows.py",
@@ -47,7 +47,7 @@
     },
     {
       "path": "propfirm_engine/engine.py",
-      "sha256": "213fee57f60136ab5561c44b2e609ca1e9168187495007838d98e076b561c08a"
+      "sha256": "e22e1646373caed0edbc0343b6cd766b7a50b87f5cbca605412c3c76c14af0dd"
     },
     {
       "path": "propfirm_engine/enums.py",
@@ -55,7 +55,7 @@
     },
     {
       "path": "propfirm_engine/event_replay.py",
-      "sha256": "2dce8cbcf07c67f919438bdd85664518b928ced0f743b4394b9d38871646d51d"
+      "sha256": "da88525c62e65e7f0b7d1f1b236f0124d8a92b3bfb278926925a80a75eb3e94e"
     },
     {
       "path": "propfirm_engine/events.py",
@@ -68,10 +68,6 @@
     {
       "path": "propfirm_engine/feasibility.py",
       "sha256": "266f4bc44ac936a354fca5384d1693963957b5ff976ff9fcae8d9a71e60633f9"
-    },
-    {
-      "path": "propfirm_engine/feeds.py",
-      "sha256": "55ed0ab5ce2b06be5f759d372be162b479f1b01c203ffbb8f376a59c0a2b97d7"
     },
     {
       "path": "propfirm_engine/fingerprint.py",
@@ -91,7 +87,7 @@
     },
     {
       "path": "propfirm_engine/info.py",
-      "sha256": "2b52eb7694c1e8844fd0f6c1e4d50b6f70f8ce6e2ad4f75b36d055f77d7fb153"
+      "sha256": "d78ab2411df276051203e38febe30f2015119695377bd746023fa19d9b8adcde"
     },
     {
       "path": "propfirm_engine/instruments.py",
@@ -106,14 +102,6 @@
       "sha256": "23257741133d9fb65f90fcf84b21a242c1b06ebc731dba4e35365d16142453cd"
     },
     {
-      "path": "propfirm_engine/market_data.py",
-      "sha256": "f02692c1807f6843e90927970957679f9b8589eedd939690db86c397dcd6ac2b"
-    },
-    {
-      "path": "propfirm_engine/market_replay.py",
-      "sha256": "493cd2fb4f7761dc11da658436ea74ea9056a62a3760d81d617a3b399cffef3a"
-    },
-    {
       "path": "propfirm_engine/model.py",
       "sha256": "eb525110af0f3a4f7c958aae1411fccfe3bb7dae6ac1fa7b1f7bc14cef17f3ca"
     },
@@ -122,16 +110,8 @@
       "sha256": "dbc98d01e2f9f782f317181c090988ce92a4acb6ceb4de9383f37e6b972b08e4"
     },
     {
-      "path": "propfirm_engine/opportunities.py",
-      "sha256": "def1905c4f7095fc3bae479d5fa085720a65c877362a730b46b85a93df01a20d"
-    },
-    {
       "path": "propfirm_engine/optimizer.py",
       "sha256": "691f5d64f07e2e90a92f17bf49d7ddfe955ca7210e4dccaa07c9f98fe8df0c95"
-    },
-    {
-      "path": "propfirm_engine/orders.py",
-      "sha256": "e97e3e8981930517cc01169a98d98696bfbca55966a341f7eea92f500dec8c1e"
     },
     {
       "path": "propfirm_engine/payouts.py",
@@ -140,14 +120,6 @@
     {
       "path": "propfirm_engine/portfolio.py",
       "sha256": "2facba6d972a5414cf600e77ed3c469cb3c149d69dec469d36f11e2f84f36e2d"
-    },
-    {
-      "path": "propfirm_engine/price_fitting.py",
-      "sha256": "38e188191090b8d6a8988516bb401dd82f4b5233cdad4c0ff7ac4647382d0342"
-    },
-    {
-      "path": "propfirm_engine/randomness.py",
-      "sha256": "a6eae7b91797ab0731519be2fa4abc08d864776dc1a56fdce7b21013639a01c1"
     },
     {
       "path": "propfirm_engine/reference.py",
@@ -190,20 +162,8 @@
       "sha256": "b3af77cdb8fe09d11942e56eef3509b040023441948ad87b8f5b321a673b3d04"
     },
     {
-      "path": "propfirm_engine/slippage.py",
-      "sha256": "b8433fa6c8c4715d5541bfb12b1705648a5ebf55eb7cdffd70afb4a9e2dc6f97"
-    },
-    {
       "path": "propfirm_engine/statistics.py",
       "sha256": "c152c31b39d48d2313239e2ba7c7b04349229474f4a2a3c7c524866805bf6a28"
-    },
-    {
-      "path": "propfirm_engine/strategy.py",
-      "sha256": "bb9fa9cde89bd9a0853ccb5b27bd7a72dd05c3b4d67ac5c7d1bf76b696e2522c"
-    },
-    {
-      "path": "propfirm_engine/strategy_fitting.py",
-      "sha256": "9d6dae44e1525e85964fe027f237bda89ab4f2c6a1c1ccab5e7949eda3a1e82e"
     },
     {
       "path": "propfirm_engine/synthetic.py",
