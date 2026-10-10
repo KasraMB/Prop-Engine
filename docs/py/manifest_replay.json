@@ -1,5 +1,5 @@
 {
-  "bundle_sha256": "202e55e9c3f39c6ab4d9175c18a0bca0656cb11505db10468f8776dabc750d07",
+  "bundle_sha256": "2bb2f94ccad21894d9fe96cf6511b6853a0206267ccbef826b6ce52ef05779c4",
   "files": [
     {
       "path": "numba.py",
@@ -7,7 +7,7 @@
     },
     {
       "path": "propfirm_engine/__init__.py",
-      "sha256": "d6b2b78e98df7e64f2a1d2d1784db7e3a65f85d17abbd6a52ff5f65ccef34233"
+      "sha256": "f4766731195d3b7c8cd3b30c8de13b409a7e838589c117c8c003469790c1460c"
     },
     {
       "path": "propfirm_engine/analytical.py",
@@ -27,7 +27,7 @@
     },
     {
       "path": "propfirm_engine/capabilities.py",
-      "sha256": "f0157cbee30e40654a2777d84f0bf150f9b2f2b3e21986a4554e8bfcb158204b"
+      "sha256": "a9955c4b86e3f6ddf0531abc4e8b654cc974705d8feca0a5e0b4c0684de4723f"
     },
     {
       "path": "propfirm_engine/cashflows.py",
@@ -47,7 +47,7 @@
     },
     {
       "path": "propfirm_engine/engine.py",
-      "sha256": "4b8875bba33aef416dad2f200a50f7da1840ae722a63ca0cc17bc9204c5f690b"
+      "sha256": "213fee57f60136ab5561c44b2e609ca1e9168187495007838d98e076b561c08a"
     },
     {
       "path": "propfirm_engine/enums.py",
@@ -111,7 +111,7 @@
     },
     {
       "path": "propfirm_engine/market_replay.py",
-      "sha256": "0e1af66b40cdb604e400609b022d33b267edbec2b633e2a885e94e44af952ec4"
+      "sha256": "493cd2fb4f7761dc11da658436ea74ea9056a62a3760d81d617a3b399cffef3a"
     },
     {
       "path": "propfirm_engine/model.py",
@@ -123,7 +123,7 @@
     },
     {
       "path": "propfirm_engine/opportunities.py",
-      "sha256": "1720fcefa49453119377f5c0c37b136612de4243b0c90ede72049202421f7f15"
+      "sha256": "def1905c4f7095fc3bae479d5fa085720a65c877362a730b46b85a93df01a20d"
     },
     {
       "path": "propfirm_engine/optimizer.py",
@@ -143,7 +143,7 @@
     },
     {
       "path": "propfirm_engine/price_fitting.py",
-      "sha256": "b1b5add0569bf17c3597801034faad99a38e1412703635802b623c8b72069bf0"
+      "sha256": "38e188191090b8d6a8988516bb401dd82f4b5233cdad4c0ff7ac4647382d0342"
     },
     {
       "path": "propfirm_engine/randomness.py",

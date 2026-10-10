@@ -151,7 +151,7 @@ interpreting results, and the [API map](#api-map) for other entry points.
 
 ## Status
 
-Version 0.2.3 provides general order and portfolio research execution under the
+Version 0.2.4 provides general order and portfolio research execution under the
 [research engine plan](docs/RESEARCH_ENGINE_PLAN.md). Recorded fills and ordered
 portfolio marks now support arbitrary exits, partials and concurrent instruments
 through `Engine.replay_events`. See the [event replay API](docs/EVENT_REPLAY.md)
@@ -445,7 +445,7 @@ remains unidentified by finite simulations. See the
 | Fit general strategy parameters with chronological OOS | `Engine.fit_strategy(...)` |
 | Refit across chronological walk-forward folds | `Engine.walk_strategy(...)` |
 | Evaluate frozen strategies and complete market scenarios | `evaluate_strategy(...)`, `evaluate_scenarios(...)` |
-| Replay and fit fixed-size dollar brackets on price bars | `Engine.backtest_prices(...)`, `Engine.fit_prices(...)` |
+| Replay, evaluate and fit long/short dollar brackets on price bars | `Engine.backtest_prices(...)`, `Engine.evaluate_prices(...)`, `Engine.fit_prices(...)` |
 | Import sequential stop/target records | `BracketHistory.from_records(...)` |
 | Replay dated account attempts | `Engine.backtest(...)` |
 | Evaluate ordered historical starting windows | `Engine.rolling_backtest(...)` |

@@ -13,7 +13,7 @@ from math import ceil, floor, isfinite
 import numpy as np
 
 from .backtest import _Replay, _ResolvedExecution, BacktestResult
-from .execution import BracketHistory, BracketTrade
+from .execution import BacktestConfig, BracketHistory, BracketTrade, DollarPolicy, LifecycleSpec
 from .instruments import Instrument
 
 
@@ -23,6 +23,7 @@ class PriceSession:
 
     Missing minutes mean no reported trades, not forward-filled quotes. The
     producer must screen known degraded data and provide a real final bar.
+    side=1 buys and side=-1 sells short at entry; direction is fixed per session.
     """
     session: date
     close_at: datetime
@@ -30,8 +31,11 @@ class PriceSession:
     ohlc: np.ndarray
     warmup_timestamps: np.ndarray | None = None
     warmup_ohlc: np.ndarray | None = None
+    side: int = 1
 
     def __post_init__(self):
+        if type(self.side) is not int or self.side not in (-1, 1):
+            raise ValueError("price session side must be +/-1")
         t = np.array(self.timestamps, dtype=np.int64, copy=True)
         p = np.array(self.ohlc, dtype=float, copy=True)
         if (not isinstance(self.session, date) or isinstance(self.session, datetime)
@@ -87,6 +91,11 @@ class PriceDecision:
     stop_allowance_ticks: int = 0
     execution_multiplier_entry: float = 1.
     execution_stressed: bool = False
+    side: int = 1
+
+    @property
+    def signed_quantity(self):
+        return self.side * self.quantity
 
 
 @dataclass(frozen=True)
@@ -111,16 +120,20 @@ def _resolve(session, instrument, quantity, risk, target, costs, *, slippage=Non
         return None
     target_ticks = max(1, ceil((target + costs) / tick_cash))
     prices = session.ohlc
-    # Buying at an upward-rounded proxy price never grants favorable rounding.
+    side = session.side
+    # Work in side-adjusted prices so both directions share execution arithmetic.
     entry_slip = tape.ticks(slippage, 0, 0) if slippage else 0
-    entry = (ceil(Fraction(str(prices[0, 0])) / tick) + entry_slip) * tick
+    entry = (ceil(side * Fraction(str(prices[0, 0])) / tick) + entry_slip) * tick
     stop, take = entry - stop_ticks * tick, entry + target_ticks * tick
-    lows, highs = prices[:, 2], prices[:, 1]
+    adverse, favorable = (prices[:, 2], prices[:, 1]) if side == 1 else (prices[:, 1], prices[:, 2])
     through = slippage.target_trade_through_ticks if slippage else 0
-    sl, tp = lows <= float(stop) + 1e-10, highs >= float(take + through * tick) - 1e-10
+    if side == 1:
+        sl, tp = adverse <= float(stop) + 1e-10, favorable >= float(take + through * tick) - 1e-10
+    else:
+        sl, tp = adverse >= -float(stop) - 1e-10, favorable <= -float(take + through * tick) + 1e-10
     hits = np.flatnonzero(sl | tp)
     index = int(hits[0]) if len(hits) else len(prices) - 1
-    opening = Fraction(str(prices[index, 0]))
+    opening = side * Fraction(str(prices[index, 0]))
     collision = bool(len(hits) and sl[index] and tp[index])
     if len(hits):
         if opening <= stop:
@@ -130,20 +143,21 @@ def _resolve(session, instrument, quantity, risk, target, costs, *, slippage=Non
         else:
             exit_price, reason = take, "target"
     else:
-        exit_price = floor(Fraction(str(prices[index, 3])) / tick) * tick
+        exit_price = floor(side * Fraction(str(prices[index, 3])) / tick) * tick
         reason = "session_close"
     exit_slip = 0 if not slippage or reason == "target" else tape.ticks(
         slippage, index, 2 if reason == "session_close" else 1)
     exit_price -= exit_slip * tick
     pnl = (exit_price - entry) * value
     # Entry slippage is already in the fill price, not a second cash charge.
-    prior_low = min(float(entry), float(prices[0, 0]))
+    prior_low = min(float(entry), side * float(prices[0, 0]))
     if index:
-        prior_low = min(prior_low, float(lows[:index].min()))
+        extreme = adverse[:index].min() if side == 1 else adverse[:index].max()
+        prior_low = min(prior_low, side * float(extreme))
     # Never include a low that may occur AFTER a target fill in the exit bar.
     low_price = min(prior_low, float(exit_price))
     if reason == "session_close":
-        low_price = min(low_price, float(lows[index]))
+        low_price = min(low_price, side * float(adverse[index]))
     low = min(Fraction(0), (Fraction(str(low_price)) - entry) * value, pnl)
     at = datetime.fromtimestamp(int(session.timestamps[index]) / 1e9, timezone.utc)
     # Intrabar times are unknowable; assign bar-end, not an invented tick time.
@@ -154,9 +168,27 @@ def _resolve(session, instrument, quantity, risk, target, costs, *, slippage=Non
                            execution_multiplier_entry=float(tape.multipliers[0]) if slippage else 1.,
                            execution_stressed=tape.stressed if slippage else False)
     return (_ResolvedExecution(exit_at, quantity, float((stop_ticks + allowance) * tick * value), float(pnl), float(low)),
-            float(entry), float(stop), float(take), float(exit_price),
+            float(side * entry), float(side * stop), float(side * take), float(side * exit_price),
             float((stop_ticks + allowance) * tick_cash + costs), float(target_ticks * tick_cash - costs),
             float(pnl * quantity - costs), reason, collision)
+
+
+def _price_inputs(sessions, instrument, quantity, execution_seed, execution_path, compensate_slippage):
+    if type(quantity) is not int or quantity < 1:
+        raise ValueError("quantity must be a positive integer")
+    for name, value in (("execution_seed", execution_seed), ("execution_path", execution_path)):
+        if type(value) is not int or value < 0:
+            raise ValueError(f"{name} must be a nonnegative integer")
+    if type(compensate_slippage) is not bool:
+        raise ValueError("compensate_slippage must be bool")
+    if not isinstance(instrument, Instrument):
+        raise TypeError("instrument must be Instrument")
+    sessions = tuple(sessions)
+    if not sessions or any(not isinstance(s, PriceSession) for s in sessions):
+        raise ValueError("supply at least one PriceSession")
+    if any(b.session <= a.session for a, b in zip(sessions, sessions[1:])):
+        raise ValueError("price sessions must be unique and chronological")
+    return sessions
 
 
 def replay_prices(spec, sessions, policy, targets, instrument, config, *, quantity=1,
@@ -165,27 +197,22 @@ def replay_prices(spec, sessions, policy, targets, instrument, config, *, quanti
     """Replay fixed quantity, state-dependent dollar SL/TP on supplied prices.
 
     ``targets`` maps every sizing-regime name to its desired NET dollar profit.
+    Each session supplies its own side (+1 long, -1 short).
     Explicit ``collision_policy='stop_first'`` opts into the OHLC approximation.
     Costs are per actual contract, not per position. Sessions must be complete,
     chronological and independent of policy; account state is never precomputed.
     """
     if collision_policy != "stop_first":
         raise ValueError("OHLC replay requires explicit collision_policy='stop_first'")
-    if type(quantity) is not int or quantity < 1:
-        raise ValueError("quantity must be a positive integer")
-    if not isinstance(instrument, Instrument):
-        raise TypeError("instrument must be Instrument")
-    sessions = tuple(sessions)
-    if not sessions or any(not isinstance(s, PriceSession) for s in sessions):
-        raise ValueError("supply at least one PriceSession")
-    if any(b.session <= a.session for a, b in zip(sessions, sessions[1:])):
-        raise ValueError("price sessions must be unique and chronological")
+    if not isinstance(spec, LifecycleSpec) or not isinstance(config, BacktestConfig):
+        raise TypeError("price replay requires LifecycleSpec and BacktestConfig")
+    if not isinstance(policy, DollarPolicy):
+        raise TypeError("price replay requires DollarPolicy")
+    sessions = _price_inputs(sessions, instrument, quantity, execution_seed, execution_path, compensate_slippage)
     if set(targets) != {r.name for r in policy.regimes} or any(
-            not isfinite(v) or v <= 0 for v in targets.values()):
+            isinstance(v, bool) or not isfinite(v) or v <= 0 for v in targets.values()):
         raise ValueError("positive net targets must match every policy regime")
     target_cash = {k: Fraction(str(v)) for k, v in targets.items()}
-    if type(compensate_slippage) is not bool:
-        raise ValueError("compensate_slippage must be bool")
     tapes = None
     if slippage is not None:
         from .slippage import prepare_execution, SlippageModel
@@ -220,7 +247,8 @@ def replay_prices(spec, sessions, policy, targets, instrument, config, *, quanti
         fill, entry, stop, take, exit_price, planned_risk, planned_target, net, reason, collision = resolved
         decisions.append(PriceDecision(template.session, runner.attempts, runner.role, regime.name,
                                        quantity, template.entry_at, fill.exit_at, entry, stop, take,
-                                       exit_price, planned_risk, planned_target, net, reason, collision, **details))
+                                       exit_price, planned_risk, planned_target, net, reason, collision,
+                                       side=sessions[index].side, **details))
         return fill
 
     result = _Replay(spec, history, policy, config, execution_factory=factory,
@@ -233,7 +261,7 @@ def replay_prices(spec, sessions, policy, targets, instrument, config, *, quanti
             digest.update(tape.uniforms.tobytes())
             digest.update(bytes([tape.stressed]))
     for s in sessions:
-        digest.update(repr((s.session, s.close_at)).encode())
+        digest.update(repr((s.session, s.close_at, s.side)).encode())
         digest.update(s.timestamps.tobytes())
         digest.update(s.ohlc.tobytes())
     assumptions = tuple(a for a in result.assumptions if a not in (
@@ -242,7 +270,8 @@ def replay_prices(spec, sessions, policy, targets, instrument, config, *, quanti
     )) + (
         "historical minute-OHLC approximation: any first-touch bar spanning both levels exits at stop",
         "fixed contract count; net dollar brackets recomputed from pre-entry account state",
-        "loss distance rounded down and target up to ticks; buy proxy rounded up, market sell down",
+        "long/short direction supplied per session; buy fills round up and sell fills down",
+        "loss distance rounded down and target distance up to ticks",
         ("stop gaps fill at bar open; target gaps receive only the limit price; no extra slippage" if slippage is None else
          "uncalibrated tick execution scenario; gap prices plus incremental slippage; no duplicate spread charge"),
         "intrabar exits timestamped at bar end; exit-bar post-fill excursions are not inferred",

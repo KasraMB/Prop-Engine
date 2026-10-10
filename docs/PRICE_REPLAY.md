@@ -121,6 +121,18 @@ and adaptive brackets, not shuffle the resulting fixed-policy trade CSVs.
 
 ## Engine API
 
+Set `PriceSession(..., side=1)` for a long entry or `side=-1` for a short entry.
+Directions can vary between sessions in the same history. Replay, evaluation and
+fitting consume that same history without changing the signals. The default is
+`side=1` for compatibility with the original long-only experiment above.
+`PriceDecision.side` and `.signed_quantity` identify the executed direction.
+The fixed `quantity` argument is a positive contract count for either side.
+
+`Engine.evaluate_prices` accepts a `TargetPolicy` and returns fixed-policy
+performance across execution scenarios; `Engine.fit_prices` searches on IS and
+evaluates the selected policy on OOS. Both preserve session direction, including
+unrestricted-wallet counterparts used for bankroll analysis.
+
 ```python
 from propfirm_engine import Engine, Instrument, PriceSession
 

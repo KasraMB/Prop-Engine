@@ -225,6 +225,11 @@ class Engine:
         from .price_fitting import fit_prices
         return fit_prices(spec, sessions, instrument, config, **kwargs)
 
+    def evaluate_prices(self, spec, sessions, policy, instrument, config, **kwargs):
+        """Evaluate a fixed risk/target policy on long, short or mixed sessions."""
+        from .price_fitting import evaluate_prices
+        return evaluate_prices(spec, sessions, policy, instrument, config, **kwargs)
+
     def fit(self, spec, history, config, **kwargs):
         """Fit named dollar regimes on IS; headline results come only from OOS."""
         from .fitting import fit_holdout

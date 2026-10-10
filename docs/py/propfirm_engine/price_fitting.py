@@ -11,7 +11,7 @@ from numbers import Real
 import numpy as np
 
 from .execution import DollarPolicy
-from .market_replay import replay_prices
+from .market_replay import _price_inputs, replay_prices
 from .optimizer import CMAES
 from .risk import cash_risk_path, distribution
 from .slippage import prepare_execution
@@ -78,7 +78,7 @@ def evaluate_prices(spec, sessions, policy, instrument, config, *, slippage=None
         raise TypeError("policy must be TargetPolicy")
     if type(paths) is not int or paths < 1 or type(path_offset) is not int or path_offset < 0:
         raise ValueError("paths must be positive and path_offset nonnegative integers")
-    sessions = tuple(sessions)
+    sessions = _price_inputs(sessions, instrument, quantity, execution_seed, path_offset, compensate_slippage)
     targets = dict(zip((r.name for r in policy.sizing.regimes), policy.targets))
     results = tuple(replay_prices(spec, sessions, policy.sizing, targets, instrument, config,
                                  quantity=quantity, slippage=slippage, execution_seed=execution_seed,
@@ -136,9 +136,7 @@ def fit_prices(spec, sessions, instrument, config, *, policy, risk_bounds, targe
             raise ValueError(f"{name} must be an integer >= {minimum}")
     if not isfinite(train_fraction) or not 0 < train_fraction < 1:
         raise ValueError("train_fraction must lie between zero and one")
-    sessions = tuple(sessions)
-    if any(b.session <= a.session for a, b in zip(sessions, sessions[1:])):
-        raise ValueError("sessions must be unique and chronological")
+    sessions = _price_inputs(sessions, instrument, quantity, execution_seed, 0, compensate_slippage)
     split = int(len(sessions)*Fraction(str(train_fraction)))
     if not 0 < split < len(sessions):
         raise ValueError("split requires nonempty training and holdout histories")

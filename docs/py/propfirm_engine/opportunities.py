@@ -102,6 +102,10 @@ class OpportunityReplay:
     expired: int
     before_start: int
 
+    @property
+    def uncertainty(self):
+        return self.replay.uncertainty
+
 
 def replay_opportunities(spec, markets, instruments, config, opportunities, policy, **kwargs):
     strategy = OpportunityStrategy(opportunities, policy)

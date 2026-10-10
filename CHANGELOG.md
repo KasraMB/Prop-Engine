@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.4 - 2026-10-09
+
+- Per-session long/short direction through price replay, fixed-policy evaluation
+  and optimization, including mixed histories and direction-aware fingerprints.
+- Symmetric adverse rounding, slippage, stop gaps, target fills and excursions.
+- Shared price-input validation, `Engine.evaluate_prices`, and opportunity replay
+  uncertainty access consistent with other replay results.
+- Cross-adapter directional accounting and mirrored optimization regression tests.
+
 ## 0.2.3 - 2026-10-09
 
 - Consistent mean-uncertainty reports across replay, fitting and cash-risk APIs.
