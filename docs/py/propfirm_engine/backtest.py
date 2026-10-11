@@ -16,7 +16,7 @@ from zoneinfo import ZoneInfo
 from .compiler import compile_account
 from .cache import freeze_compiled
 from .enums import ExitCode, Severity, StateField, Timing
-from .execution import BacktestConfig, BracketHistory, DollarPolicy, LifecycleSpec
+from .execution import BacktestConfig, BracketHistory, DollarPolicy, LifecycleSpec, Trade, TradeHistory
 from .feasibility import project_position
 from .payouts import PayoutLedger
 from .reference import _ReferenceSim
@@ -439,9 +439,40 @@ class _Replay:
             self.emit(trade.entry_at, "policy_skip", regime=regime.name)
             return
         quantity = min(int(quantity), self.limit)
+        if isinstance(trade, Trade):
+            self.settle_observed(trade, day_index, regime, quantity)
+            return
         pnl_per_unit = trade.take_profit if trade.won else -trade.stop_loss
         self.settle_trade(trade, day_index, regime, quantity, pnl_per_unit,
                           min(0.0, pnl_per_unit), trade.exit_at)
+
+    def settle_observed(self, trade, day_index, regime, quantity):
+        sim = self.sim
+        before = sim.equity
+        cost = self.fixed_cost + quantity * self.contract_cost
+        sim.trade_cost = cost
+        balance = before - cost
+        for mark in trade.marks:
+            closing = mark.at == trade.exit_at
+            equity = balance + quantity * Fraction(str(mark.pnl))
+            net = equity - before
+            self.advance(mark.at, qualifying_close=closing and abs(net) >= self.activity_threshold)
+            if self.sim is not sim:
+                raise ValueError("inactivity expired during an open trade; that execution is unsupported")
+            code = sim.observe(equity if closing else balance, equity, day_index,
+                               traded=True, allow_pass=closing)
+            if closing or code != ExitCode.ALIVE:
+                if not closing:
+                    sim.observe(equity, equity, day_index, traded=True, allow_pass=False)
+                if self.ledger:
+                    self.ledger.record_trade(mark.at, net)
+                if abs(net) >= self.activity_threshold:
+                    self.activity(mark.at)
+                self.emit(mark.at, "trade" if closing else "liquidation", quantity=quantity,
+                          regime=regime.name)
+                self.handle_result(mark.at, code, regime.name)
+                self.advance(mark.at)
+                return
 
     def settle_trade(self, trade, day_index, regime, quantity, pnl_per_unit, low, exit_at):
         """One settlement path shared by fixed brackets and historical fills."""
@@ -519,6 +550,19 @@ class _Replay:
         return self.result()
 
     def result(self, *, fingerprint=None, assumptions=None):
+        if fingerprint is None and isinstance(self.history, TradeHistory):
+            fingerprint = self.history.fingerprint
+        if assumptions is None and isinstance(self.history, TradeHistory):
+            assumptions = (
+                "sequential recorded per-contract P&L; original risk sizes the position before entry",
+                "ordered supplied observations only; no inference between marks",
+                "round-trip configured costs reserved and deducted in full at entry",
+                "rule breach liquidates at the first observed breach P&L; no additional liquidation slippage",
+                "realized closes drive targets, winning days and activity; open profit cannot pass evaluation",
+                "recorded exit and gross per-contract path stay fixed under quantity changes",
+                "maximum eligible payout requested; configured approval and receipt delays apply",
+                "repeated attempts after failure and handoff; no valuation of live accounts",
+            )
         outstanding = sum(float(r.net) for ledger in self.ledgers for r in ledger.requests
                           if r.status in ("pending", "approved"))
         return BacktestResult(
@@ -544,7 +588,7 @@ def backtest(spec: LifecycleSpec, history: BracketHistory, policy: DollarPolicy,
              config: BacktestConfig) -> BacktestResult:
     """Replay one chronological history with repeated attempts and dated cashflows."""
     if not isinstance(spec, LifecycleSpec) or not isinstance(history, BracketHistory):
-        raise TypeError("backtest requires LifecycleSpec and BracketHistory")
+        raise TypeError("backtest requires LifecycleSpec and BracketHistory or TradeHistory")
     if not isinstance(policy, DollarPolicy) or not isinstance(config, BacktestConfig):
         raise TypeError("backtest requires DollarPolicy and BacktestConfig")
     return _Replay(spec, history, policy, config).run()

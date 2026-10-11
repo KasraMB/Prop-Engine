@@ -17,21 +17,26 @@ class ReplaySupport:
 def check_replay(spec, *, adapter="recorded", fidelity=None, features=()):
     if not isinstance(spec, LifecycleSpec):
         raise TypeError("preflight requires LifecycleSpec")
-    if adapter not in ("recorded", "brackets"):
-        raise UnsupportedInputCapabilityError("select recorded fills or closed brackets replay")
+    if adapter not in ("recorded", "brackets", "trades"):
+        raise UnsupportedInputCapabilityError("select recorded fills, sized trades or closed brackets replay")
     if fidelity is None:
         fidelity = "closed_brackets" if adapter == "brackets" else "observed_marks"
-    if adapter == "brackets":
-        expected = "closed_brackets"
+    if adapter in ("brackets", "trades"):
+        expected = "closed_brackets" if adapter == "brackets" else "observed_marks"
         if fidelity != expected:
             raise UnsupportedInputCapabilityError(f"{adapter} replay requires {expected}")
         _check_support(spec, observations=False)
         supported = {"long", "short", "mixed_directions", "eod_drawdown", "sizing"}
+        if adapter == "trades":
+            supported |= {"arbitrary_exits", "observed_equity"}
         missing = set(features)-supported
         if missing:
             raise UnsupportedInputCapabilityError(f"unsupported by {adapter} replay: {', '.join(sorted(missing))}")
         return ReplaySupport(adapter, fidelity, tuple(sorted(supported)), (
-            "closed brackets hold recorded outcomes and reward-to-risk ratios fixed",
+            "recorded per-contract outcomes remain fixed under quantity changes",
+            "sequential same-session trades with EOD trailing floors; no overlapping or partial positions",
+            ("sized trade logs deduct round-trip configured costs at entry and observe only supplied marks"
+             if adapter == "trades" else "ideal stop/target outcomes; configured costs settle at exit"),
             "partial exits and concurrent positions require recorded fills",
         ))
     if fidelity != "observed_marks":

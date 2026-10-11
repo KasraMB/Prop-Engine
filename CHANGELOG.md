@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.0 - 2026-10-11
+
+- Size arbitrary-exit trade logs from account state using `TradeHistory`.
+- Observe supplied per-contract P&L paths and liquidate on observed breaches.
+- Share this input across joint and phase fitting, rolling replay and resampling.
+- Keep original risk separate from realized P&L, including partial profits and gaps.
+
 ## 0.4.0 - 2026-10-10
 
 - Optional separate-phase sizing search and paired joint-search comparison.

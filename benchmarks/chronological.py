@@ -64,6 +64,35 @@ def main():
         print(json.dumps(dict(name=name, seconds=median(timings), peak_bytes=peak,
                               result_sha256=hashes[0])), flush=True)
     search_comparison()
+    sized_logs()
+
+
+def sized_logs():
+    from datetime import datetime, timedelta, timezone
+    from propfirm_engine import BacktestConfig, DollarPolicy, Engine, PnlMark, Trade, TradeHistory
+    from propfirm_engine.firms.lucidflex import replay_50k
+
+    spec = replay_50k(eval_fee=105.2, reset_fee=105, contract_type="mini")
+    config = BacktestConfig(0, timedelta(0), timedelta(0), timedelta(0))
+    entry = datetime(2026, 9, 1, 14, tzinfo=timezone.utc)
+    exit = entry + timedelta(hours=1)
+    for count in (1000, 10000):
+        marks = ((PnlMark(entry, 0),) + tuple(
+            PnlMark(entry + timedelta(milliseconds=i), -10) for i in range(1, count-1)
+        ) + (PnlMark(exit, 30),))
+        history = TradeHistory((Trade(entry, exit, entry.date(), 50, 30, marks),))
+        timings = []
+        for _ in range(3):
+            start = perf_counter()
+            result = Engine().backtest(spec, history, DollarPolicy.constant(200), config)
+            timings.append(perf_counter()-start)
+            assert result.final_balance == 50120
+        tracemalloc.start()
+        Engine().backtest(spec, history, DollarPolicy.constant(200), config)
+        peak = tracemalloc.get_traced_memory()[1]
+        tracemalloc.stop()
+        print(json.dumps(dict(name="sized_log", marks=count, seconds=median(timings),
+                              peak_bytes=peak, retained_events=len(result.events))), flush=True)
 
 
 def search_comparison():

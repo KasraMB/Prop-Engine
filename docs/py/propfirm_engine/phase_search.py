@@ -286,7 +286,7 @@ def fit_phases(spec, history, config, *, policy, risk_bounds, search=PhaseSearch
 
         @lru_cache(maxsize=64)
         def window(a, b):
-            return BracketHistory(train.trades[a:b])
+            return type(train)(train.trades[a:b])
         quota = (search.trade_budget-full_cost)//4
         if quota < 4*phase_cost or search.trade_budget-full_cost-2*quota < full_cost:
             raise ValueError("trade_budget must cover four candidate sweeps per phase and a lifecycle pair")

@@ -4,8 +4,10 @@
 It reuses the account engine, payout ledger and CMA-ES. There are no worker
 threads or processes. `Engine.fit` remains the default joint optimizer.
 
-Input is the existing bracket trade log, not market data. This does not add
-target retuning or arbitrary-exit sizing.
+Input is `TradeHistory` for arbitrary recorded exits or `BracketHistory` for
+stop/target outcomes, not market data. Both support account-dependent sizing.
+Recorded exits stay fixed; this does not add target retuning.
+See the [sized trade-log guide](TRADE_LOG.md).
 
 ## Example
 

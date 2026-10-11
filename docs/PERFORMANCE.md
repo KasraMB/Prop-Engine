@@ -35,6 +35,13 @@ account transitions, payouts and requested trace records can grow with input.
 
 ## Existing implementation choices
 
+The chronological benchmark also reports sized trade logs with 1,000 and 10,000
+observations. Input construction is excluded from this replay-allocation measure.
+Marks are immutable slotted objects, replay retains lifecycle events rather than
+each valuation, and each history's fingerprint is streamed and cached. Work still
+grows linearly with marks processed; phase-search trade-visit budgets are not
+equal wall-time budgets when trades contain different numbers of observations.
+
 - Fixed costs and sizing budgets are converted to exact rational values once.
 - Immutable result cash totals are cached; account state is never shared.
 - Portfolio accounting drops closed lots and uses cached instrument tick values.

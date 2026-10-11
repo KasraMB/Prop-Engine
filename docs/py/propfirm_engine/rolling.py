@@ -133,7 +133,7 @@ def rolling_backtest(spec, history, policy, config, *, rolling, objective=None, 
     windows, visited, risk_paths = [], set(), []
     has_eval = any(p.role == "eval" for p in spec.account.phases)
     for begin, end in slices:
-        part = BracketHistory(history.trades[begin:end])
+        part = type(history)(history.trades[begin:end])
         result = backtest(spec, part, policy, config)
         if risk is not None:
             unlimited = (backtest(spec, part, policy, replace(config, initial_wallet=None))

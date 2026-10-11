@@ -176,7 +176,7 @@ class Engine:
         return uncertainty_report(samples, sample_kind=sample_kind, **kwargs)
 
     def backtest(self, spec, history, policy, config):
-        """Chronological bracket replay; distinct from resampled summary runs."""
+        """Size chronological trade logs or brackets through the account lifecycle."""
         from .backtest import backtest
         return backtest(spec, history, policy, config)
 

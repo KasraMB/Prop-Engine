@@ -124,7 +124,10 @@ and reports the frozen policy on the remaining 30%. The chosen objective does
 not remove other reported performance metrics.
 
 Recorded fills are evaluated as supplied; they are not automatically rescaled
-or retargeted. The sizing optimizer uses the explicit bracket-log contract.
+or retargeted. For account-dependent sizing with arbitrary exits, supply
+`TradeHistory`: original risk, realized P&L and ordered per-contract P&L marks.
+See the runnable [sized trade-log guide](docs/TRADE_LOG.md). The same input works
+with `backtest`, `fit`, `fit_phases`, rolling replay and cash-risk resampling.
 Joint risk/target search is available as a separate synthetic outcome model,
 not as a way to infer new exits from a closed trade log.
 
@@ -133,8 +136,8 @@ before interpreting results.
 
 ## Status
 
-Version 0.4.0 is a trade-log prop-firm simulator, not a market-data backtester.
-It supports recorded-fill accounting, sequential bracket sizing optimization,
+Version 0.5.0 is a trade-log prop-firm simulator, not a market-data backtester.
+It supports recorded-fill accounting, sequential trade-log sizing optimization,
 account rules, repeated attempts, payouts, rolling evaluations and cash-risk
 reporting. See the [changelog](CHANGELOG.md), [design](docs/DESIGN.md) and
 [performance checks](docs/PERFORMANCE.md).
@@ -413,6 +416,7 @@ remains unidentified by finite simulations. See the
 | Check account/input support before running | `Engine.check_replay(...)` |
 | Replay arbitrary recorded fills and portfolio marks | `Engine.replay_events(...)` |
 | Import sequential stop/target records | `BracketHistory.from_records(...)` |
+| Import arbitrary exits with entry-time sizing | `TradeHistory.from_records(...)`, [guide](docs/TRADE_LOG.md) |
 | Replay dated account attempts | `Engine.backtest(...)` |
 | Evaluate ordered historical starting windows | `Engine.rolling_backtest(...)` |
 | Cash distributions, ruin and bankroll | `RiskConfig`, `cash_risk_path(...)`, `risk_report(...)` |

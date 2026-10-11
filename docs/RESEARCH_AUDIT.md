@@ -44,6 +44,14 @@ rather than interpreting an old test total as current evidence.
 
 ## Research boundaries
 
+Sized arbitrary-exit logs are covered by `tests/test_trade_log.py`: phase-dependent
+quantity, partial and gap outcomes, fee accounting, observed breach liquidation,
+realized-only progress, fixed-fill parity for both directions, OOS isolation in
+both optimizers, rolling windows and bootstrap timestamp rebasing. Dense marks
+do not create a retained event per observation. Input fingerprints are streamed
+and cached per immutable history. This does not infer missing intratrade paths
+or certify unsupported overlapping-position sizing; see [the contract](TRADE_LOG.md).
+
 Historical windows overlap and are not independent future trials. Model-based
 confidence is conditional on the generator and a frozen policy. Closed P&L alone
 does not establish intratrade drawdown behavior. Supplied marks establish only

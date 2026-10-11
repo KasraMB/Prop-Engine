@@ -1,9 +1,10 @@
 """Prop-firm simulation from trade logs, sizing policies and attempt economics."""
 
-__version__ = "0.4.0"
+__version__ = "0.5.0"
 
 from . import firms, statistics
 from .execution import (
+    Trade, TradeHistory, PnlMark,
     BracketTrade, BracketHistory, RiskRegime, DollarPolicy, LifecycleSpec, BacktestConfig,
 )
 from .backtest import BacktestEvent, BacktestResult
@@ -129,6 +130,7 @@ from .rules import (
 )
 
 __all__ = [
+    "Trade", "TradeHistory", "PnlMark",
     "UncertaintyConfig", "uncertainty_report", "paired_uncertainty", "scenario_sensitivity",
     "account_info",
     "PhaseSearch", "PhaseSample", "PhaseCandidate", "SearchWork", "PhaseFit",

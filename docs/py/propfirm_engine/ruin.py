@@ -15,7 +15,7 @@ from zoneinfo import ZoneInfo
 import numpy as np
 
 from .backtest import backtest
-from .execution import BracketHistory
+from .execution import BracketHistory, TradeHistory
 from .resampling import StationaryDayBootstrap
 from .risk import RiskConfig, cash_risk_path, risk_report
 
@@ -207,9 +207,11 @@ def _resampled_history(spec, history, indices):
                 if shifted.astimezone(timezone.utc).astimezone(zone).replace(tzinfo=None) != shifted.replace(tzinfo=None):
                     raise ValueError("resampled trade clock falls in a nonexistent daylight-saving time")
                 return shifted
-            trades.append(replace(trade, entry_at=move(trade.entry_at), exit_at=move(trade.exit_at), session=day))
+            extra = ({"marks": tuple(replace(m, at=move(m.at)) for m in trade.marks)}
+                     if hasattr(trade, "marks") else {})
+            trades.append(replace(trade, entry_at=move(trade.entry_at), exit_at=move(trade.exit_at), session=day, **extra))
         day += timedelta(days=1)
-    return BracketHistory(tuple(trades))
+    return type(history)(tuple(trades))
 
 
 def _settled_cycles(result):
@@ -294,7 +296,8 @@ def bootstrap_ruin(spec, history, policy, config, *, simulation=RuinConfig(), ri
             tail_tolerance=simulation.tail_tolerance, seed=simulation.seed)
     return {"settings": asdict(simulation), "risk": report, "horizon_curve": curve,
             "source_sessions": len(history.sessions), "source_trades": len(history.trades),
-            "source_fingerprint": sha256(repr(history.trades).encode()).hexdigest(),
+            "source_fingerprint": (history.fingerprint if isinstance(history, TradeHistory)
+                                   else sha256(repr(history.trades).encode()).hexdigest()),
             "payout_retention": 1.0, "cycle_approximation": cycle_report,
             "cycle_records": [asdict(c) for c in cycles], "excluded_unsettled_or_open_accounts": excluded,
             "ultimate_full_engine": {"status": "not_identified",

@@ -1,4 +1,4 @@
-"""Explicit bracket-history, dollar-policy and lifecycle contracts.
+"""Explicit trade-history, dollar-policy and lifecycle contracts.
 
 This is an input adapter for the existing simulator, not a price-path generator.
 Historical targets are immutable: changing them requires replayable market data.
@@ -6,6 +6,8 @@ Historical targets are immutable: changing them requires replayable market data.
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta, timezone
 from fractions import Fraction
+from functools import cached_property
+from hashlib import sha256
 from math import isfinite
 from numbers import Integral, Real
 
@@ -21,6 +23,54 @@ def _aware(value, name):
     if not isinstance(value, datetime) or value.tzinfo is None or value.utcoffset() is None:
         raise ValueError(f"{name} must be a timezone-aware datetime")
     return value.astimezone(timezone.utc)
+
+
+@dataclass(frozen=True, slots=True)
+class PnlMark:
+    """Ordered gross unrealized P&L in dollars for one original contract."""
+
+    at: datetime
+    pnl: float
+
+    def __post_init__(self):
+        object.__setattr__(self, "at", _aware(self.at, "mark time"))
+        if isinstance(self.pnl, bool) or not isinstance(self.pnl, Real) or not isfinite(self.pnl):
+            raise ValueError("mark pnl must be finite")
+
+
+@dataclass(frozen=True)
+class Trade:
+    """Recorded sequential trade, with original risk separate from realized P&L."""
+
+    entry_at: datetime
+    exit_at: datetime
+    session: date
+    risk: float
+    pnl: float
+    marks: tuple[PnlMark, ...]
+
+    def __post_init__(self):
+        entry, exit = _aware(self.entry_at, "entry_at"), _aware(self.exit_at, "exit_at")
+        if exit <= entry or type(self.session) is not date:
+            raise ValueError("trade needs an exit after entry and a session date")
+        _number(self.risk, "risk")
+        if self.risk == 0:
+            raise ValueError("risk must be positive")
+        if isinstance(self.pnl, bool) or not isinstance(self.pnl, Real) or not isfinite(self.pnl):
+            raise ValueError("pnl must be finite")
+        marks = tuple(self.marks)
+        if len(marks) < 2 or any(not isinstance(m, PnlMark) for m in marks):
+            raise ValueError("sized trade logs require ordered PnlMark observations, including entry and exit")
+        if (marks[0].at != entry or marks[-1].at != exit or marks[-1].pnl != self.pnl
+                or any(b.at <= a.at for a, b in zip(marks, marks[1:]))):
+            raise ValueError("marks must increase from entry to exit and end at realized pnl")
+        object.__setattr__(self, "entry_at", entry)
+        object.__setattr__(self, "exit_at", exit)
+        object.__setattr__(self, "marks", marks)
+
+    @property
+    def stop_loss(self):
+        return self.risk
 
 
 @dataclass(frozen=True)
@@ -55,11 +105,12 @@ class BracketHistory:
     """Immutable chronological input. No sorting or overlap repair is performed."""
 
     trades: tuple[BracketTrade, ...]
+    trade_type = BracketTrade
 
     def __post_init__(self):
         object.__setattr__(self, "trades", tuple(self.trades))
-        if not self.trades or any(not isinstance(t, BracketTrade) for t in self.trades):
-            raise ValueError("history must contain BracketTrade objects")
+        if not self.trades or any(not isinstance(t, self.trade_type) for t in self.trades):
+            raise ValueError(f"history must contain {self.trade_type.__name__} objects")
         for previous, current in zip(self.trades, self.trades[1:]):
             if current.entry_at < previous.exit_at or current.session < previous.session:
                 raise ValueError("history must be chronological, sequential and non-overlapping")
@@ -102,8 +153,39 @@ class BracketHistory:
         if count == 0 or count == len(days):
             raise ValueError("split needs at least one complete session in each partition")
         boundary = days[count]
-        return (BracketHistory(tuple(t for t in self.trades if t.session < boundary)),
-                BracketHistory(tuple(t for t in self.trades if t.session >= boundary)))
+        return (type(self)(tuple(t for t in self.trades if t.session < boundary)),
+                type(self)(tuple(t for t in self.trades if t.session >= boundary)))
+
+
+@dataclass(frozen=True)
+class TradeHistory(BracketHistory):
+    """Sequential realized trade logs with observations; no barrier-only outcome restriction."""
+
+    trades: tuple[Trade, ...]
+    trade_type = Trade
+
+    @cached_property
+    def fingerprint(self):
+        digest = sha256(b"trade-log-v1")
+        for trade in self.trades:
+            digest.update(repr((trade.entry_at, trade.exit_at, trade.session,
+                                trade.risk, trade.pnl, len(trade.marks))).encode())
+            for mark in trade.marks:
+                digest.update(repr(mark).encode())
+        return digest.hexdigest()
+
+    @classmethod
+    def from_records(cls, records):
+        trades = []
+        for row in records:
+            def stamp(value):
+                return datetime.fromisoformat(value) if isinstance(value, str) else value
+            session = date.fromisoformat(row["session"]) if isinstance(row["session"], str) else row["session"]
+            marks = tuple(m if isinstance(m, PnlMark) else PnlMark(stamp(m["at"]), float(m["pnl"]))
+                          for m in row["marks"])
+            trades.append(Trade(stamp(row["entry_at"]), stamp(row["exit_at"]), session,
+                                float(row["risk"]), float(row["pnl"]), marks))
+        return cls(tuple(trades))
 
 
 @dataclass(frozen=True)
