@@ -1,8 +1,9 @@
 """Prop-firm simulation from trade logs, sizing policies and attempt economics."""
 
-__version__ = "0.5.0"
+__version__ = "0.6.0"
 
 from . import firms, statistics
+from .windows import Window, PreparedWindows, WindowOutcome, WindowBatch, WindowFit
 from .execution import (
     Trade, TradeHistory, PnlMark,
     BracketTrade, BracketHistory, RiskRegime, DollarPolicy, LifecycleSpec, BacktestConfig,
@@ -130,6 +131,7 @@ from .rules import (
 )
 
 __all__ = [
+    "Window", "PreparedWindows", "WindowOutcome", "WindowBatch", "WindowFit",
     "Trade", "TradeHistory", "PnlMark",
     "UncertaintyConfig", "uncertainty_report", "paired_uncertainty", "scenario_sensitivity",
     "account_info",

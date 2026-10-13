@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.6.0 - 2026-10-13
+
+- Public prepared calendar windows, no-trade sessions and explicit cash horizons.
+- Window-based fitting uses the same replays for scores, regime detection and reports.
+- Aggregate objectives, candidate progress records, optional traces and cash-risk reports.
+- Preserve direct policy scoring; prevent regime restoration from worsening IS scores.
+
 ## 0.5.0 - 2026-10-11
 
 - Size arbitrary-exit trade logs from account state using `TradeHistory`.

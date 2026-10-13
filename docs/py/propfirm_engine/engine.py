@@ -200,6 +200,21 @@ class Engine:
         from .fitting import fit_holdout
         return fit_holdout(spec, history, config, **kwargs)
 
+    def prepare_windows(self, spec, history, **kwargs):
+        """Prepare explicit calendar windows, including sessions without trades."""
+        from .windows import prepare_windows
+        return prepare_windows(spec, history, **kwargs)
+
+    def replay_windows(self, prepared, policy, config, **kwargs):
+        """Replay fresh-account calendar windows with compact or detailed reports."""
+        from .windows import replay_windows
+        return replay_windows(prepared, policy, config, **kwargs)
+
+    def fit_windows(self, training, holdout, config, **kwargs):
+        """Select sizing on training windows and report the frozen holdout policy."""
+        from .windows import fit_windows
+        return fit_windows(training, holdout, config, **kwargs)
+
     def fit_phases(self, spec, history, config, **kwargs):
         """Screen phases on IS, then select a complete lifecycle policy."""
         from .phase_search import fit_phases

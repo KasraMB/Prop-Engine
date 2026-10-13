@@ -65,6 +65,39 @@ def main():
                               result_sha256=hashes[0])), flush=True)
     search_comparison()
     sized_logs()
+    calendar_windows()
+
+
+def calendar_windows():
+    import csv
+    from datetime import datetime, time, timedelta
+    from io import StringIO
+    from zoneinfo import ZoneInfo
+    from propfirm_engine import BacktestConfig, BracketHistory, DollarPolicy, Engine, Window
+    from propfirm_engine.firms.lucidflex import replay_50k
+
+    data = generate(dict(generator="iid", win_rate=.6, rr=8, stop_loss=100,
+        trades_per_day=1, sessions=30, seed=7, start_date="2026-01-05"))["csv"]
+    history = BracketHistory.from_records(csv.DictReader(StringIO(data)))
+    closes = {d: datetime.combine(d, time(16, 45), ZoneInfo("America/New_York")) for d in history.sessions}
+    definitions = tuple(Window(history.trades[i].entry_at, closes[history.sessions[i+4]])
+                        for i in range(0, 30, 5))
+    engine = Engine()
+    prepared = engine.prepare_windows(replay_50k(eval_fee=105.2, reset_fee=105, contract_type="micro"),
+        history, sessions=history.sessions, closes=closes, windows=definitions)
+    config = BacktestConfig(0, timedelta(0), timedelta(0), timedelta(0))
+    times = []
+    for _ in range(3):
+        start = perf_counter()
+        result = engine.replay_windows(prepared, DollarPolicy.constant(100), config)
+        times.append(perf_counter()-start)
+    tracemalloc.start()
+    repeated = engine.replay_windows(prepared, DollarPolicy.constant(100), config)
+    peak = tracemalloc.get_traced_memory()[1]
+    tracemalloc.stop()
+    assert result == repeated
+    print(json.dumps(dict(name="calendar_windows", windows=len(result.windows),
+        seconds=median(times), peak_bytes=peak, retained_events=sum(len(w.events) for w in result.windows))), flush=True)
 
 
 def sized_logs():

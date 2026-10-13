@@ -41,7 +41,8 @@ class HoldoutFit:
 def fit_holdout(spec, history: BracketHistory, config, *, policy: DollarPolicy,
                 risk_bounds, objective=None, direction="maximize",
                 train_fraction=0.7, seed=0, generations=20, population=12,
-                rolling: RollingConfig | None = None, progress=None, risk=None):
+                rolling: RollingConfig | None = None, progress=None, risk=None,
+                policy_objective=None):
     """Select dollar sizing on IS only, then replay the frozen policy once on OOS.
 
     risk_bounds maps every regime name to a (minimum, maximum) dollar budget.
@@ -50,9 +51,19 @@ def fit_holdout(spec, history: BracketHistory, config, *, policy: DollarPolicy,
     IS and report the same statistic on OOS. Full chronological replays remain
     available alongside rolling summaries. Windows never cross the split.
     This empirical criterion is not claimed to be an unbiased expected value.
+
+    policy_objective(policy, history), when supplied, scores candidates without
+    the otherwise redundant chronological replay. It must implement the same
+    scalar criterion as objective(result) and must not access the held-out data.
+    It cannot be combined with rolling. Final chronological reports and the
+    selected policy's unvisited-regime restoration are still performed, but
+    restoration cannot worsen the supplied IS objective. Use fit_windows for
+    objectives over explicit calendar windows with matching regime detection.
     """
     if direction not in ("maximize", "minimize"):
         raise ValueError("direction must be maximize or minimize")
+    if policy_objective is not None and (not callable(policy_objective) or rolling is not None or objective is None):
+        raise ValueError('policy_objective requires objective and cannot be combined with rolling')
     for name, value, minimum in (("seed", seed, 0), ("generations", generations, 0),
                                   ("population", population, 2)):
         if isinstance(value, bool) or not isinstance(value, Integral) or value < minimum:
@@ -83,16 +94,24 @@ def fit_holdout(spec, history: BracketHistory, config, *, policy: DollarPolicy,
         return DollarPolicy(tuple(replace(r, risk_dollars=float(v))
                                   for r, v in zip(policy.regimes, values)))
 
-    def score(result):
-        value = objective(result)
+    def checked_score(value):
         if isinstance(value, bool) or not isinstance(value, Real) or not isfinite(value):
             raise ValueError("objective must return a finite real scalar")
         return float(value)
+
+    def score(result):
+        return checked_score(objective(result))
 
     def evaluate(x):
         key = tuple(float(v) for v in x)
         if key not in cache:
             candidate = decode(x)
+            if policy_objective is not None:
+                cache[key] = (checked_score(policy_objective(candidate, train)), candidate, None)
+                if progress:
+                    progress({"stage": "search", "evaluations": len(cache),
+                              "maximum_evaluations": generations * population + 2})
+                return sign * cache[key][0]
             result = (rolling_backtest(spec, train, candidate, config, rolling=rolling, objective=objective)
                       if rolling is not None else backtest(spec, train, candidate, config))
             visited = (frozenset(result.visited_regimes) if rolling is not None else
@@ -110,14 +129,27 @@ def fit_holdout(spec, history: BracketHistory, config, *, policy: DollarPolicy,
                    seed=seed, max_gen=generations)
     search.optimize(evaluate)
     best_score, best_policy, visited = max(cache.values(), key=lambda item: sign * item[0])
+    training = None
+    if policy_objective is not None:
+        training = backtest(spec, train, best_policy, config)
+        visited = frozenset(e.regime for e in training.events if e.regime is not None)
     # No data supports tuning an IS-unvisited regime: retain its declared baseline.
-    best_policy = DollarPolicy(tuple(
+    restored = DollarPolicy(tuple(
         fitted if fitted.name in visited else original
         for fitted, original in zip(best_policy.regimes, policy.regimes)
     ))
+    if restored != best_policy:
+        proposed = (rolling_backtest(spec, train, restored, config, rolling=rolling, objective=objective)
+                    if rolling is not None else backtest(spec, train, restored, config))
+        proposed_score = proposed.score if rolling is not None else score(proposed)
+        if sign * proposed_score >= sign * best_score:
+            best_policy = restored
+            if rolling is None:
+                training = proposed
     if progress:
         progress({"stage": "holdout", "evaluations": len(cache)})
-    training = backtest(spec, train, best_policy, config)
+    if training is None or training.policy != best_policy:
+        training = backtest(spec, train, best_policy, config)
     if rolling is None:
         best_score = score(training)
     # No OOS result can affect candidate selection, regime design or search stopping.

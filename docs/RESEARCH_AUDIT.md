@@ -44,6 +44,13 @@ rather than interpreting an old test total as current evidence.
 
 ## Research boundaries
 
+`tests/test_windows.py` covers the public calendar-window experiment path:
+same-window regime selection, custom-objective restoration safety, holdout
+isolation, empty sessions, finite receipts across DST, early closes, explicit
+exclusions and wallet-truncation counterparts. Candidate replays do not depend
+on an unrelated continuous history. Calendar completeness and missing-data
+classifications remain declared research inputs, not inferred facts.
+
 Sized arbitrary-exit logs are covered by `tests/test_trade_log.py`: phase-dependent
 quantity, partial and gap outcomes, fee accounting, observed breach liquidation,
 realized-only progress, fixed-fill parity for both directions, OOS isolation in

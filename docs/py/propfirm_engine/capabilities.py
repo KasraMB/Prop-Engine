@@ -26,7 +26,7 @@ def check_replay(spec, *, adapter="recorded", fidelity=None, features=()):
         if fidelity != expected:
             raise UnsupportedInputCapabilityError(f"{adapter} replay requires {expected}")
         _check_support(spec, observations=False)
-        supported = {"long", "short", "mixed_directions", "eod_drawdown", "sizing"}
+        supported = {"long", "short", "mixed_directions", "eod_drawdown", "sizing", "calendar_windows"}
         if adapter == "trades":
             supported |= {"arbitrary_exits", "observed_equity"}
         missing = set(features)-supported

@@ -35,6 +35,12 @@ account transitions, payouts and requested trace records can grow with input.
 
 ## Existing implementation choices
 
+The calendar-window benchmark reuses prepared sessions, trade groups and hashes
+across serial policy replays. Preparation shares immutable observations. Candidate
+search caches retain scores and policies, not event ledgers. Final traces are
+opt-in. Bankroll metrics require an additional unlimited-wallet replay only when
+the specified wallet constrained an outcome; this extra work is intentional.
+
 The chronological benchmark also reports sized trade logs with 1,000 and 10,000
 observations. Input construction is excluded from this replay-allocation measure.
 Marks are immutable slotted objects, replay retains lifecycle events rather than

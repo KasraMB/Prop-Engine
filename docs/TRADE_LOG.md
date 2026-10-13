@@ -78,3 +78,24 @@ Use `Engine.check_replay(spec, adapter="trades")` for account preflight.
 Partial position exits, overlapping positions and other supported account rule
 families remain available through fixed-quantity `replay_events`; they are not
 silently converted into independent dynamically sized trades.
+# Direct policy scoring during fitting
+
+For finite-calendar experiments, use the public [calendar-window API](WINDOWS.md).
+It replaces private calendar wrappers and nested simulation objectives. Research
+supplies the trade log, calendar, window exclusions and aggregate scoring function.
+
+`Engine.fit(..., objective=score_result, policy_objective=score_policy)` can avoid
+an otherwise redundant chronological replay for each candidate when a custom
+research objective already runs its own prepared windows. `score_policy(policy,
+training_history)` must return the same finite scalar criterion as
+`score_result(result)`. It must not inspect held-out observations. This option
+requires an explicit `objective` and cannot be combined with `rolling`.
+
+The optimizer still uses the same CMA-ES search, bounds and seed. After selection
+it performs chronological reporting and proposes restoring regimes unvisited in
+the selected training chronology. Restoration is accepted only if the supplied
+training objective does not worsen. Explicit window fitting detects regimes
+from the scored windows themselves instead of that unrelated chronology.
+It then evaluates the frozen policy on held-out data. Default fitting behavior
+is unchanged. Caller-defined calendar windows and their assumptions remain the
+responsibility of the research adapter.

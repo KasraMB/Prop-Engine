@@ -1,5 +1,5 @@
 {
-  "bundle_sha256": "4f94c0d8f3cdf48b791db6bf99ecc4040623a696395712586b13c0a7f633f33e",
+  "bundle_sha256": "6ed77094cd17af32ab5cb16cc8c9c2d32e29b5283b3cb2bf9d654644da3c351f",
   "files": [
     {
       "path": "numba.py",
@@ -7,7 +7,7 @@
     },
     {
       "path": "propfirm_engine/__init__.py",
-      "sha256": "76a2ab818d71d4249f7ad3797d1b052ebd9020507f1da0b1d926eb085dbf9719"
+      "sha256": "2da457429a183087bac468e59276f37b45eca9d9e465ebad5147747a5e9b6d5f"
     },
     {
       "path": "propfirm_engine/analytical.py",
@@ -27,7 +27,7 @@
     },
     {
       "path": "propfirm_engine/capabilities.py",
-      "sha256": "59a04c2aebbef44fe958b9c3b0dc85abfa1f80c7b905aa139b461d9f6e7eaace"
+      "sha256": "bcfbae35e44be5fae37344872140cef827fcf39490b3a3e2a1d9d4af7fa33b01"
     },
     {
       "path": "propfirm_engine/cashflows.py",
@@ -47,7 +47,7 @@
     },
     {
       "path": "propfirm_engine/engine.py",
-      "sha256": "273ddfcb448ab8b0f7fedab37cb6d75cae21a4e66bf01a32c622ca7481e66ded"
+      "sha256": "9e85cbdc02143bb7471feb8c25ac0a5f1bdbc636e816ffdc15e5693c62f6e820"
     },
     {
       "path": "propfirm_engine/enums.py",
@@ -83,7 +83,7 @@
     },
     {
       "path": "propfirm_engine/fitting.py",
-      "sha256": "965cb5114c581636d109e9d164bfa2ab9e4d90b61cfc8ee0b5caa02a4e1109b1"
+      "sha256": "0a19fb308406bbac8e9b2fbe65b67af1dfbf0dc29ee23c8640b1ccfec0cab70b"
     },
     {
       "path": "propfirm_engine/info.py",
@@ -184,6 +184,10 @@
     {
       "path": "propfirm_engine/validate.py",
       "sha256": "19e6e18036d94ab4c95f9bd7e1bd4ca386d76fb3feca0732818fd3f24b116560"
+    },
+    {
+      "path": "propfirm_engine/windows.py",
+      "sha256": "758be0bdce54b213cec238e9ded8875ac9e164362cf034f38daf46c88ef83dc4"
     },
     {
       "path": "replay.py",
