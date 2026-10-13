@@ -15,6 +15,7 @@ import sys
 
 from propfirm_engine import BacktestConfig, BracketHistory, DollarPolicy, Engine, RiskRegime, RollingConfig
 from propfirm_engine.rolling import window_slices
+from propfirm_engine.backtest import net_cash, net_cash_per_day
 from propfirm_engine.risk import RiskConfig, cash_risk_path, risk_report
 from propfirm_engine.ruin import RuinConfig
 from propfirm_engine.firms.lucidflex import replay_50k
@@ -25,8 +26,8 @@ import numpy as np
 MAX_CSV_BYTES = 5_000_000
 MAX_TRADES = 20_000
 OBJECTIVES = {
-    "net_cash_per_day": lambda result: result.net_cash_per_day,
-    "net_cash": lambda result: result.net_cash,
+    "net_cash_per_day": net_cash_per_day,
+    "net_cash": net_cash,
 }
 CSV_COLUMNS = ("entry_at", "exit_at", "session", "stop_loss", "take_profit", "won")
 NY = ZoneInfo("America/New_York")

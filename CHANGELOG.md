@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.6.1 - 2026-10-13
+
+- Reuse rolling inputs and fingerprints across candidate policies.
+- Compact built-in cash scoring uses the same lifecycle without full search ledgers.
+- Exact integer money and cached rational conversions avoid repeated arithmetic work.
+- Reuse sizing decisions without caching account-dependent buffer or contract caps.
+- Report within-candidate window progress; add representative native/browser benchmarks.
+
 ## 0.6.0 - 2026-10-13
 
 - Public prepared calendar windows, no-trade sessions and explicit cash horizons.

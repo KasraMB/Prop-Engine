@@ -1,14 +1,14 @@
 """Whole-session historical starts, without resampling or account-state carryover."""
 from dataclasses import dataclass, replace
 from datetime import date, datetime
-from hashlib import sha256
 from itertools import groupby
 from math import fsum, isfinite
 from numbers import Integral, Real
+from time import perf_counter
 
 import numpy as np
 
-from .backtest import backtest
+from .backtest import backtest, _CashReplay
 from .execution import BracketHistory
 from .risk import cash_risk_path, risk_report
 
@@ -37,6 +37,49 @@ def window_slices(history, rolling):
         raise ValueError("window_sessions exceeds available sessions; no complete rolling windows")
     return tuple((offsets[i], offsets[i + rolling.window_sessions])
                  for i in range(0, count - rolling.window_sessions + 1, rolling.stride_sessions))
+
+
+@dataclass(frozen=True)
+class _RollingInputs:
+    parts: tuple
+    fingerprint: str
+    excluded: int
+
+
+def _prepare_rolling(history, rolling):
+    slices = window_slices(history, rolling)
+    parts = tuple(type(history)(history.trades[a:b]) for a, b in slices)
+    for part in parts:
+        part.fingerprint
+    return _RollingInputs(parts, history.fingerprint,
+                          len(range(0, len(history.sessions), rolling.stride_sessions))-len(parts))
+
+
+@dataclass(frozen=True)
+class _RollingScore:
+    score: float
+    visited_regimes: tuple
+
+
+def _score_cash(spec, prepared, policy, config, objective, progress=None):
+    values, visited = [], set()
+    sizing_cache = {}
+    last = perf_counter()
+    if progress:
+        progress({"completed_windows": 0, "windows": len(prepared.parts)})
+    for i, part in enumerate(prepared.parts):
+        run = _CashReplay(spec, part, policy, config, sizing_cache=sizing_cache)
+        result = run.run()
+        value = objective(result)
+        if not isfinite(value):
+            raise ValueError("objective must return a finite real scalar")
+        values.append(value)
+        visited.update(run.visited)
+        now = perf_counter()
+        if progress and (now-last >= .25 or i+1 == len(prepared.parts)):
+            progress({"completed_windows": i+1, "windows": len(prepared.parts)})
+            last = now
+    return _RollingScore(fsum(v/len(values) for v in values), tuple(sorted(visited)))
 
 
 @dataclass(frozen=True)
@@ -118,7 +161,7 @@ class RollingResult:
         }
 
 
-def rolling_backtest(spec, history, policy, config, *, rolling, objective=None, risk=None):
+def rolling_backtest(spec, history, policy, config, *, rolling, objective=None, risk=None, _prepared=None):
     """Evaluate each complete window through the canonical repeated-attempt engine.
 
     The objective receives one BacktestResult; its equally weighted mean is score.
@@ -126,14 +169,13 @@ def rolling_backtest(spec, history, policy, config, *, rolling, objective=None, 
     denominator, but exclude accounts that could not start and direct-funded cases.
     Window ledgers are discarded after summary; replay a window to inspect its events.
     """
-    slices = window_slices(history, rolling)
+    prepared = _prepared if _prepared is not None else _prepare_rolling(history, rolling)
     objective = objective if objective is not None else lambda r: r.net_cash_per_day
     if not callable(objective):
         raise ValueError("objective must be callable")
     windows, visited, risk_paths = [], set(), []
     has_eval = any(p.role == "eval" for p in spec.account.phases)
-    for begin, end in slices:
-        part = type(history)(history.trades[begin:end])
+    for part in prepared.parts:
         result = backtest(spec, part, policy, config)
         if risk is not None:
             unlimited = (backtest(spec, part, policy, replace(config, initial_wallet=None))
@@ -165,7 +207,6 @@ def rolling_backtest(spec, history, policy, config, *, rolling, objective=None, 
             sum(e.kind == "trade" for e in result.events),
             sum(e.kind == "live_handoff" for e in result.events), result.status, float(score),
         ))
-    candidate_starts = len(range(0, len(history.sessions), rolling.stride_sessions))
-    return RollingResult(tuple(windows), rolling, candidate_starts - len(slices),
-                         sha256(repr(history.trades).encode("utf-8")).hexdigest(), tuple(sorted(visited)),
+    return RollingResult(tuple(windows), rolling, prepared.excluded,
+                         prepared.fingerprint, tuple(sorted(visited)),
                          risk_report(risk_paths, options=risk) if risk is not None else None)

@@ -188,6 +188,8 @@ function startEngine() {
       const visits = data.estimated_trade_visits;
       $("status").textContent = visits
         ? `Estimated work: ${visits.toLocaleString()} trade visits. Running the full request; larger searches take longer. Cancel is available.`
+        : data.stage === "search_windows"
+          ? `Candidate ${data.candidate} / up to ${data.maximum_evaluations}: ${data.completed_windows.toLocaleString()} / ${data.windows.toLocaleString()} windows. Cancel is available.`
         : data.stage === "ruin"
           ? `Ruin analysis: ${data.completed_paths} / ${data.paths} full-engine paths. Cancel is available.`
           : data.stage === "holdout"

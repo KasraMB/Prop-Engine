@@ -17,7 +17,7 @@ from .compiler import compile_account
 from .cache import freeze_compiled
 from .enums import ExitCode, Severity, StateField, Timing
 from .execution import BacktestConfig, BracketHistory, DollarPolicy, LifecycleSpec, Trade, TradeHistory
-from .feasibility import project_position
+from .money import decimal_cash
 from .payouts import PayoutLedger
 from .reference import _ReferenceSim
 from .rules import RuleKind
@@ -132,11 +132,13 @@ class _Replay:
     def __init__(self, spec, history, policy, config, *, bracket_factory=None,
                  session_closes=None, sessions=None):
         self.spec, self.history, self.policy, self.config = spec, history, policy, config
-        self.fixed_cost = Fraction(str(config.cost_per_trade))
-        self.contract_cost = Fraction(str(config.cost_per_contract))
-        self.risk_budgets = ({r.name: Fraction(str(r.risk_dollars)) for r in policy.regimes}
+        self.fixed_cost = decimal_cash(config.cost_per_trade)
+        self.contract_cost = decimal_cash(config.cost_per_contract)
+        self.risk_budgets = ({r.name: decimal_cash(r.risk_dollars) for r in policy.regimes}
                              if policy is not None else {})
-        self.activity_threshold = Fraction(str(spec.activity_threshold))
+        self.activity_threshold = decimal_cash(spec.activity_threshold)
+        self._close_cache = {}
+        self._sizing_cache = {}
         # Internal research hook; the public historical API never retargets trades.
         self.bracket_factory = bracket_factory
         self.session_closes = dict(session_closes or {})
@@ -177,10 +179,13 @@ class _Replay:
                 raise ValueError("trade lies outside its declared firm's trading session")
 
     def close_at(self, session):
+        if session in self._close_cache:
+            return self._close_cache[session]
         normal = datetime.combine(session, self.spec.session_close, self.tz).astimezone(timezone.utc)
         actual = self.session_closes.get(session, normal)
         if actual.tzinfo is None or actual > normal:
             raise ValueError("session close must be aware and no later than the firm cutoff")
+        self._close_cache[session] = actual
         return actual
 
     def check_support(self, spec):
@@ -421,24 +426,22 @@ class _Replay:
         if self.bracket_factory is not None:
             trade = self.bracket_factory(trade, regime, self, day_index)
         fixed, cost = self.fixed_cost, self.contract_cost
-        stop = trade.stop_loss if isinstance(trade.stop_loss, Fraction) else Fraction(str(trade.stop_loss))
+        stop = decimal_cash(trade.stop_loss)
         per_unit = stop + cost
-        desired = (self.risk_budgets[regime.name] - fixed) / per_unit
-        # Reuse the projection arithmetic with rational dollars on this slow path.
-        # Fast Monte Carlo keeps its compiled float64 implementation.
-        project = getattr(project_position, "py_func", project_position)
-        quantity, capped, _, _ = project(
-            max(Fraction(0), desired), sim.equity - sim.dd_floor,
-            Fraction(1), per_unit, Fraction(1), fixed_cost=fixed,
-        )
-        if capped:
+        budget = sim.equity - sim.dd_floor - fixed
+        if budget < per_unit:
             self.fail(trade.entry_at, "CAPPED_OUT", regime=regime.name)
             return
         # A small policy budget is not evidence that the account is untradeable.
+        key = (regime.name, per_unit)
+        desired = self._sizing_cache.get(key)
+        if desired is None:
+            desired = (self.risk_budgets[regime.name] - fixed) // per_unit
+            self._sizing_cache[key] = desired
         if desired < 1:
             self.emit(trade.entry_at, "policy_skip", regime=regime.name)
             return
-        quantity = min(int(quantity), self.limit)
+        quantity = min(desired, budget // per_unit, self.limit)
         if isinstance(trade, Trade):
             self.settle_observed(trade, day_index, regime, quantity)
             return
@@ -454,7 +457,7 @@ class _Replay:
         balance = before - cost
         for mark in trade.marks:
             closing = mark.at == trade.exit_at
-            equity = balance + quantity * Fraction(str(mark.pnl))
+            equity = balance + quantity * decimal_cash(mark.pnl)
             net = equity - before
             self.advance(mark.at, qualifying_close=closing and abs(net) >= self.activity_threshold)
             if self.sim is not sim:
@@ -478,13 +481,13 @@ class _Replay:
         """One settlement path shared by fixed brackets and historical fills."""
         sim = self.sim
         sim.trade_cost = self.fixed_cost + quantity * self.contract_cost
-        net = Fraction(str(pnl_per_unit)) * quantity - sim.trade_cost
+        net = decimal_cash(pnl_per_unit) * quantity - sim.trade_cost
         self.advance(exit_at, qualifying_close=abs(net) >= self.activity_threshold)
         if self.sim is not sim:
             raise ValueError("inactivity expired during an open trade; that execution is unsupported")
         before = sim.equity
         balance = before + net
-        observed = min(before + quantity * Fraction(str(low)), balance)
+        observed = min(before + quantity * decimal_cash(low), balance)
         code = sim.observe(balance, observed, day_index, traded=True, allow_pass=True)
         if self.ledger:
             self.ledger.record_trade(exit_at, sim.equity - before)
@@ -550,7 +553,7 @@ class _Replay:
         return self.result()
 
     def result(self, *, fingerprint=None, assumptions=None):
-        if fingerprint is None and isinstance(self.history, TradeHistory):
+        if fingerprint is None and self.history is not None:
             fingerprint = self.history.fingerprint
         if assumptions is None and isinstance(self.history, TradeHistory):
             assumptions = (
@@ -592,3 +595,34 @@ def backtest(spec: LifecycleSpec, history: BracketHistory, policy: DollarPolicy,
     if not isinstance(policy, DollarPolicy) or not isinstance(config, BacktestConfig):
         raise TypeError("backtest requires DollarPolicy and BacktestConfig")
     return _Replay(spec, history, policy, config).run()
+
+
+def net_cash(result):
+    return result.net_cash
+
+
+def net_cash_per_day(result):
+    return result.net_cash_per_day
+
+
+class _CashReplay(_Replay):
+    """Same state machine, retaining only cash events for built-in search objectives."""
+
+    def __init__(self, *args, sizing_cache=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        if sizing_cache is not None:
+            self._sizing_cache = sizing_cache
+        self.visited = set()
+
+    def ledger_options(self):
+        return {"record_events": False}
+
+    def emit(self, at, kind, **kwargs):
+        regime = kwargs.get("regime")
+        if regime is not None:
+            self.visited.add(regime)
+        if kwargs.get("cash", 0):
+            super().emit(at, kind, **kwargs)
+
+    def result(self, **kwargs):
+        return super().result(fingerprint=self.history.fingerprint)

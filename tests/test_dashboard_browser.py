@@ -147,7 +147,7 @@ def test_upload_fit_export_and_errors_in_real_browser(site, tmp_path):
             page.locator("#generations").fill("100")
             page.locator("#population").fill("32")
             page.locator("#run").click()
-            page.wait_for_function("document.getElementById('status').textContent.includes('candidate evaluations') || !document.getElementById('error').hidden", timeout=60_000)
+            page.wait_for_function("/candidate evaluations|windows/.test(document.getElementById('status').textContent) || !document.getElementById('error').hidden", timeout=60_000)
             assert page.locator("#error").is_hidden(), page.locator("#error").inner_text()
             page.locator("#cancel").click()
             assert page.locator("#results").is_hidden()

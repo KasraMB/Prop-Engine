@@ -119,6 +119,10 @@ class BracketHistory:
     def sessions(self):
         return tuple(dict.fromkeys(t.session for t in self.trades))
 
+    @cached_property
+    def fingerprint(self):
+        return sha256(repr(self.trades).encode("utf-8")).hexdigest()
+
     @classmethod
     def from_records(cls, records):
         """Import CSV/dict records with explicit clocks, session, brackets and outcome.

@@ -36,12 +36,12 @@ The semantics it pins (each cites where it is decided):
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from fractions import Fraction
 from math import isfinite
 
 import numpy as np
 
 from .enums import ExitCode, Severity, Stage, StateField, Timing
+from .money import decimal_cash
 from .feasibility import project_position
 from .rules import RuleKind
 
@@ -133,7 +133,7 @@ class _ReferenceSim:
 
     def _cash(self, value):
         if self.exact_money and isfinite(value):
-            return value if isinstance(value, Fraction) else Fraction(str(value))
+            return decimal_cash(value)
         return float(value)
 
     def _has_trailing(self) -> bool:

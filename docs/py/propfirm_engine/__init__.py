@@ -1,6 +1,6 @@
 """Prop-firm simulation from trade logs, sizing policies and attempt economics."""
 
-__version__ = "0.6.0"
+__version__ = "0.6.1"
 
 from . import firms, statistics
 from .windows import Window, PreparedWindows, WindowOutcome, WindowBatch, WindowFit
@@ -8,7 +8,7 @@ from .execution import (
     Trade, TradeHistory, PnlMark,
     BracketTrade, BracketHistory, RiskRegime, DollarPolicy, LifecycleSpec, BacktestConfig,
 )
-from .backtest import BacktestEvent, BacktestResult
+from .backtest import BacktestEvent, BacktestResult, net_cash, net_cash_per_day
 from .instruments import Instrument
 from .events import Fill, Marks, merge_events
 from .portfolio import Book, BookState, Position
@@ -131,6 +131,7 @@ from .rules import (
 )
 
 __all__ = [
+    "net_cash", "net_cash_per_day",
     "Window", "PreparedWindows", "WindowOutcome", "WindowBatch", "WindowFit",
     "Trade", "TradeHistory", "PnlMark",
     "UncertaintyConfig", "uncertainty_report", "paired_uncertainty", "scenario_sensitivity",

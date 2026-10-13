@@ -5,10 +5,10 @@ from numbers import Integral, Real
 
 import numpy as np
 
-from .backtest import BacktestResult, backtest
+from .backtest import BacktestResult, backtest, net_cash, net_cash_per_day
 from .execution import BracketHistory, DollarPolicy
 from .optimizer import CMAES
-from .rolling import RollingConfig, RollingResult, rolling_backtest, window_slices
+from .rolling import RollingConfig, RollingResult, rolling_backtest, window_slices, _prepare_rolling, _score_cash
 
 
 @dataclass(frozen=True)
@@ -79,7 +79,9 @@ def fit_holdout(spec, history: BracketHistory, config, *, policy: DollarPolicy,
     if rolling is not None:
         window_slices(train, rolling)
         window_slices(test, rolling)
-    objective = objective if objective is not None else lambda result: result.net_cash_per_day
+    prepared_train = _prepare_rolling(train, rolling) if rolling is not None else None
+    prepared_test = _prepare_rolling(test, rolling) if rolling is not None else None
+    objective = objective if objective is not None else net_cash_per_day
     if not callable(objective):
         raise ValueError("objective must be callable")
     sign = 1 if direction == "maximize" else -1
@@ -112,8 +114,16 @@ def fit_holdout(spec, history: BracketHistory, config, *, policy: DollarPolicy,
                     progress({"stage": "search", "evaluations": len(cache),
                               "maximum_evaluations": generations * population + 2})
                 return sign * cache[key][0]
-            result = (rolling_backtest(spec, train, candidate, config, rolling=rolling, objective=objective)
-                      if rolling is not None else backtest(spec, train, candidate, config))
+            if rolling is not None and (objective is net_cash or objective is net_cash_per_day):
+                def report(update):
+                    progress({"stage": "search_windows", "candidate": len(cache)+1,
+                              "maximum_evaluations": generations*population+2, **update})
+                result = _score_cash(spec, prepared_train, candidate, config, objective,
+                                     report if progress else None)
+            else:
+                result = (rolling_backtest(spec, train, candidate, config, rolling=rolling,
+                          objective=objective, _prepared=prepared_train)
+                          if rolling is not None else backtest(spec, train, candidate, config))
             visited = (frozenset(result.visited_regimes) if rolling is not None else
                        frozenset(e.regime for e in result.events if e.regime is not None))
             # Do not retain a full event ledger for every search candidate.
@@ -139,7 +149,7 @@ def fit_holdout(spec, history: BracketHistory, config, *, policy: DollarPolicy,
         for fitted, original in zip(best_policy.regimes, policy.regimes)
     ))
     if restored != best_policy:
-        proposed = (rolling_backtest(spec, train, restored, config, rolling=rolling, objective=objective)
+        proposed = (rolling_backtest(spec, train, restored, config, rolling=rolling, objective=objective, _prepared=prepared_train)
                     if rolling is not None else backtest(spec, train, restored, config))
         proposed_score = proposed.score if rolling is not None else score(proposed)
         if sign * proposed_score >= sign * best_score:
@@ -156,8 +166,8 @@ def fit_holdout(spec, history: BracketHistory, config, *, policy: DollarPolicy,
     held_out = backtest(spec, test, best_policy, config)
     train_rolling = test_rolling = None
     if rolling is not None:
-        train_rolling = rolling_backtest(spec, train, best_policy, config, rolling=rolling, objective=objective)
-        test_rolling = rolling_backtest(spec, test, best_policy, config, rolling=rolling, objective=objective, risk=risk)
+        train_rolling = rolling_backtest(spec, train, best_policy, config, rolling=rolling, objective=objective, _prepared=prepared_train)
+        test_rolling = rolling_backtest(spec, test, best_policy, config, rolling=rolling, objective=objective, risk=risk, _prepared=prepared_test)
         best_score = train_rolling.score
     return HoldoutFit(best_policy, training, held_out, best_score,
                       test_rolling.score if test_rolling is not None else score(held_out),

@@ -136,7 +136,7 @@ before interpreting results.
 
 ## Status
 
-Version 0.6.0 is a trade-log prop-firm simulator, not a market-data backtester.
+Version 0.6.1 is a trade-log prop-firm simulator, not a market-data backtester.
 It supports recorded-fill accounting, sequential trade-log sizing optimization,
 account rules, repeated attempts, payouts, rolling evaluations and cash-risk
 reporting. See the [changelog](CHANGELOG.md), [design](docs/DESIGN.md) and
